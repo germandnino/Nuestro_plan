@@ -1,0 +1,1860 @@
+﻿/* =========================================================
+   NUESTRO PLAN — modelo unificado de Meta
+   tipos: imprevistos | invertir | sueno | personal(sistema)
+   ========================================================= */
+
+const CFG_DEF={
+  nombreP1:'Persona 1',
+  nombreP2:'Persona 2',
+  perfil:'p1',
+  nominaP1:3000000,
+  nominaP2:3000000,
+  gastos:2365000,
+  planPareja:1000000,
+  libreP1:400000,
+  libreP2:400000,
+  pctPremio:20,
+  modoPremio:'igual',      // igual | proporcional | personalizado
+  pctPremioP1:50,
+  estrategia:'secuencial', // secuencial | simultaneo
+  onboarded:false
+};
+function metasEjemplo(){
+  return [
+    {id:'inversion',nombre:'Inversión',tipo:'invertir',saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,prioridad:9,
+      reparto:[{n:'Renta variable',pct:50},{n:'Renta fija',pct:30},{n:'Reserva',pct:20}]}
+  ];
+}
+function metasPersonales(){
+  return [
+    {id:'personal-p1',nombre:'Personal',tipo:'personal',dueno:'p1',sistema:true,saldo:0,aportes:[]},
+    {id:'personal-p2',nombre:'Personal',tipo:'personal',dueno:'p2',sistema:true,saldo:0,aportes:[]}
+  ];
+}
+
+let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
+let curTab=0, detailKey=null, firstFlow=true;
+let mForm=null; // estado del formulario de meta en edición
+let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este cierre
+
+const store={
+  async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
+  async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
+};
+
+const $=id=>document.getElementById(id);
+const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
+const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
+const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function flash(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1900);}
+const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function fmtMes(ym){if(!ym)return'';const[y,m]=ym.split('-');return MONTHS[(+m)-1]+' '+y;}
+function fmtFecha(d){if(!d)return'';const p=d.split('-');return p[2]+' '+MONTHS[(+p[1])-1]+' '+p[0];}
+function curMonth(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function monthsUntil(ym){const[y,mo]=ym.split('-').map(Number);const n=new Date();return Math.max(0,(y-n.getFullYear())*12+(mo-n.getMonth()-1));}
+function addMonths(n){const d=new Date();d.setMonth(d.getMonth()+Math.max(0,Math.round(n)));return MONTHS[d.getMonth()]+' '+d.getFullYear();}
+function perfilNombre(p){return p==='p1'?state.config.nombreP1:state.config.nombreP2;}
+function libreOf(p){return p==='p1'?state.config.libreP1:state.config.libreP2;}
+
+/* ---------- persistencia ---------- */
+function normalize(){
+  state.config=Object.assign({},CFG_DEF,state.config||{});
+  if(Array.isArray(state.config.gastosFijos)){state.config.gastos=state.config.gastosFijos.reduce((s,x)=>s+(x.v||0),0);delete state.config.gastosFijos;}
+  if(typeof state.config.gastos!=='number')state.config.gastos=CFG_DEF.gastos;
+  if(!['p1','p2'].includes(state.config.perfil))state.config.perfil='p1';
+  if(!Array.isArray(state.metas)||!state.metas.length){
+    state.metas=metasEjemplo().concat(metasPersonales());
+  }
+  // garantizar metas personales
+  ['p1','p2'].forEach(p=>{
+    let m=state.metas.find(x=>x.tipo==='personal'&&x.dueno===p);
+    if(!m){state.metas.push({id:'personal-'+p,nombre:'Personal',tipo:'personal',dueno:p,sistema:true,saldo:0,aportes:[]});}
+    else{if(typeof m.saldo!=='number')m.saldo=0;if(!Array.isArray(m.aportes))m.aportes=[];}
+  });
+  state.metas.forEach(m=>{
+    if(typeof m.saldo!=='number')m.saldo=0;
+    if(m.tipo==='personal')return;
+    // migrar modelo viejo {aporte,aporteTipo} -> {aporteFijo,aportePct}
+    if(m.aporte!==undefined){
+      if(m.aporteTipo==='pct')m.aportePct=m.aporte;else m.aporteFijo=m.aporte;
+      delete m.aporte;delete m.aporteTipo;
+    }
+    if(typeof m.aporteFijo!=='number')m.aporteFijo=0;
+    if(typeof m.aportePct!=='number')m.aportePct=0;
+  });
+  state.log=Array.isArray(state.log)?state.log:[];
+  state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
+  state.gastos=Array.isArray(state.gastos)?state.gastos:[];
+}
+async function load(){
+  const raw=await store.get();
+  if(raw){try{state=JSON.parse(raw);}catch(e){}}
+  normalize();
+  if(!state.config.onboarded){startOnboarding();}
+  else{go(0);}
+}
+async function save(){const ok=await store.set(JSON.stringify(state));if(!ok)$('banner').style.display='block';}
+
+/* ---------- selectores de metas ---------- */
+function metaById(id){return state.metas.find(m=>m.id===id);}
+function metasCompartidas(){return state.metas.filter(m=>m.tipo!=='personal');}
+function metaPersonal(p){return state.metas.find(m=>m.tipo==='personal'&&m.dueno===p);}
+function metasVisiblesEnFondos(){
+  // todas las compartidas + la personal del perfil de este teléfono
+  return metasCompartidas().concat([metaPersonal(state.config.perfil)]);
+}
+function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inversión':t==='sueno'?'Sueño':'Personal';}
+
+/* ---------- motor de cálculo (preserva la esencia) ---------- */
+function gastosFijosTotal(){return state.config.gastos||0;}
+function aportesFijosTotal(){return metasCompartidas().filter(m=>m.tipo!=='imprevistos').reduce((s,m)=>s+(m.aporteFijo||0),0);}
+function sumaPct(){
+  const c=state.config;
+  if(c.estrategia==='cascada')return 0;
+  return metasCompartidas().filter(m=>c.estrategia==='simultaneo'||m.tipo!=='imprevistos').reduce((s,m)=>s+(m.aportePct||0),0);
+}
+function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
+function computeBase(){const c=state.config;return c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo();}
+function avgVar(){if(!state.log.length)return 2000000;return state.log.reduce((s,e)=>s+e.p1+e.p2,0)/state.log.length;}
+function computeTotal(){return metasCompartidas().reduce((s,m)=>s+m.saldo,0)+metaPersonal(state.config.perfil).saldo;}
+function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
+function emergenciaPrincipal(){return emergencias()[0]||null;}
+function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir');}
+function getMetaPrioritaria(){
+  const comp=metasCompartidas();
+  const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+  return sorted.find(m=>m.objetivo>0&&m.saldo<m.objetivo)||null;
+}
+
+function premioSplitFactor(p,e){
+  const c=state.config;
+  if(c.modoPremio==='igual')return 0.5;
+  if(c.modoPremio==='proporcional'){if(!e)return 0.5;const sum=e.p1+e.p2;if(sum===0)return 0.5;return p==='p1'?e.p1/sum:e.p2/sum;}
+  return p==='p1'?c.pctPremioP1/100:(100-c.pctPremioP1)/100;
+}
+
+/* Reparto del ahorro entre metas compartidas.
+   Orden: (1) aportes fijos en $ de cada meta (compromisos recurrentes, primero),
+          (2) prioritaria primero si es secuencial (recibe el remanente tras fijos),
+          (3) cada meta toma su % del resto (post-fijos y post-prioritaria),
+          (4) lo que sobre -> inversión abierta. */
+function distribuirAhorro(monto, esEspecial = false){
+  const c=state.config,res={};
+  state.metas.forEach(m=>res[m.id]=0);
+  if(monto<=0)return res;
+  let rem=monto;
+  const comp=metasCompartidas();
+
+  if(c.estrategia==='cascada'){
+    const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+    for(let i=0;i<sorted.length;i++){
+      const m=sorted[i];
+      if(m.objetivo>0){
+        const falta=Math.max(0,m.objetivo-(m.saldo+res[m.id]));
+        const add=Math.min(rem,falta);res[m.id]+=add;rem-=add;
+      }else{
+        res[m.id]+=rem;rem=0;
+      }
+      if(rem<=0.5)break;
+    }
+    if(rem>0.5){
+      const inv=inversionAbierta();
+      if(inv)res[inv.id]+=rem;
+      else{const e=emergenciaPrincipal();if(e)res[e.id]+=rem;}
+    }
+    return res;
+  }
+
+  // (1) aportes fijos en $ (se cubren de primero para evitar desatender compromisos mensuales recurrentes)
+  if(!esEspecial){
+    comp.filter(m=>(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')&&(m.aporteFijo||0)>0).forEach(m=>{
+      let add=m.aporteFijo;
+      if(m.objetivo){const falta=Math.max(0,m.objetivo-(m.saldo+res[m.id]));add=Math.min(add,falta);}
+      add=Math.min(add,rem);res[m.id]+=add;rem-=add;
+    });
+    if(rem<=0.5)return res;
+  }
+
+  // (2) prioritaria primero si es secuencial
+  if(c.estrategia==='secuencial'){
+    const prio=getMetaPrioritaria();
+    if(prio){
+      const falta=Math.max(0,prio.objetivo-(prio.saldo+res[prio.id]));
+      const add=Math.min(rem,falta);res[prio.id]+=add;rem-=add;
+    }
+    if(rem<=0.5)return res;
+  }
+
+  // (3) cada meta toma su % del resto (base fija = remanente tras fijos y prioritario)
+  const baseRem=rem;
+  comp.filter(m=>(m.aportePct||0)>0&&(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')).forEach(m=>{
+    let add=baseRem*m.aportePct/100;
+    if(m.objetivo){const falta=Math.max(0,m.objetivo-(m.saldo+res[m.id]));add=Math.min(add,falta);}
+    add=Math.min(add,rem);res[m.id]+=add;rem-=add;
+  });
+  if(rem<=0.5)return res;
+
+  // (4) sobrante -> inversión abierta
+  const inv=inversionAbierta();
+  if(inv)res[inv.id]+=rem;
+  else{const e=emergenciaPrincipal();if(e)res[e.id]+=rem;}
+  return res;
+}
+
+/* ---------- navegación ---------- */
+const RENDER=[renderInicio,renderMetas,renderCerrar,renderFlujo,renderPlan];
+function go(t){
+  curTab=t;detailKey=null;
+  $('mainnav').classList.remove('hide');
+  document.querySelectorAll('.nt').forEach((b,i)=>b.classList.toggle('on',i===t));
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(id=>$(id).classList.remove('on'));
+  $('s'+t).classList.add('on');
+  RENDER[t]();
+  $('s'+t).scrollTop=0;
+}
+function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;}
+$('mainnav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b)go(+b.dataset.t);});
+// Formato de miles en vivo en los campos de plata (clase .money)
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(!el||!el.classList||!el.classList.contains('money'))return;
+  const d=el.value.replace(/\D/g,'');
+  el.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+});
+
+/* =========================================================
+   INICIO (solo lectura)
+   ========================================================= */
+function renderInicio(){
+  const c=state.config,total=computeTotal();
+  const prio=getMetaPrioritaria();
+  const est=computeBase()+avgVar()*(1-c.pctPremio/100);
+  let faseTxt,proyTxt;
+  if(prio){
+    const m=est>0?Math.ceil((prio.objetivo-prio.saldo)/est):'—';
+    faseTxt='Llenando '+prio.nombre;proyTxt=(m==='—'?'—':'Listo en ~'+m+' mes'+(m!==1?'es':''));
+  }else{
+    faseTxt='Ahorrando e invirtiendo';proyTxt='~'+fmt(est)+'/mes al plan';
+  }
+  // meta destacada: la prioritaria si no está llena, si no, el primer sueño
+  let dest=prio?prio:(state.metas.find(m=>m.tipo==='sueno')||emergenciaPrincipal()||inversionAbierta());
+  $('r0').innerHTML=`
+<header><div class="ey">${c.nombreP1} &amp; ${c.nombreP2}</div><h1>Nuestro plan</h1></header>
+<div class="card dark"><div class="k">¿Cómo vamos?</div><div class="num big">${fmt(total)}</div>
+  <div class="muted sm" style="margin-top:4px">Acumulado en todas las metas</div>
+  <div class="row2" style="margin-top:14px;border-top:1px solid rgba(246,241,230,.18);padding-top:12px">
+    <div><div class="k" style="color:var(--gb)">Etapa</div><div class="num" style="font-size:16px;color:var(--cream)">${faseTxt}</div></div>
+    <div><div class="k" style="color:var(--gb)">Proyección</div><div class="num" style="font-size:15px;color:var(--cream);line-height:1.2">${proyTxt}</div></div></div></div>
+${drawSavingsDonut()}
+${drawFixedBudgetCard()}
+${drawSavingsHistoryCard()}
+<button class="btn" id="btnMes" style="margin-top:12px">Aportar al plan</button>
+<div class="hint" style="text-align:center;color:rgba(246,241,230,.5);margin-top:8px">Aquí solo se mira. Para editar, entra a Metas.</div>`;
+  $('btnMes').onclick=()=>go(2);
+}
+function heroMeta(m){
+  const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):0,falta=Math.max(0,obj-m.saldo);
+  if(!obj){
+    return `<div class="card dark"><div class="k">${m.nombre}</div><div class="num big">${fmt(m.saldo)}</div>
+      <div class="muted sm" style="margin-top:4px">${tipoLabel(m.tipo)} · meta abierta</div></div>`;
+  }
+  return `<div class="card dark"><div class="k">${m.nombre}</div><div class="num big">${fmt(m.saldo)}</div>
+    <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+    <div style="display:flex;justify-content:space-between;font-size:12.5px;color:rgba(246,241,230,.8)"><b>${pct.toFixed(0)}%</b><span>${falta>0?'faltan '+fmt(falta):'¡meta cumplida!'}</span></div></div>`;
+}
+
+function drawSavingsDonut() {
+  const total = computeTotal();
+  const metasConSaldo = state.metas.map(m => {
+    let nombre = m.nombre;
+    if (m.tipo === 'personal') {
+      nombre = m.dueno === state.config.perfil ? 'Mi bolsillo' : `Bolsillo de ${perfilNombre(m.dueno)}`;
+    }
+    return {
+      id: m.id,
+      nombre: nombre,
+      saldo: m.saldo,
+      tipo: m.tipo,
+      dueno: m.dueno
+    };
+  }).filter(m => m.saldo > 0);
+
+  if (total === 0 || metasConSaldo.length === 0) {
+    return `<div class="card dark" style="padding:18px 16px;">
+      <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
+      <div style="display:flex; align-items:center; gap:20px;">
+        <div style="width:90px; height:90px; flex-shrink:0;">
+          <svg viewBox="0 0 100 100" style="width:100%; height:100%;">
+            <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(246,241,230,.08)" stroke-width="8" />
+            <text x="50" y="53" text-anchor="middle" font-family="var(--sans)" font-size="8" fill="rgba(246,241,230,.3)" font-weight="600">Vacío</text>
+          </svg>
+        </div>
+        <div style="flex:1; color:rgba(246,241,230,.5); font-size:12.5px; line-height:1.4;">
+          Aún no hay ahorros acumulados. Los saldos que agreguen a sus metas aparecerán aquí.
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const segments = [];
+  let accumPct = 0;
+  
+  metasConSaldo.sort((a,b) => b.saldo - a.saldo);
+
+  metasConSaldo.forEach(m => {
+    const pct = (m.saldo / total) * 100;
+    let color = '#2f5a44';
+    if (m.tipo === 'imprevistos') color = '#2f5a44';
+    else if (m.tipo === 'sueno') color = '#c08a2d';
+    else if (m.tipo === 'invertir') color = '#5b9aa0';
+    else if (m.tipo === 'personal') {
+      color = m.dueno === 'p1' ? '#c87a53' : '#a36a84';
+    }
+    
+    segments.push({
+      ...m,
+      pct,
+      color,
+      startAngle: (accumPct / 100) * 360 - 90
+    });
+    accumPct += pct;
+  });
+
+  const C = 219.91;
+  let svgCircles = '';
+  segments.forEach(seg => {
+    const offset = C - (seg.pct / 100) * C;
+    svgCircles += `<circle cx="50" cy="50" r="35" fill="none" stroke="${seg.color}" stroke-width="8" stroke-dasharray="${C} ${C}" stroke-dashoffset="${offset}" transform="rotate(${seg.startAngle} 50 50)" stroke-linecap="butt" />`;
+  });
+
+  const legend = segments.map(seg => `
+    <div style="display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:rgba(246,241,230,.85)">
+      <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${seg.color}; flex-shrink:0;"></span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px;">${seg.nombre}</span>
+      </div>
+      <div style="font-variant-numeric:tabular-nums; margin-left:8px; flex-shrink:0;">
+        <b style="color:var(--cream);">${fmtK(seg.saldo)}</b>
+        <span style="font-size:10px; color:rgba(246,241,230,.45); margin-left:2px;">(${Math.round(seg.pct)}%)</span>
+      </div>
+    </div>
+  `).join('');
+
+  return `<div class="card dark" style="padding:18px 16px;">
+    <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
+    <div style="display:flex; align-items:center; gap:20px;">
+      <div style="width:96px; height:96px; flex-shrink:0;">
+        <svg viewBox="0 0 100 100" style="width:100%; height:100%; overflow:visible;">
+          ${svgCircles}
+          <text x="50" y="47" text-anchor="middle" font-family="var(--sans)" font-size="6.5" fill="rgba(246,241,230,.5)" font-weight="700" letter-spacing="0.05em">TOTAL</text>
+          <text x="50" y="57" text-anchor="middle" font-family="var(--serif)" font-size="11.5" fill="var(--cream)" font-weight="600">${fmtK(total)}</text>
+        </svg>
+      </div>
+      <div style="flex:1; display:flex; flex-direction:column; gap:7px; overflow:hidden;">
+        ${legend}
+      </div>
+    </div>
+  </div>`;
+}
+
+function drawFixedBudgetCard() {
+  const c = state.config;
+  const totalIngresos = c.nominaP1 + c.nominaP2;
+  if (totalIngresos <= 0) return '';
+
+  const pGas = (c.gastos / totalIngresos) * 100;
+  const pPP = (c.planPareja / totalIngresos) * 100;
+  const pL1 = (c.libreP1 / totalIngresos) * 100;
+  const pL2 = (c.libreP2 / totalIngresos) * 100;
+  const baseAhorro = computeBase();
+  const pBase = (baseAhorro / totalIngresos) * 100;
+
+  return `<div class="card dark" style="padding:18px 16px;">
+    <div class="k">Presupuesto Fijo Mensual</div>
+    <div class="num big" style="font-size:24px; margin-top:2px;">${fmt(totalIngresos)}</div>
+    <div class="muted sm" style="margin-top:2px;">Nóminas de ${c.nombreP1} y ${c.nombreP2}</div>
+    
+    <div class="stack" style="margin-top:14px; margin-bottom:14px; background:rgba(246,241,230,.06);">
+      <span class="st-seg" style="width:${pGas.toFixed(1)}%; background:#8a7f70;"></span>
+      <span class="st-seg st-seg-pp" style="width:${pPP.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-p1" style="width:${pL1.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-p2" style="width:${pL2.toFixed(1)}%"></span>
+      <span class="st-seg" style="flex:1; background:#3d8c64;"></span>
+    </div>
+    
+    <div style="display:flex; flex-direction:column; gap:6.5px; font-size:12.5px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#8a7f70; flex-shrink:0;"></span>Gastos del hogar</div>
+        <b style="color:var(--cream);">${fmt(c.gastos)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Citas y gustos pareja</div>
+        <b style="color:var(--cream);">${fmt(c.planPareja)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pPP)}%)</span></b>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Libre de ${c.nombreP1}</div>
+        <b style="color:var(--cream);">${fmt(c.libreP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Libre de ${c.nombreP2}</div>
+        <b style="color:var(--cream);">${fmt(c.libreP2)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL2)}%)</span></b>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(246,241,230,.12); padding-top:7px; margin-top:2px;">
+        <div style="display:flex; align-items:center; gap:6px; font-weight:700; color:rgba(246,241,230,.9)"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#3d8c64; flex-shrink:0;"></span>Ahorro base</div>
+        <b style="color:var(--gb); font-family:var(--sans); font-size:14px;">${fmt(baseAhorro)} <span style="font-size:10px; color:rgba(246,241,230,.5); font-weight:normal; margin-left:3px;">(${Math.round(pBase)}%)</span></b>
+      </div>
+    </div>
+  </div>`;
+}
+
+function drawSavingsHistoryCard() {
+  if (!state.log || state.log.length === 0) {
+    return `<div class="card dark" style="padding:18px 16px; border: 1px dashed rgba(246,241,230,.15); background: transparent;">
+      <div class="k" style="color:rgba(246,241,230,.5)">Evolución del Ahorro</div>
+      <div style="font-size:12.5px; color:rgba(246,241,230,.5); line-height:1.45; text-align:center; padding:12px 6px;">
+        El gráfico de ahorro mensual se activará cuando cierren su primer mes en <b>Aportar al plan</b>.
+      </div>
+    </div>`;
+  }
+
+  const historyData = state.log.slice(0, 6).reverse().map(e => {
+    let ahorro = 0;
+    if (e.reparto && typeof e.reparto.ahorro === 'number') {
+      ahorro = e.reparto.ahorro + (e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0);
+    } else {
+      const base = computeBase();
+      const comb = e.p1 + e.p2;
+      ahorro = base + comb * (1 - state.config.pctPremio / 100);
+    }
+    return {
+      mesLabel: fmtMes(e.mes),
+      ahorro: ahorro
+    };
+  });
+
+  const maxVal = Math.max(...historyData.map(d => d.ahorro), 500000);
+  const N = historyData.length;
+  
+  const graphWidth = 250;
+  const startX = 35;
+  const startY = 90;
+  const colWidth = graphWidth / N;
+  const barWidth = Math.min(22, colWidth * 0.45);
+
+  let barElements = '';
+  historyData.forEach((d, i) => {
+    const barHeight = Math.max(4, (d.ahorro / maxVal) * 65);
+    const x = startX + i * colWidth + (colWidth - barWidth) / 2;
+    const y = startY - barHeight;
+
+    barElements += `
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="url(#barGrad)" rx="3" ry="3" />
+      <text x="${x + barWidth/2}" y="${y - 5}" text-anchor="middle" font-family="var(--sans)" font-size="8.5" fill="var(--cream)" font-weight="600">${fmtK(d.ahorro)}</text>
+      <text x="${x + barWidth/2}" y="${startY + 15}" text-anchor="middle" font-family="var(--sans)" font-size="8" fill="rgba(246,241,230,.4)" font-weight="600">${d.mesLabel.split(' ')[0]}</text>
+    `;
+  });
+
+  return `<div class="card dark" style="padding:18px 16px;">
+    <div class="k" style="margin-bottom:14px;">Evolución del Ahorro</div>
+    <div style="height:120px; width:100%;">
+      <svg viewBox="0 0 300 120" style="width:100%; height:100%; overflow:visible;">
+        <defs>
+          <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--gb)" />
+            <stop offset="100%" stop-color="var(--green)" />
+          </linearGradient>
+        </defs>
+        <line x1="${startX - 10}" y1="${startY}" x2="${startX + graphWidth + 10}" y2="${startY}" stroke="rgba(246,241,230,.12)" stroke-width="1" />
+        ${barElements}
+      </svg>
+    </div>
+  </div>`;
+}
+
+/* =========================================================
+   METAS (lista unificada + crear/editar)
+   ========================================================= */
+function metaSub(m){
+  if(m.tipo==='personal')return 'Tu premio + libre · privado de tu teléfono';
+  let s=[];
+  const isCompleted = m.objetivo > 0 && m.saldo >= m.objetivo;
+  
+  if(state.config.estrategia==='secuencial'){
+    const prio = getMetaPrioritaria();
+    if(prio && prio.id === m.id){
+      s.push('<span style="color:var(--gold);font-weight:600">Prioritaria primero</span>');
+    }
+  } else if(m.tipo==='imprevistos'){
+    s.push('Se llena primero');
+  }
+
+  if(m.objetivo)s.push('meta '+fmtK(m.objetivo));
+
+  if(isCompleted){
+    if((m.aporteFijo||0)>0||(m.aportePct||0)>0){
+      s.push('<span style="color:var(--gb);font-weight:600">Aportes liberados (llena)</span>');
+    } else {
+      s.push('completada');
+    }
+  } else {
+    const prio = state.config.estrategia==='secuencial' ? getMetaPrioritaria() : null;
+    const isPrio = prio && prio.id === m.id;
+    if(!isPrio){
+      if((m.aporteFijo||0)>0)s.push('+'+fmtK(m.aporteFijo)+'/mes');
+      if((m.aportePct||0)>0)s.push('+'+m.aportePct+'% del resto');
+    }
+  }
+
+  if(m.tipo==='invertir'&&!m.objetivo&&!(m.aporteFijo||0)&&!(m.aportePct||0)){
+    const sp=sumaPct();
+    const rest=Math.max(0,100-sp);
+    s.push(`recibe el sobrante (${rest}% del resto)`);
+  }
+  return s.join(' · ')||'sin meta';
+}
+function renderMetas(){
+  const card=(m)=>{
+    const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):null;
+    const isPersonal = m.tipo === 'personal';
+    const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;padding:8px 0;font-size:20px;color:var(--gs);touch-action:none;user-select:none;margin-right:4px">☰</span>`;
+    return `<div class="card tap" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
+      ${dragHandle}
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span class="k" style="margin:0">${m.nombre}</span>${m.tipo!=='personal'?'<span class="pill">'+tipoLabel(m.tipo)+'</span>':''}</div>
+        <div class="num med">${fmt(m.saldo)}</div>
+        ${pct!=null?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
+        <div class="muted" style="font-size:12px">${metaSub(m)}</div>
+      </div><span class="chev">›</span></div>`;
+  };
+  let h='<header><div class="ey">Nuestras</div><h1>Metas</h1></header>';
+  const sp=sumaPct();
+  if(sp>0){
+    const over=sp>100;
+    const inv=inversionAbierta();
+    const invName=inv?inv.nombre:'la inversión';
+    h+=`<div class="card" style="background:${over?'rgba(122,34,34,.12)':'rgba(192,138,45,.1)'};border-color:${over?'#7a2222':'rgba(192,138,45,.35)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span class="k" style="margin:0;color:${over?'#ff6b6b':'var(--gb)'}">Reparto del ahorro restante (%)</span><span class="num" style="font-size:18px;color:${over?'#ff6b6b':'var(--gb)'}">${sp}%</span></div>
+      <div class="hint" style="margin-top:6px;color:rgba(246,241,230,.7)">${over?'Te pasaste de 100%: las últimas metas recibirán menos de lo que indica su %.':(sp<100?`El ${100-sp}% restante va a ${invName}.`:'Repartes el 100%; la inversión solo recibe lo que no alcance otra meta.')}</div></div>`;
+  }
+  h+=`<div class="stitle" style="display:flex;align-items:center;gap:6px">
+    Metas compartidas
+    <span id="helpPrioBtn" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(246,241,230,.15);color:var(--cream);font-size:9.5px;font-weight:bold;cursor:pointer;user-select:none">?</span>
+  </div>
+  <div id="prioHint" class="hint" style="display:none;background:rgba(192,138,45,.08);border:1px solid rgba(192,138,45,.2);border-radius:10px;padding:10px 12px;margin:2px 0 10px;color:rgba(246,241,230,.8);line-height:1.45">
+    El orden de esta lista define la prioridad de ahorro si usan la estrategia <b>Prioritaria primero</b> o <b>En cascada</b>. Mantén presionado y arrastra ☰ para ordenarlas.
+  </div>`;
+  h+='<div id="sharedMetasContainer">';
+  metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0)).forEach(m=>h+=card(m));
+  h+='</div>';
+  h+='<div class="stitle">Personal</div>'+card(metaPersonal(state.config.perfil));
+  h+=`<div style="height:72px;flex-shrink:0;"></div>
+  <div style="position:sticky;bottom:0;background:linear-gradient(to top, var(--gd) 85%, transparent);padding:20px 0 16px;z-index:20;margin-top:auto">
+    <button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>
+  </div>`;
+  $('r1').innerHTML=h;
+  const helpBtn = $('helpPrioBtn');
+  if(helpBtn){
+    helpBtn.onclick=(e)=>{
+      e.stopPropagation();
+      const hint = $('prioHint');
+      if(hint) hint.style.display = hint.style.display==='none'?'block':'none';
+    };
+  }
+  $('r1').querySelectorAll('[data-mid]').forEach(el=>el.onclick=(e)=>{
+    if(e.target.closest('.drag-handle') || e.target.closest('#helpPrioBtn')) return;
+    if(el.classList.contains('dragged')){
+      el.classList.remove('dragged');
+      return;
+    }
+    openDetail(el.dataset.mid);
+  });
+  $('addMeta').onclick=()=>openMetaForm(null);
+  initReorder();
+}
+
+function initReorder(){
+  const container=$('sharedMetasContainer');
+  if(!container)return;
+  let draggedEl=null,startY=0,hasDragged=false;
+
+  const onPointerMove=e=>{
+    if(!draggedEl)return;
+    const deltaY=e.clientY-startY;
+    if(Math.abs(deltaY)>5){
+      hasDragged=true;
+      draggedEl.classList.add('dragged');
+    }
+    const siblings=[...container.querySelectorAll('.card.tap:not(.dragging)')];
+    const nextSibling=siblings.find(sibling=>{
+      const box=sibling.getBoundingClientRect();
+      return e.clientY<box.top+box.height/2;
+    });
+    if(nextSibling){
+      container.insertBefore(draggedEl,nextSibling);
+    }else{
+      container.appendChild(draggedEl);
+    }
+  };
+
+  const onPointerUp=e=>{
+    if(!draggedEl)return;
+    document.removeEventListener('pointermove',onPointerMove);
+    document.removeEventListener('pointerup',onPointerUp);
+    document.removeEventListener('pointercancel',onPointerUp);
+
+    draggedEl.classList.remove('dragging');
+    if(hasDragged){
+      const cards=[...container.querySelectorAll('.card.tap')];
+      cards.forEach((card,idx)=>{
+        const m=metaById(card.dataset.mid);
+        if(m)m.prioridad=idx;
+      });
+      save();
+      rerender();
+      flash('Prioridades actualizadas ✓');
+    }else{
+      draggedEl.classList.remove('dragged');
+    }
+    draggedEl=null;
+  };
+
+  container.addEventListener('pointerdown',e=>{
+    const handle=e.target.closest('.drag-handle');
+    if(!handle)return;
+    const card=handle.closest('.card.tap');
+    if(!card)return;
+    draggedEl=card;
+    startY=e.clientY;
+    hasDragged=false;
+    card.classList.add('dragging');
+    
+    document.addEventListener('pointermove',onPointerMove);
+    document.addEventListener('pointerup',onPointerUp);
+    document.addEventListener('pointercancel',onPointerUp);
+    
+    e.preventDefault();
+  });
+}
+
+/* ---------- formulario único de meta ---------- */
+function openMetaForm(id){
+  const existing=id?metaById(id):null;
+  mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:'sueno',saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,prioridad:metasCompartidas().length,reparto:null};
+  detailKey=null;
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
+  $('sf').classList.add('on');$('sf').scrollTop=0;
+  $('mainnav').classList.add('hide');
+  renderMetaForm(!!existing);
+}
+function renderMetaForm(editing){
+  const m=mForm;
+  const tipoBtns=`<div class="seg">
+    <button data-tipo="imprevistos" class="${m.tipo==='imprevistos'?'on':''}">Para imprevistos</button>
+    <button data-tipo="invertir" class="${m.tipo==='invertir'?'on':''}">Para invertir</button>
+    <button data-tipo="sueno" class="${m.tipo==='sueno'?'on':''}">Para un sueño</button>
+  </div>`;
+  let fields='';
+  if(m.tipo==='imprevistos'){
+    const prio = getMetaPrioritaria();
+    const isPrio = prio && prio.id === m.id;
+    const showAporte = state.config.estrategia === 'simultaneo' || !isPrio;
+    fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
+      <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
+      ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
+      <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
+  }else if(m.tipo==='invertir'){
+    fields=`<div class="card"><label class="lbl">Aporte al mes (opcional)</label>
+      ${aporteFields()}
+      <div class="deriv" id="fDeriv" style="margin-top:14px"></div>
+      <div class="hint">Una inversión no “se completa”: recibe lo que defines y, además, absorbe lo que sobre del ahorro tras las demás metas.</div></div>
+      <details ${m.reparto&&m.reparto.length?'open':''}><summary>Repartir por dentro (opcional)</summary>
+        <div class="dpad" id="repWrap">${repartoEditor()}</div></details>`;
+  }else{
+    const prio = getMetaPrioritaria();
+    const isPrio = prio && prio.id === m.id;
+    const showAporte = state.config.estrategia !== 'secuencial' || !isPrio;
+    fields=`<div class="card">
+      <label class="lbl">Meta (opcional)</label>
+      <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
+      <label class="lbl" style="margin-top:14px">¿Para cuándo? (opcional)</label>
+      <input class="sf" type="month" id="fFecha" value="${m.fecha||''}">
+      ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
+      <div class="deriv" id="fDeriv"></div>
+    </div>`;
+  }
+  $('rf').innerHTML=`
+<button class="bk" id="fBack">‹ Cancelar</button>
+<header style="padding-top:6px"><div class="ey">${editing?'Editar':'Nueva'} meta</div><h1>${editing?m.nombre||'Meta':'¿Qué quieren lograr?'}</h1></header>
+<div class="card"><label class="lbl">Nombre</label><input class="sf" id="fNom" value="${(m.nombre||'').replace(/"/g,'&quot;')}" placeholder="Viaje a Japón, Carro, Casa…"></div>
+${m.tipo!=='personal'?'<div class="stitle" style="color:rgba(246,241,230,.65)">¿Para qué es?</div><div class="card">'+tipoBtns+'</div>':''}
+${fields}
+<div class="card"><label class="lbl">¿Ya tienes algo guardado aquí? (opcional)</label>
+  <input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0"></div>
+<button class="btn" id="fSave">${editing?'Guardar cambios':'Crear meta'}</button>
+${editing&&m.tipo!=='imprevistos'?'<button class="btn danger" id="fDel">Eliminar meta</button>':''}`;
+  attachMetaForm(editing);
+  updateDeriv();
+}
+function aporteFields(){
+  const m=mForm;
+  return `<input class="amt money" id="fFijo" inputmode="numeric" value="${m.aporteFijo?fmt(m.aporteFijo):''}" placeholder="$0 fijo / mes">
+    <label class="lbl" style="margin-top:12px">Además, un % de lo que sobra (opcional)</label>
+    <input class="sf" id="fPct" inputmode="numeric" value="${m.aportePct||''}" placeholder="0 %">
+    <div class="hint">Puedes usar uno, el otro o los dos: primero se aparta el monto fijo y, del resto que queda, esta meta toma ese %.</div>`;
+}
+function repartoEditor(){
+  const r=(mForm.reparto||[]);
+  let h=r.map((x,i)=>`<div class="grow"><input data-rn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" style="flex:1;font-family:var(--sans)"><input data-rp="${i}" inputmode="numeric" value="${x.pct}" style="width:56px;text-align:center"><button class="del" data-rdel="${i}">×</button></div>`).join('');
+  h+=`<button class="btn sm ghost" id="repAdd">+ Agregar categoría</button>`;
+  const sum=r.reduce((s,x)=>s+(+x.pct||0),0);
+  h+=`<div class="hint">Suma: ${sum}% ${sum!==100&&r.length?'· idealmente 100%':''}</div>`;
+  return h;
+}
+function readMetaForm(){
+  const m=mForm;
+  m.nombre=($('fNom')?$('fNom').value.trim():m.nombre);
+  if($('fObj'))m.objetivo=parse($('fObj').value);
+  if(m.tipo==='invertir')m.objetivo=0;
+  if($('fFecha'))m.fecha=$('fFecha').value||null;
+  if($('fFijo'))m.aporteFijo=parse($('fFijo').value);
+  if($('fPct'))m.aportePct=Math.max(0,Math.min(100,parse($('fPct').value)));
+  if($('fSaldo'))m.saldo=parse($('fSaldo').value);
+  if(state.config.estrategia==='secuencial'){
+    const prio = getMetaPrioritaria();
+    const isPrio = prio && prio.id === m.id;
+    if(isPrio){
+      m.aporteFijo=0;m.aportePct=0;
+    }
+  }
+  if(m.tipo==='imprevistos'){
+    m.fecha=null;
+  }
+}
+function updateDeriv(){
+  const el=$('fDeriv');if(!el)return;
+  const obj=$('fObj')?parse($('fObj').value):0;const fecha=$('fFecha')?$('fFecha').value:'';
+  const fijo=$('fFijo')?parse($('fFijo').value):0;
+  const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
+  const saldo=$('fSaldo')?parse($('fSaldo').value):0;
+  const est=Math.max(0,computeBase()+avgVar()*(1-state.config.pctPremio/100));
+  const pctMes=est*pct/100;
+  const aporteMes=fijo+pctMes;
+  const apTxt=()=>{let p=[];if(fijo>0)p.push(fmt(fijo)+' fijos');if(pct>0)p.push('~'+fmt(pctMes)+' ('+pct+'% del resto)');return p.join(' + ');};
+
+  let txt='';
+  const strat = state.config.estrategia;
+
+  if (strat === 'cascada') {
+    if (obj) {
+      const falta = Math.max(0, obj - saldo);
+      txt = `Estrategia actual: <b>En cascada</b>. Esta meta se llenará al 100% con todo el ahorro disponible (según prioridad) hasta completar los <b>${fmt(obj)}</b> (faltan ${fmt(falta)}).`;
+    } else {
+      txt = `Estrategia actual: <b>En cascada</b>. Esta meta abierta absorberá todo el ahorro sobrante una vez se completen las metas de mayor prioridad.`;
+    }
+  } else if (strat === 'secuencial') {
+    const prio = getMetaPrioritaria();
+    const isPrio = prio && prio.id === mForm.id;
+    if (isPrio) {
+      const falta = Math.max(0, obj - saldo);
+      const fijosOtros = metasCompartidas().filter(m => m.id !== prio.id && m.tipo !== 'imprevistos').reduce((s, m) => s + (m.aporteFijo || 0), 0);
+      const estPrio = Math.max(0, est - fijosOtros);
+      const meses = estPrio > 0 ? Math.ceil(falta / estPrio) : '—';
+      if (fijosOtros > 0) {
+        txt = `Estrategia actual: <b>Prioritaria primero</b>. Esta meta recibe el ahorro base restante de <b>${fmt(estPrio)}/mes</b> (tras cubrir aportes fijos de otras metas). Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
+      } else {
+        txt = `Estrategia actual: <b>Prioritaria primero</b>. Todo el ahorro base de <b>${fmt(est)}/mes</b> va a esta meta primero por ser la de máxima prioridad. Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
+      }
+    } else {
+      const prioNom = prio ? prio.nombre : 'la meta principal';
+      if(obj&&fecha){
+        const meses=Math.max(1,monthsUntil(fecha));const need=Math.ceil((obj-saldo)/meses);
+        txt=`Para llegar a <b>${fmt(obj)}</b> en ${fmtMes(fecha)} necesitas <b>${fmt(need)}/mes</b>.`;
+        if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} (~${fmt(aporteMes)}/mes) llegarías en ${addMonths(m2)}.`;}
+      }else if(obj&&aporteMes>0){
+        const meses=Math.ceil((obj-saldo)/aporteMes);
+        txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
+      }else if(aporteMes>0&&!obj){
+        txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+      }else if(obj){
+        txt=`Meta de <b>${fmt(obj)}</b> sin aporte definido: recibe lo que sobre del ahorro mensual.`;
+      }else{
+        txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
+      }
+      txt += ` <br><span style="opacity:0.8; font-size:11px;">Nota: Recibirá aportes en paralelo una vez se complete <b>${prioNom}</b> o si sobra ahorro mensual.</span>`;
+    }
+  } else {
+    if(obj&&fecha){
+      const meses=Math.max(1,monthsUntil(fecha));const need=Math.ceil((obj-saldo)/meses);
+      txt=`Para llegar a <b>${fmt(obj)}</b> en ${fmtMes(fecha)} necesitas <b>${fmt(need)}/mes</b>.`;
+      if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} (~${fmt(aporteMes)}/mes) llegarías en ${addMonths(m2)}.`;}
+    }else if(obj&&aporteMes>0){
+      const meses=Math.ceil((obj-saldo)/aporteMes);
+      txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
+    }else if(aporteMes>0&&!obj){
+      txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+    }else if(obj){
+      txt=`Meta de <b>${fmt(obj)}</b> sin aporte definido: recibe lo que sobre del ahorro mensual.`;
+    }else{
+      txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
+    }
+  }
+  el.innerHTML=txt;
+}
+function attachMetaForm(editing){
+  $('fBack').onclick=()=>{mForm=null;go(1);};
+  $('rf').querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>{readMetaForm();mForm.tipo=b.dataset.tipo;if(mForm.tipo==='invertir'&&!mForm.reparto)mForm.reparto=[];renderMetaForm(editing);});
+  ['fObj','fFecha','fFijo','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
+  // reparto interno
+  const repAdd=$('repAdd');
+  if(repAdd)repAdd.onclick=()=>{readMetaForm();mForm.reparto=mForm.reparto||[];mForm.reparto.push({n:'',pct:0});renderMetaForm(editing);};
+  $('rf').querySelectorAll('[data-rdel]').forEach(b=>b.onclick=()=>{readMetaForm();mForm.reparto.splice(+b.dataset.rdel,1);renderMetaForm(editing);});
+  $('rf').querySelectorAll('[data-rn]').forEach(el=>el.addEventListener('blur',()=>{mForm.reparto[+el.dataset.rn].n=el.value.trim();}));
+  $('rf').querySelectorAll('[data-rp]').forEach(el=>el.addEventListener('input',()=>{mForm.reparto[+el.dataset.rp].pct=parse(el.value);}));
+  $('fSave').onclick=()=>{
+    readMetaForm();
+    if(!mForm.nombre){flash('Ponle un nombre a la meta');return;}
+    const idx=state.metas.findIndex(x=>x.id===mForm.id);
+    if(idx>=0)state.metas[idx]=mForm;else state.metas.push(mForm);
+    mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
+  };
+  const del=$('fDel');
+  if(del)del.onclick=()=>{if(!confirm('¿Eliminar esta meta?'))return;state.metas=state.metas.filter(x=>x.id!==mForm.id);mForm=null;save();go(1);flash('Meta eliminada');};
+}
+
+/* ---------- detalle de meta ---------- */
+function openDetail(id){detailKey=id;renderDetail();
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));$('sd').classList.add('on');$('sd').scrollTop=0;
+  $('mainnav').classList.add('hide');}
+function gastosDe(id){return state.gastos.filter(g=>g.meta===id);}
+function renderDetail(){
+  const m=metaById(detailKey);if(!m){go(1);return;}
+  const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):0,falta=Math.max(0,obj-m.saldo);
+  let body='';
+  if(obj){
+    body+=`<div class="bar light"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--gs)"><b class="gold">${pct.toFixed(0)}%</b><span>${falta>0?'faltan '+fmt(falta):'✓ cumplido'}</span></div>`;
+    if(m.fecha){const mr=monthsUntil(m.fecha),ap=mr>0&&falta>0?Math.ceil(falta/mr):null;
+      if(ap)body+=`<div class="hint">Para ${fmtMes(m.fecha)}: ${fmt(ap)}/mes (${mr} mes${mr!==1?'es':''}).</div>`;}
+  }
+  if(m.tipo==='invertir'){
+    const r=m.reparto||[];const sum=r.reduce((s,x)=>s+(+x.pct||0),0);
+    body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="k">Cómo distribuyes esta inversión</div>
+      <div class="hint" style="margin-bottom:8px">${r.length===0?'<b>Sin categorías aún.</b> Agrega tipos (acciones, bonos, cripto…) para ver cómo se reparte el saldo.':'Define qué % va a cada tipo. Puedes agregar o quitar en cualquier momento.'}</div>
+      <div id="repBox">${r.map((x,i)=>`<div class="grow"><input data-drn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo" style="flex:1;font-family:var(--sans)"><input data-drp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">% <button class="del" data-drdel="${i}">×</button></div>`).join('')}</div>
+      <button class="btn sm ghost" id="repAddD">+ Agregar tipo de inversión</button>
+      <div class="hint" style="color:${sum!==100&&r.length?'#a23':'var(--gs)'}">Suma: ${sum}%${r.length&&sum!==100?' · debería sumar 100%':''}</div>
+      ${r.length?'<div class="esc" style="margin-top:8px">'+r.map(e=>`<div class="ep">${e.pct}%</div><div class="et">${e.n||'—'}</div><div class="ev num">${fmt(m.saldo*e.pct/100)}</div>`).join('')+'</div>':''}
+    </div>`;
+  }
+  // editor saldo
+  body+=`<label class="lbl" style="margin-top:14px">Saldo actual</label><input class="amt money" id="dSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}">
+    <div class="hint">El saldo se actualiza solo al cerrar el mes. Edítalo a mano únicamente para corregir el punto de partida.</div>`;
+  // gastos (no para personal)
+  let ghist='';
+  if(m.tipo!=='personal'){
+    const gs=gastosDe(m.id).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha));
+    ghist=gs.length?gs.map(g=>`<div class="lrow"><div><div class="lm">${g.nota||'Salida'}</div><div class="ls">${fmtFecha(g.fecha)}</div></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px">−${fmt(g.monto)}</span><button class="ldel" data-gdel="${g.id}">×</button></div></div>`).join(''):'<div class="empty">Sin salidas registradas.</div>';
+    body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">Registrar salida</div>
+      <div class="row2"><label class="lbl">Fecha<input class="sf" type="date" id="dFecha" value="${today()}" style="margin-top:4px"></label>
+      <label class="lbl">Monto<input class="sf money" id="dMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
+      <label class="lbl" style="margin-top:10px">Nota<input class="sf" id="dNota" placeholder="¿En qué fue?" style="margin-top:4px"></label>
+      <button class="btn sm" id="dGasto">Registrar salida</button>
+      <div style="margin-top:16px"><div class="k">Salidas</div>${ghist}</div></div>`;
+  }
+  $('rd').innerHTML=`<button class="bk" id="dBack">‹ Volver a Metas</button>
+    <header style="padding-top:6px"><div class="ey">${m.tipo==='personal'?'Personal':tipoLabel(m.tipo)}</div><h1>${m.nombre}</h1></header>
+    <div class="card"><div class="k">Saldo</div><div class="num big">${fmt(m.saldo)}</div>${body}</div>
+    ${m.tipo!=='personal'?'<button class="btn ghost" id="dEdit" style="border-color:rgba(246,241,230,.24);color:var(--cream)">Editar esta meta</button>':''}`;
+  $('dBack').onclick=()=>go(1);
+  const ds=$('dSaldo');
+  ds.addEventListener('focus',()=>{ds.value=String(m.saldo||0);ds.select();});
+  ds.addEventListener('blur',()=>{m.saldo=parse(ds.value);ds.value=m.saldo?fmt(m.saldo):'';save();renderDetail();});
+  const ed=$('dEdit');if(ed)ed.onclick=()=>openMetaForm(m.id);
+  const dg=$('dGasto');
+  if(dg)dg.onclick=()=>{const f=$('dFecha').value||today(),mo=parse($('dMonto').value),nt=$('dNota').value.trim();
+    if(mo<=0){flash('Pon el monto');return;}m.saldo=Math.max(0,m.saldo-mo);state.gastos.push({id:uid(),meta:m.id,fecha:f,monto:mo,nota:nt});save();renderDetail();flash('Salida registrada');};
+  $('rd').querySelectorAll('[data-gdel]').forEach(b=>b.onclick=()=>{const g=state.gastos.find(x=>x.id===b.dataset.gdel);if(g){m.saldo+=g.monto;state.gastos=state.gastos.filter(x=>x.id!==g.id);save();renderDetail();}});
+  // editor de distribución de inversión (inline en la ficha)
+  const ra=$('repAddD');
+  if(ra)ra.onclick=()=>{m.reparto=m.reparto||[];m.reparto.push({n:'',pct:0});save();renderDetail();};
+  $('rd').querySelectorAll('[data-drdel]').forEach(b=>b.onclick=()=>{m.reparto.splice(+b.dataset.drdel,1);save();renderDetail();});
+  $('rd').querySelectorAll('[data-drn]').forEach(el=>el.addEventListener('blur',()=>{m.reparto[+el.dataset.drn].n=el.value.trim();save();}));
+  $('rd').querySelectorAll('[data-drp]').forEach(el=>el.addEventListener('blur',()=>{m.reparto[+el.dataset.drp].pct=Math.max(0,Math.min(100,parse(el.value)));save();renderDetail();}));
+}
+
+/* ---------- historial de meses cerrados ---------- */
+function openHistoryList() {
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
+  $('sh').classList.add('on');
+  $('sh').scrollTop=0;
+  $('mainnav').classList.add('hide');
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const c=state.config;
+  const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
+  
+  let h = `<button class="bk" id="hListBack">‹ Volver a Aportar</button>
+    <header style="padding-top:6px">
+      <div class="ey">Registro Histórico</div>
+      <h1>Meses cerrados</h1>
+    </header>`;
+    
+  if (sortedLog.length === 0) {
+    h += `<div class="card"><div class="empty">Aún no hay meses cerrados registrados.</div></div>`;
+  } else {
+    h += sortedLog.map(e => {
+      const ec = e.config || c;
+      const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
+      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
+      const p1Total = (ec.nominaP1 || 0) + e.p1;
+      const p2Total = (ec.nominaP2 || 0) + e.p2;
+      return `<div class="card tap tap-hist-item" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
+        <div style="flex:1">
+          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
+          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
+          <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
+          <button class="ldel delete-hist-item-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
+          <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  
+  $('rh').innerHTML = h;
+  
+  $('hListBack').onclick = () => {
+    go(2);
+  };
+  
+  $('rh').querySelectorAll('.tap-hist-item').forEach(el => el.onclick = (e) => {
+    if (e.target.closest('.delete-hist-item-btn')) return;
+    openHistoryDetail(el.dataset.hmes, 'list');
+  });
+  
+  $('rh').querySelectorAll('.delete-hist-item-btn').forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    state.log = state.log.filter(x => x.mes !== b.dataset.logm);
+    save();
+    renderHistoryList();
+  });
+}
+
+function openHistoryDetail(mes, fromTab) {
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
+  $('sh').classList.add('on');
+  $('sh').scrollTop=0;
+  $('mainnav').classList.add('hide');
+  renderHistoryDetail(mes, fromTab);
+}
+
+function renderHistoryDetail(mes, fromTab) {
+  const entry = state.log.find(e => e.mes === mes);
+  if (!entry) {
+    if (fromTab === 'list') renderHistoryList(); else go(2);
+    return;
+  }
+  
+  const backFn = () => {
+    if (fromTab === 'list') renderHistoryList(); else go(2);
+  };
+  
+  const c = entry.config || state.config;
+  const r = entry.reparto;
+  
+  let h = `<button class="bk" id="hDetailBack">‹ Volver</button>
+    <header style="padding-top:6px">
+      <div class="ey">Detalle de Cierre</div>
+      <h1>${fmtMes(entry.mes)}</h1>
+    </header>`;
+    
+  if (!r) {
+    const cb = entry.p1 + entry.p2;
+    h += `<div class="card">
+      <div class="k" style="margin-bottom:12px;">Resumen del mes</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px;">
+        <div style="display:flex;justify-content:space-between"><span>Extra ${c.nombreP1}:</span><b class="num">${fmt(entry.p1)}</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Extra ${c.nombreP2}:</span><b class="num">${fmt(entry.p2)}</b></div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px;font-weight:700;">
+          <span>Total extra:</span><b class="num">${fmt(cb)}</b>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:16px;line-height:1.45;">
+        ℹ️ Los detalles completos de reparto y gráficos no están disponibles para meses cerrados antes de la actualización de historial.
+      </div>
+    </div>`;
+  } else {
+    const totalEntra = r.entra || (r.nom + r.comb);
+    const totalEspecial = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
+    const totalEspecialAhorro = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto*(1-(ep.pctRetener||0)/100), 0) : 0;
+    const entra = Math.max(1, totalEntra + totalEspecial);
+    const ahorro = Math.max(0, r.ahorro + totalEspecialAhorro);
+    
+    let histExtraBolsilloP1=0,histExtraBolsilloP2=0;
+    (entry.especiales||[]).forEach(ep=>{
+      const toBolsillo=ep.monto*(ep.pctRetener||0)/100;
+      if(toBolsillo>0.5){
+        if(ep.persona==='p1')histExtraBolsilloP1+=toBolsillo;
+        else if(ep.persona==='p2')histExtraBolsilloP2+=toBolsillo;
+        else{histExtraBolsilloP1+=toBolsillo/2;histExtraBolsilloP2+=toBolsillo/2;}
+      }
+    });
+    const pg = (r.gastosDia / entra * 100);
+    const ppp = (r.gustosPareja / entra * 100);
+    const pp1 = ((r.gustosP1+histExtraBolsilloP1) / entra * 100);
+    const pp2 = ((r.gustosP2+histExtraBolsilloP2) / entra * 100);
+    const pa = (ahorro / entra * 100);
+    
+    const recibe = Object.keys(r.dist || {}).map(id => ({
+      m: metaById(id) || { nombre: id, tipo: 'Desconocido' },
+      v: r.dist[id] || 0
+    })).filter(x => x.v > 0.5);
+    
+    h += `<div class="casc nofade">
+      <div class="inc-row"><span class="inc-name">Ingresos totales</span><span class="inc-val num">${fmt(totalEntra + totalEspecial)}</span></div>
+      
+      <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
+        <div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>
+        ${r.comb > 0 ? `<div style="display:flex;justify-content:space-between"><span>Variables:</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>` : ''}
+        ${entry.especiales && entry.especiales.length > 0 ? entry.especiales.map(ep => {
+          const pctR=ep.pctRetener||0;
+          const toSave=ep.monto*(1-pctR/100);
+          const toBolsillo=ep.monto-toSave;
+          const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+          return `<div style="display:flex;justify-content:space-between"><span>Adicional — ${ep.nombre} (${persNom}):</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>${pctR>0?`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div><div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`:''}`;
+        }).join('') : ''}
+      </div>
+      
+      <div class="stack">
+        <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-a" style="flex:1"></span>
+      </div>
+      
+      <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
+      <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
+      <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
+      ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
+      <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
+      ${histExtraBolsilloP2>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP2)}</b></div>`:''}
+      <div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Ahorro e inversión</span><b>${fmt(ahorro)}</b></div>
+      
+      ${(()=>{
+        const especiales=entry.especiales||[];
+        if(especiales.length>0){
+          const unifiedDist={};
+          recibe.forEach(x=>{unifiedDist[x.m.id]={m:x.m,base:x.v,extra:0};});
+          especiales.forEach(ep=>{
+            const toSave=ep.monto*(1-(ep.pctRetener||0)/100);
+            if(toSave>0.5){
+              if(ep.meta==='distribuir'){
+                const distEsp=distribuirAhorro(toSave,true);
+                metasCompartidas().forEach(m=>{if(!unifiedDist[m.id])unifiedDist[m.id]={m,base:0,extra:0};unifiedDist[m.id].extra+=distEsp[m.id]||0;});
+              }else{const md=metaById(ep.meta);if(md){if(!unifiedDist[ep.meta])unifiedDist[ep.meta]={m:md,base:0,extra:0};unifiedDist[ep.meta].extra+=toSave;}}
+            }
+          });
+          const uList=Object.values(unifiedDist).filter(x=>(x.base+x.extra)>0.5);
+          const totalAh=Math.max(1,ahorro);
+          let mh=uList.map(x=>{const tot=x.base+x.extra;return `<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(tot)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,tot/totalAh*100)).toFixed(1)}%"></i></div>${x.extra>0?`<div style="font-size:11px;color:var(--gb);margin-top:3px;padding-left:2px">↳ incluye +${fmt(x.extra)} de ingresos adicionales</div>`:''}</div>`;}).join('');
+          return mh?`<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${mh}</div>`:`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`;
+        }else{
+          return recibe.length>0?`<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${recibe.map(x=>`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,x.v/Math.max(1,ahorro)*100)).toFixed(1)}%"></i></div></div>`).join('')}</div>`:`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`;
+        }
+      })()}
+    </div>`;
+  }
+  
+  h += `<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
+    <button class="btn danger" id="btnDelHistEntry">Eliminar registro</button>
+  </div>`;
+  
+  $('rh').innerHTML = h;
+  
+  $('hDetailBack').onclick = backFn;
+  
+  $('btnDelHistEntry').onclick = () => {
+    if (!confirm(`¿Eliminar el registro de ${fmtMes(entry.mes)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    state.log = state.log.filter(e => e.mes !== entry.mes);
+    save();
+    backFn();
+  };
+}
+
+/* =========================================================
+   CERRAR MES (cascada)
+   ========================================================= */
+function computeReparto(g,a){
+  const c=state.config,base=computeBase(),comb=g+a;
+  const prem=comb*c.pctPremio/100;
+  const ahorroVar=comb*(1-c.pctPremio/100);
+  const ahorro=base+ahorroVar;
+  const gastosDia=gastosFijosTotal();
+  const pf1=premioSplitFactor('p1',{p1:g,p2:a});
+  const pf2=1-pf1;
+  const gustosPareja=c.planPareja;
+  const gustosP1=c.libreP1+prem*pf1;
+  const gustosP2=c.libreP2+prem*pf2;
+  const gustos=gustosPareja+gustosP1+gustosP2;
+  const dist=distribuirAhorro(ahorro);
+  return {base,comb,prem,ahorro,gastosDia,gustos,gustosPareja,gustosP1,gustosP2,dist,nom:c.nominaP1+c.nominaP2,entra:c.nominaP1+c.nominaP2+comb};
+}
+function renderCerrar(){
+  const c=state.config;
+  const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
+  const showLimit = 2;
+  const showLogs = sortedLog.slice(0, showLimit);
+
+  let logH = '';
+  if (sortedLog.length === 0) {
+    logH = '<div class="card"><div class="empty">Aún no hay meses cerrados.</div></div>';
+  } else {
+    logH = showLogs.map(e => {
+      const ec = e.config || c;
+      const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
+      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
+      const p1Total = (ec.nominaP1 || 0) + e.p1;
+      const p2Total = (ec.nominaP2 || 0) + e.p2;
+      return `<div class="card tap tap-hist" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
+        <div style="flex:1">
+          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
+          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
+          <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
+          <button class="ldel delete-hist-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
+          <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    if (sortedLog.length > showLimit) {
+      logH += `<button class="btn ghost sm" id="btnFullHistory" style="margin-top:8px;width:100%;">Ver historial completo (${sortedLog.length} meses) ›</button>`;
+    } else {
+      logH += `<button class="btn ghost sm" id="btnFullHistory" style="margin-top:8px;width:100%;">Abrir historial completo ›</button>`;
+    }
+  }
+
+  $('r2').innerHTML=`
+<header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
+<label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
+${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
+  const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
+  const pctR=ep.pctRetener||0;
+  const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:4px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epedit="${i}" style="font-size:14px;opacity:.65" title="Editar">✎</button><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
+<details id="detEspecial" class="card" style="margin-bottom:8px;padding:0"><summary style="font-size:14px;font-weight:600;color:var(--ink);padding:9px 14px">+ Agregar ingreso adicional</summary>
+  <div class="dpad" style="padding:0 12px 10px">
+    <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Comisión enero, prima junio…"></label>
+    <label class="lbl" style="margin-top:5px">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
+    <div class="row2" style="margin-top:5px">
+      <label class="lbl">¿De quién?<select class="sf" id="iPersona" style="margin-top:4px"><option value="p1">${c.nombreP1}</option><option value="p2">${c.nombreP2}</option><option value="ambos">Ambos</option></select></label>
+      <label class="lbl">% al bolsillo<input class="sf" id="iPctRetener" type="number" min="0" max="100" placeholder="${c.pctPremio||0}" style="margin-top:4px"></label>
+    </div>
+    <label class="lbl" style="margin-top:5px">¿A dónde va el resto?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
+    <button class="btn sm" id="iSave" style="padding:7px;margin-top:5px">Agregar</button>
+  </div>
+</details>
+<div class="stitle">Reparto del mes</div>
+<div class="flow nofade" id="mflow"></div>
+<button class="btn" id="mApply" style="margin-top:12px">Aportar</button>
+<div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
+  function updateMesDisplay(){const v=$('mMes').value;const d=$('mMesDisplay');if(d)d.textContent=fmtMes(v)||v;}
+  $('mMes').addEventListener('change',updateMesDisplay);
+  updateMesDisplay();
+  $('mApply').onclick=aplicar;
+  $('iSave').onclick=addIngreso;
+  $('r2').querySelectorAll('[data-epdel]').forEach(b=>b.onclick=()=>{
+    especialesPendientes.splice(+b.dataset.epdel,1);
+    renderCerrar();
+    drawFlow();
+  });
+  $('r2').querySelectorAll('[data-epedit]').forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.epedit;
+    const ep=especialesPendientes[i];
+    especialesPendientes.splice(i,1);
+    renderCerrar();
+    drawFlow();
+    if($('iNom'))$('iNom').value=ep.nombre;
+    if($('iMonto'))$('iMonto').value=ep.monto;
+    if($('iPersona'))$('iPersona').value=ep.persona||'p1';
+    if($('iPctRetener'))$('iPctRetener').value=ep.pctRetener||'';
+    if($('iMeta'))$('iMeta').value=ep.meta||'distribuir';
+    const det=$('detEspecial');if(det)det.setAttribute('open','');
+  });
+  $('r2').querySelectorAll('.tap-hist').forEach(el => el.onclick = (e) => {
+    if (e.target.closest('.delete-hist-btn')) return;
+    openHistoryDetail(el.dataset.hmes, 'cerrar');
+  });
+  $('r2').querySelectorAll('.delete-hist-btn').forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    state.log = state.log.filter(x => x.mes !== b.dataset.logm);
+    save();
+    renderCerrar();
+  });
+  const btnFull = $('btnFullHistory');
+  if (btnFull) {
+    btnFull.onclick = () => openHistoryList();
+  }
+  drawFlow();
+}
+function drawFlow(animate){
+  const el=$('mflow');if(!el)return;
+  const r=computeReparto(0,0),c=state.config;
+  const totalEspecial=especialesPendientes.reduce((s,ep)=>s+ep.monto,0);
+  const totalEspecialAhorro=especialesPendientes.reduce((s,ep)=>s+ep.monto*(1-(ep.pctRetener||0)/100),0);
+  const totalEntra=r.entra+totalEspecial;
+  const entra=Math.max(1,totalEntra);
+  const ahorro=Math.max(0,r.ahorro+totalEspecialAhorro);
+  const pg=(r.gastosDia/entra*100);
+  const ppp=(r.gustosPareja/entra*100);
+  let extraBolsilloP1=0,extraBolsilloP2=0;
+  especialesPendientes.forEach(ep=>{
+    const toBolsillo=ep.monto*(ep.pctRetener||0)/100;
+    if(toBolsillo>0.5){
+      if(ep.persona==='p1')extraBolsilloP1+=toBolsillo;
+      else if(ep.persona==='p2')extraBolsilloP2+=toBolsillo;
+      else{extraBolsilloP1+=toBolsillo/2;extraBolsilloP2+=toBolsillo/2;}
+    }
+  });
+  const pp1=((r.gustosP1+extraBolsilloP1)/entra*100);
+  const pp2=((r.gustosP2+extraBolsilloP2)/entra*100);
+  const pa=(ahorro/entra*100);
+  const recibe=metasCompartidas().map(m=>({m,v:r.dist[m.id]||0})).filter(x=>x.v>0.5);
+  const ah=Math.max(1,r.ahorro);
+  
+  // Habilitar o deshabilitar botón Aportar si hay ahorro negativo
+  const btnApply = $('mApply');
+  if (btnApply) {
+    btnApply.disabled = r.ahorro < 0;
+  }
+
+  let h='<div class="casc'+(animate?'':' nofade')+'">';
+  if(r.ahorro < 0) {
+    h += `<div style="background:rgba(122,34,34,0.08); border:1px solid #7a2222; padding:12px 14px; border-radius:12px; font-size:13px; color:#5a1919; line-height:1.45; margin-bottom:12px;">
+      ⚠️ <b>Ahorro mensual negativo (${fmt(r.ahorro)})</b>: Sus gastos y dinero libre superan los ingresos de este mes. Ajusten las cifras en <b>Flujo</b> o agreguen ingresos extras para poder aportar al plan.
+    </div>`;
+  }
+  h+=`<div class="inc-row"><span class="inc-name">Entra este mes</span><span class="inc-val num">${fmt(totalEntra)}</span></div>`;
+  // desglose: fijos, extras, especiales
+  h+=`<div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">`;
+  h+=`<div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>`;
+  if(totalEspecial>0){
+    especialesPendientes.forEach(ep=>{
+      const pctR=ep.pctRetener||0;
+      const toSave=ep.monto*(1-pctR/100);
+      const toBolsillo=ep.monto-toSave;
+      const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+      h+=`<div style="display:flex;justify-content:space-between"><span>${ep.nombre} (${persNom}):</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>`;
+      if(pctR>0){
+        h+=`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div>`;
+        h+=`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`;
+      }
+    });
+  }
+  h+=`</div>`;
+  h+=`<div class="stack">
+      <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-a" style="flex:1"></span></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1} (bolsillo personal)</span><b>${fmt(r.gustosP1+extraBolsilloP1)}</b></div>`;
+  if(extraBolsilloP1>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP1)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2} (bolsillo personal)</span><b>${fmt(r.gustosP2+extraBolsilloP2)}</b></div>`;
+  if(extraBolsilloP2>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP2)}</b></div>`;
+  h+=`<div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Para ahorrar e invertir</span><b>${fmt(ahorro)}</b></div>`;
+  if(especialesPendientes.length>0){
+    // Vista unificada: base + ingresos adicionales fusionados por meta
+    const unifiedDist={};
+    metasCompartidas().forEach(m=>{unifiedDist[m.id]={m,base:r.dist[m.id]||0,extra:0};});
+    especialesPendientes.forEach(ep=>{
+      const toSave=ep.monto*(1-(ep.pctRetener||0)/100);
+      if(toSave>0.5){
+        if(ep.meta==='distribuir'){
+          const distEsp=distribuirAhorro(toSave,true);
+          metasCompartidas().forEach(m=>{
+            if(!unifiedDist[m.id])unifiedDist[m.id]={m,base:0,extra:0};
+            unifiedDist[m.id].extra+=distEsp[m.id]||0;
+          });
+        }else{
+          const metaDest=metaById(ep.meta);
+          if(metaDest){
+            if(!unifiedDist[ep.meta])unifiedDist[ep.meta]={m:metaDest,base:0,extra:0};
+            unifiedDist[ep.meta].extra+=toSave;
+          }
+        }
+      }
+    });
+    const unifiedList=Object.values(unifiedDist).filter(x=>(x.base+x.extra)>0.5);
+    const totalAhorro=Math.max(1,ahorro);
+    if(unifiedList.length){
+      h+='<div class="meta-block"><div class="mt-title">A dónde va el ahorro</div>';
+      let delay=0;
+      unifiedList.forEach(x=>{
+        const total=x.base+x.extra;
+        const st=animate?`animation-delay:${delay}ms`:'';delay+=160;
+        h+=`<div class="meta-lvl" style="${st}"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(total)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,total/totalAhorro*100)).toFixed(1)}%"></i></div>${x.extra>0?`<div style="font-size:11px;color:var(--gb);margin-top:3px;padding-left:2px">↳ incluye +${fmt(x.extra)} de ingresos adicionales</div>`:''}</div>`;
+      });
+      h+='</div>';
+    }else{
+      h+=`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">Aún no hay ahorro para repartir este mes.</div>`;
+    }
+  }else{
+    if(recibe.length){
+      h+='<div class="meta-block"><div class="mt-title">A dónde va el ahorro</div>';
+      let delay=0;
+      recibe.forEach(x=>{
+        const st=animate?`animation-delay:${delay}ms`:'';delay+=160;
+        h+=`<div class="meta-lvl" style="${st}"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,x.v/ah*100)).toFixed(1)}%"></i></div></div>`;
+      });
+      h+='</div>';
+    }else{
+      h+=`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">Aún no hay ahorro para repartir este mes.</div>`;
+    }
+  }
+  const completedWithContributions = metasCompartidas().filter(m => m.objetivo > 0 && m.saldo >= m.objetivo && ((m.aporteFijo||0) > 0 || (m.aportePct||0) > 0));
+  if(completedWithContributions.length > 0) {
+    const list = completedWithContributions.map(m => `<b>${m.nombre}</b>`).join(', ');
+    h += `<div class="deriv" style="margin-top:12px; background:rgba(192,138,45,0.06); border-color:rgba(192,138,45,0.25); color:var(--ink)">
+      ℹ️ Las metas ${list} ya están completas. Sus aportes configurados se liberaron automáticamente y se redirigieron al ahorro sobrante de este mes.
+    </div>`;
+  }
+  h+='</div>';
+  el.className='flow';
+  el.innerHTML=h;
+}
+function aplicar(){
+  const mes=$('mMes').value;if(!mes){flash('Elige el mes');return;}
+  const ex=state.log.find(e=>e.mes===mes);
+  if(ex&&ex.aplicado){if(!confirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.'))return;}
+  const r=computeReparto(0,0),c=state.config;
+  if(r.ahorro < 0){flash('No se puede aportar: el ahorro es negativo');return;}
+  state.metas.forEach(m=>{if(m.tipo!=='personal')m.saldo=Math.max(0,m.saldo+(r.dist[m.id]||0));});
+  // aplicar ingresos adicionales pendientes
+  especialesPendientes.forEach(ep=>{
+    const pctR=ep.pctRetener||0;
+    const toSave=ep.monto*(1-pctR/100);
+    state.ingresos.unshift({id:uid(),mes:ep.mes,nombre:ep.nombre,monto:ep.monto,meta:ep.meta,persona:ep.persona||'ambos',pctRetener:pctR});
+    if(toSave>0.5){
+      if(ep.meta==='distribuir'){
+        const dist=distribuirAhorro(toSave, true);
+        state.metas.forEach(m=>{if(m.tipo!=='personal'&&(dist[m.id]||0)>0.5)m.saldo+=dist[m.id];});
+      }else{
+        const m=metaById(ep.meta);if(m)m.saldo+=toSave;
+      }
+    }
+  });
+  const espSnapshot = especialesPendientes.map(ep => ({
+    nombre: ep.nombre,
+    monto: ep.monto,
+    meta: ep.meta,
+    persona: ep.persona||'ambos',
+    pctRetener: ep.pctRetener||0,
+    metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')
+  }));
+  especialesPendientes=[];
+  // bolsillo personal del perfil de este teléfono
+  const perfil=c.perfil,per=metaPersonal(perfil);
+  const retenPersonal=especialesPendientes.reduce((s,ep)=>{
+    const ret=ep.monto*(ep.pctRetener||0)/100;
+    if(ep.persona===perfil)return s+ret;
+    if(ep.persona==='ambos')return s+ret*0.5;
+    return s;
+  },0);
+  const aporte=libreOf(perfil)+retenPersonal;
+  const ya=per.aportes.find(x=>x.mes===mes);
+  if(ya){per.saldo+=aporte-ya.monto;ya.monto=aporte;}else{per.saldo+=aporte;per.aportes.push({mes,monto:aporte});}
+  const snapshot = {
+    mes,
+    p1: 0,
+    p2: 0,
+    aplicado: true,
+    config: {
+      nombreP1: c.nombreP1,
+      nombreP2: c.nombreP2,
+      nominaP1: c.nominaP1,
+      nominaP2: c.nominaP2,
+      gastos: c.gastos,
+      planPareja: c.planPareja,
+      libreP1: c.libreP1,
+      libreP2: c.libreP2,
+      pctPremio: c.pctPremio,
+      modoPremio: c.modoPremio,
+      pctPremioP1: c.pctPremioP1,
+      estrategia: c.estrategia
+    },
+    reparto: {
+      base: r.base,
+      comb: r.comb,
+      prem: r.prem,
+      ahorro: r.ahorro,
+      gastosDia: r.gastosDia,
+      gustos: r.gustos,
+      gustosPareja: r.gustosPareja,
+      gustosP1: r.gustosP1,
+      gustosP2: r.gustosP2,
+      nom: r.nom,
+      entra: r.entra,
+      dist: Object.assign({}, r.dist)
+    },
+    especiales: espSnapshot
+  };
+  state.log=state.log.filter(e=>e.mes!==mes);state.log.push(snapshot);
+  state.log.sort((x,y)=>y.mes.localeCompare(x.mes));
+  save();
+  // animar la cascada como confirmación
+  renderCerrar();drawFlow(true);
+  flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓');
+}
+function addIngreso(){
+  const nom=$('iNom').value.trim(),mes=$('mMes')?$('mMes').value:curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
+  if(!nom||!monto){flash('Completa concepto y monto');return;}
+  const persona=$('iPersona')?$('iPersona').value:'ambos';
+  const pctRaw=$('iPctRetener')?$('iPctRetener').value.trim():'';
+  const pctRetener=pctRaw===''?(state.config.pctPremio||0):Math.min(100,Math.max(0,Number(pctRaw)||0));
+  especialesPendientes.push({nombre:nom,mes,monto,meta:mid,persona,pctRetener});
+  $('iNom').value='';
+  $('iMonto').value='';
+  if($('iPctRetener'))$('iPctRetener').value='';
+  $('iMeta').value='distribuir';
+  if($('iPersona'))$('iPersona').value='p1';
+  const det=$('detEspecial');if(det)det.removeAttribute('open');
+  renderCerrar();
+  drawFlow();
+  flash('Ingreso adicional agregado — se aplicará al aportar ✓');
+}
+
+/* =========================================================
+   FLUJO (presupuesto editable)
+   ========================================================= */
+function renderFlujo(){
+  const c=state.config;
+  const base=computeBase();
+  const total=c.nominaP1+c.nominaP2;
+  const pGas=total?Math.round(c.gastos/total*100):0;
+  const pPP=total?Math.round(c.planPareja/total*100):0;
+  const pL1=total?Math.round(c.libreP1/total*100):0;
+  const pL2=total?Math.round(c.libreP2/total*100):0;
+  const pAh=Math.max(0,100-pGas-pPP-pL1-pL2);
+  $('r3').innerHTML=`
+<header><div class="ey">Presupuesto mensual</div><h1>Flujo</h1></header>
+<div class="card dark">
+  <div class="k">Ahorro base mensual</div>
+  <div class="num big" id="flujoBase">${fmt(base)}</div>
+  <div class="muted sm" style="margin-top:4px">Nóminas − gastos − gustos</div>
+  <div class="stack" style="margin-top:12px;background:rgba(246,241,230,.06)">
+    <span class="st-seg" style="width:${pGas}%;background:#8a7f70"></span>
+    <span class="st-seg st-seg-pp" style="width:${pPP}%"></span>
+    <span class="st-seg st-seg-p1" style="width:${pL1}%"></span>
+    <span class="st-seg st-seg-p2" style="width:${pL2}%"></span>
+    <span class="st-seg" style="flex:1;background:#3d8c64"></span>
+  </div>
+  <div style="font-size:12px;color:rgba(246,241,230,.6);display:flex;justify-content:space-between;margin-top:4px">
+    <span>Gastos ${pGas}%</span><span>Gustos ${pPP+pL1+pL2}%</span><span style="color:var(--gb);font-weight:700">Ahorro ${pAh}%</span>
+  </div>
+</div>
+<div class="stitle">Nóminas netas</div>
+<div class="card">
+  <label class="lbl">Nómina neta de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+  <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px">
+  <label class="lbl" style="margin-top:12px">Nómina neta de ${c.nombreP2}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+  <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px">
+</div>
+<div class="stitle">Gastos del hogar</div>
+<div class="card">
+  <label class="lbl">Total gastos fijos</label>
+  <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px">
+  <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
+</div>
+<div class="stitle">Gustos · para disfrutar</div>
+<div class="card">
+  <label class="lbl">En pareja (citas, salidas…)</label>
+  <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px">
+  <div class="row2" style="margin-top:12px">
+    <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px"></label>
+    <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px"></label>
+  </div>
+  <div class="hint">Lo de "en pareja" se gasta juntos; el "libre" de cada uno va a su bolsillo sin rendir cuentas.</div>
+</div>`;
+  attachFlujo();
+}
+function attachFlujo(){
+  const c=state.config;
+  const money=(id,key)=>{const el=$(id);if(!el)return;
+    el.addEventListener('focus',()=>{el.value=String(c[key]||0);el.select();});
+    el.addEventListener('blur',()=>{c[key]=parse(el.value);save();rerender();});};
+  money('pN1','nominaP1');money('pN2','nominaP2');money('pGas','gastos');money('pPP','planPareja');money('pL1','libreP1');money('pL2','libreP2');
+}
+
+/* =========================================================
+   AJUSTES (configuración)
+   ========================================================= */
+function renderPlan(){
+  const c=state.config;
+  const detExtrasOpen = $('detExtras') ? $('detExtras').hasAttribute('open') : false;
+  const detEstrategiaOpen = $('detEstrategia') ? $('detEstrategia').hasAttribute('open') : false;
+  const detPerfilOpen = $('detPerfil') ? $('detPerfil').hasAttribute('open') : false;
+  const detNombresOpen = $('detNombres') ? $('detNombres').hasAttribute('open') : false;
+  const detRespaldoOpen = $('detRespaldo') ? $('detRespaldo').hasAttribute('open') : false;
+  const detInstalarOpen = $('detInstalar') ? $('detInstalar').hasAttribute('open') : false;
+
+  $('r4').innerHTML=`
+<header><div class="ey">Configuración</div><h1>Ajustes</h1></header>
+
+<details id="detEstrategia" ${detEstrategiaOpen ? 'open' : ''}><summary>Estrategia de ahorro</summary><div class="dpad">
+  <div class="seg">
+    <button id="estSeq" class="${c.estrategia==='secuencial'?'on':''}">Prioritaria primero</button>
+    <button id="estSim" class="${c.estrategia==='simultaneo'?'on':''}">Simultáneo</button>
+    <button id="estCas" class="${c.estrategia==='cascada'?'on':''}">En cascada</button>
+  </div>
+  <div class="hint">
+    ${c.estrategia==='secuencial'?'<b>Prioritaria primero</b>: Cubre los aportes fijos de todas las metas y luego destina todo el ahorro restante a la meta de máxima prioridad.'
+      :c.estrategia==='simultaneo'?'<b>Simultáneo</b>: Reparte en paralelo entre todas las metas (incluyendo la prioritaria si tiene aportes) desde el inicio.'
+      :'<b>En cascada</b>: Llena las metas una por una en estricto orden de prioridad (número menor a mayor), ignorando porcentajes y fijos.'}
+  </div>
+</div></details>
+
+<details id="detExtras" ${detExtrasOpen ? 'open' : ''}><summary>Ingresos adicionales</summary><div class="dpad">
+  <label class="lbl">% por defecto al bolsillo</label><input class="sf" id="pPct" inputmode="numeric" value="${c.pctPremio}">
+  <div class="hint">Al agregar un ingreso adicional (comisión, bono, prima…) este porcentaje se pre-rellena en el campo "% al bolsillo". Pueden cambiarlo por ítem.</div>
+</div></details>
+
+<details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary>Perfil de este teléfono</summary><div class="dpad">
+  <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Tú ves y llenas tu bolsillo personal.</div>
+  <div class="seg" style="margin-top:8px"><button id="pfG" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button><button id="pfA" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button></div>
+</div></details>
+
+<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary>Nombres de la pareja</summary><div class="dpad">
+  <div class="row2"><label class="lbl">Persona 1<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px"></label>
+    <label class="lbl">Persona 2<input class="sf" id="pNom2" value="${c.nombreP2.replace(/"/g,'&quot;')}" style="margin-top:4px"></label></div>
+</div></details>
+
+<details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary>Instalar en el teléfono</summary><div class="dpad">
+  <div class="hint" style="margin-top:0">Instala "Nuestro plan" en tu pantalla de inicio para usarla como una aplicación, más rápido y sin conexión a internet.</div>
+  <button class="btn gold" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
+  <div id="pwaIosHint" style="display:${isIOS()?'block':'none'};margin-top:10px;background:rgba(246,241,230,.05);border:1px solid var(--line);border-radius:10px;padding:12px;color:rgba(246,241,230,.85)">
+    <div style="font-weight:700;margin-bottom:6px;color:var(--gb)">Instrucciones para iPhone / iPad (Safari):</div>
+    <ol style="padding-left:18px;font-size:12.5px;line-height:1.45;display:flex;flex-direction:column;gap:6px">
+      <li>Toca el botón de <b>Compartir</b> <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:middle;display:inline-block"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> en Safari.</li>
+      <li>Desplaza la lista hacia abajo y selecciona <b>Agregar al inicio</b> (o "Add to Home Screen").</li>
+      <li>Presiona <b>Agregar</b> arriba a la derecha.</li>
+    </ol>
+  </div>
+  <div id="pwaGenericHint" style="margin-top:10px;font-size:12px;color:rgba(246,241,230,.5);line-height:1.4">
+    ${isIOS() ? '' : 'Si tu navegador no muestra el botón de instalación directa, abre el menú de opciones (tres puntos) y selecciona <b>Instalar aplicación</b> o <b>Agregar a pantalla de inicio</b>.'}
+  </div>
+</div></details>
+
+<details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
+  <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp">Restaurar</button>
+  <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
+  <button class="btn danger" id="bReset">Borrar todos los datos</button>
+  <button class="btn ghost" id="bOnb">Ver el tutorial otra vez</button>
+</div></details>`;
+  attachPlan();
+}
+function attachPlan(){
+  const c=state.config;
+  $('pPct').addEventListener('blur',()=>{c.pctPremio=Math.max(0,Math.min(100,parse($('pPct').value)));save();rerenderPlanKeepOpen();});
+  $('estSeq').onclick=()=>{c.estrategia='secuencial';save();rerenderPlanKeepOpen();};
+  $('estSim').onclick=()=>{c.estrategia='simultaneo';save();rerenderPlanKeepOpen();};
+  $('estCas').onclick=()=>{c.estrategia='cascada';save();rerenderPlanKeepOpen();};
+  $('pfG').onclick=()=>{c.perfil='p1';save();rerenderPlanKeepOpen();};
+  $('pfA').onclick=()=>{c.perfil='p2';save();rerenderPlanKeepOpen();};
+  $('pNom1').addEventListener('blur',()=>{c.nombreP1=$('pNom1').value.trim()||'Persona 1';save();});
+  $('pNom2').addEventListener('blur',()=>{c.nombreP2=$('pNom2').value.trim()||'Persona 2';save();});
+  $('bExp').onclick=()=>{$('bTxt').value=JSON.stringify(state);flash('Respaldo generado');};
+  $('bImp').onclick=()=>{try{const o=JSON.parse($('bTxt').value);if(!o.metas)throw 0;
+    const perfil=c.perfil,miPersonal=JSON.parse(JSON.stringify(metaPersonal(perfil)));
+    state=o;normalize();state.config.perfil=perfil;
+    const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===perfil);if(idx>=0)state.metas[idx]=miPersonal;
+    save();go(0);flash('Respaldo restaurado ✓');}catch(e){flash('Respaldo inválido');}};
+  $('bReset').onclick=()=>{if(!confirm('¿Borrar todos los datos?'))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
+  $('bOnb').onclick=()=>startOnboarding();
+  const bInst = $('bInstallPWA');
+  if (bInst) {
+    bInst.onclick = async () => {
+      if (!deferredPrompt) return;
+      bInst.disabled = true;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`Instalación del usuario: ${outcome}`);
+      deferredPrompt = null;
+      bInst.style.display = 'none';
+      bInst.disabled = false;
+    };
+  }
+}
+function rerenderPlanKeepOpen(){renderPlan();}
+
+/* =========================================================
+   ONBOARDING (bienvenida + 5 pasos)
+   ========================================================= */
+let obStep=0,obMetaTipo='sueno',obReparto=[{n:'Renta variable',pct:50},{n:'Renta fija',pct:30},{n:'Reserva',pct:20}];
+const OB_TOTAL=9;
+function startOnboarding(){obStep=0;$('onb').classList.add('on');renderOb();}
+function obProgress(){$('obBar').style.width=Math.round((obStep)/(OB_TOTAL-1)*100)+'%';}
+function renderOb(){
+  obProgress();
+  const c=state.config;const inner=$('obInner');
+  $('obSkip').style.display=obStep===0?'none':'block';
+  $('obNext').textContent=obStep===OB_TOTAL-1?'Empezar':(obStep===0?'Empezar':'Continuar');
+  let h='';
+  if(obStep===0){
+    h=`<div class="ob-step on"><div class="ob-mark">✦</div>
+      <div class="ob-eyebrow">Nuestro plan</div>
+      <div class="ob-h">Organicen su plata,<br>juntos.</div>
+      <div class="ob-p">Definan a dónde va cada peso cada mes y avancen hacia sus sueños, inversiones y lo que quieran lograr juntos. Configurarlo toma un par de minutos.</div></div>`;
+  }else if(obStep===1){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 7</div>
+      <div class="ob-h">¿Quiénes son?</div>
+      <div class="ob-p">Así personalizamos el plan con sus nombres.</div>
+      <div class="ob-field"><label class="lbl">Persona 1</label><input class="sf" id="obNom1" value="${c.nombreP1==='Persona 1'?'':c.nombreP1}" placeholder="Tu nombre"></div>
+      <div class="ob-field"><label class="lbl">Persona 2</label><input class="sf" id="obNom2" value="${c.nombreP2==='Persona 2'?'':c.nombreP2}" placeholder="Su nombre"></div></div>`;
+  }else if(obStep===2){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 2 de 7</div>
+      <div class="ob-h">¿De quién es<br>este teléfono?</div>
+      <div class="ob-p">Cada uno instala la app en el suyo. En este teléfono verás y llenarás tu bolsillo personal; el otro hace lo mismo en el suyo.</div>
+      <div class="ob-field"><div class="seg dark-seg"><button id="obPf1" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button><button id="obPf2" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button></div></div></div>`;
+  }else if(obStep===3){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 3 de 7</div>
+      <div class="ob-h">¿Cuánto les llega<br>a la cuenta?</div>
+      <div class="ob-p">Pongan la <b>nómina neta</b>: lo que realmente transfieren a su cuenta después de descontar salud y pensión. Los gastos del hogar en una sola cifra.</div>
+      <div class="ob-field"><label class="lbl">Nómina neta de ${c.nombreP1}</label><input class="amt money" id="obN1" inputmode="numeric" value="${c.nominaP1?fmt(c.nominaP1):''}" placeholder="$0"></div>
+      <div class="ob-field"><label class="lbl">Nómina neta de ${c.nombreP2}</label><input class="amt money" id="obN2" inputmode="numeric" value="${c.nominaP2?fmt(c.nominaP2):''}" placeholder="$0"></div>
+      <div class="ob-field"><label class="lbl">Gastos del mes (arriendo, servicios, mercado…)</label><input class="amt money" id="obGas" inputmode="numeric" value="${c.gastos?fmt(c.gastos):''}" placeholder="$0"></div></div>`;
+  }else if(obStep===4){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 4 de 7</div>
+      <div class="ob-h">¿Cuánto apartan<br>para disfrutar?</div>
+      <div class="ob-p">Además del ahorro, separen algo para vivir bien. Lo de pareja se gasta juntos; lo libre de cada uno va a su bolsillo sin rendir cuentas.</div>
+      <div class="ob-field"><label class="lbl">En pareja (citas, salidas…)</label><input class="amt money" id="obPP" inputmode="numeric" value="${c.planPareja?fmt(c.planPareja):''}" placeholder="$0"></div>
+      <div class="ob-field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label class="lbl">Libre de ${c.nombreP1}<input class="amt money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$0" style="margin-top:4px"></label>
+        <label class="lbl">Libre de ${c.nombreP2}<input class="amt money" id="obL2" inputmode="numeric" value="${c.libreP2?fmt(c.libreP2):''}" placeholder="$0" style="margin-top:4px"></label>
+      </div>
+      <div class="hint" style="margin-top:10px">Pueden dejarlo en $0 y ajustarlo después en Mi plan.</div>
+      </div>`;
+  }else if(obStep===5){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 5 de 7</div>
+      <div class="ob-h">¿Cómo quieren<br>distribuir el ahorro?</div>
+      <div class="ob-p">Elige cómo repartir lo que sobra cada mes entre sus metas. Lo pueden cambiar cuando quieran.</div>
+      <div class="ob-field">
+        <div class="seg dark-seg" id="obEstSeg">
+          <button id="obEstSeq" class="${c.estrategia==='secuencial'?'on':''}">Prioritaria primero</button>
+          <button id="obEstSim" class="${c.estrategia==='simultaneo'?'on':''}">Simultáneo</button>
+          <button id="obEstCas" class="${c.estrategia==='cascada'?'on':''}">En cascada</button>
+        </div>
+      </div>
+      <div id="obEstHint" style="margin-top:14px;background:rgba(246,241,230,.1);border:1px solid rgba(246,241,230,.2);border-radius:12px;padding:12px 14px;font-size:13.5px;color:rgba(246,241,230,.85);line-height:1.5">
+        ${c.estrategia==='secuencial'?'<b style="color:var(--gb)">Prioritaria primero:</b> Primero se cubren los aportes fijos de cada meta y luego todo el ahorro sobrante va a la meta #1 hasta llenarla.'
+          :c.estrategia==='simultaneo'?'<b style="color:var(--gb)">Simultáneo:</b> El ahorro se divide en paralelo entre todas las metas según los % y montos que configuren.'
+          :'<b style="color:var(--gb)">En cascada:</b> Llena cada meta en orden estricto de prioridad, una por una, antes de pasar a la siguiente.'}
+      </div>
+      </div>`;
+  }else if(obStep===6){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 6 de 7</div>
+      <div class="ob-h">¿Reciben<br>ingresos adicionales?</div>
+      <div class="ob-p">Comisiones, bonos, prima, freelances… Al registrar cada ingreso pueden elegir qué % va a su bolsillo y qué % va al ahorro. Aquí configuren el porcentaje por defecto.</div>
+      <div class="ob-field"><label class="lbl">% por defecto al bolsillo</label>
+        <input class="amt" id="obPct" inputmode="numeric" value="${c.pctPremio}" placeholder="20" style="margin-top:6px">
+        <div id="obPctPreview" style="margin-top:8px;font-size:13px;color:rgba(246,241,230,.7);line-height:1.4">
+          Por defecto: <b>${c.pctPremio}%</b> al bolsillo · <b>${100-c.pctPremio}%</b> al ahorro — editable por ítem
+        </div>
+      </div>
+      </div>`;
+  }else if(obStep===7){
+    obMetaTipo='sueno';
+    const _rRows=obReparto.map((x,i)=>`<div class="grow" style="gap:6px"><input data-orn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo (ej: Acciones)" style="flex:1;font-family:var(--sans)"><input data-orp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">%<button class="del" data-ordel="${i}" style="margin-left:2px">×</button></div>`).join('');
+    const _rSum=obReparto.reduce((s,r)=>s+(+r.pct||0),0);
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 7 de 7</div>
+      <div class="ob-h">¿Tienen una primera<br>meta de ahorro?</div>
+      <div class="ob-p">Agréguenla ahora o créenla después cuando quieran.</div>
+      <div class="ob-field"><label class="lbl">¿Qué quieren lograr?</label><input class="sf" id="obMetaNom" placeholder="ej: Viaje a Europa, Carro, Apartamento…"></div>
+      <div class="ob-field"><label class="lbl">Tipo</label>
+        <div class="seg dark-seg" style="margin-top:6px;flex-wrap:wrap;gap:4px">
+          <button id="obTipoSueno" class="on">🌟 Sueño</button>
+          <button id="obTipoImprev">🛡️ Imprevistos</button>
+          <button id="obTipoInvertir">📈 Inversión</button>
+        </div>
+        <div class="hint" id="obTipoHint" style="margin-top:8px">Una meta con fecha u objetivo concreto: viaje, carro, apartamento…</div>
+      </div>
+      <div class="ob-field" id="obRepartoSec" style="display:none">
+        <label class="lbl">Cómo distribuyen la inversión <span style="font-weight:400;opacity:.7;font-size:13px">— pueden cambiar después</span></label>
+        <div id="obRepartoBox">${_rRows}</div>
+        <button class="btn sm ghost" id="obRepartoAdd" style="margin-top:6px">+ Agregar tipo</button>
+        <div class="hint" style="margin-top:4px;color:${_rSum!==100&&obReparto.length?'#a23':'var(--gs)'}">Suma: ${_rSum}%${obReparto.length&&_rSum!==100?' · debería sumar 100%':''}</div>
+      </div>
+      <div class="ob-field"><label class="lbl">¿Cuánto necesitan? <span style="font-weight:400;opacity:.7">(opcional)</span></label><input class="amt money" id="obMetaObj" inputmode="numeric" placeholder="$0"></div>
+      <div class="hint" style="margin-top:14px">Si aún no saben la cifra exacta, déjenlo en $0 y la ajustan después.</div>
+      </div>`;
+  }else if(obStep===8){
+    h=`<div class="ob-step on"><div class="ob-eyebrow">Así funciona</div>
+      <div class="ob-h">El dinero del mes,<br>repartido solo</div>
+      <div class="ob-p">Cada mes registras lo que entró y el plan lo reparte: gastos, la parte personal de cada uno, y lo que queda hacia las metas.</div>
+      <div class="flow" id="obFlow" style="margin-top:18px"></div></div>`;
+  }
+  inner.innerHTML=h;
+  attachOb();
+  if(obStep===8)setTimeout(()=>obDrawFlow(),150);
+}
+function attachOb(){
+  const c=state.config;
+  if(obStep===2){
+    $('obPf1').onclick=()=>{c.perfil='p1';renderOb();};
+    $('obPf2').onclick=()=>{c.perfil='p2';renderOb();};
+  }
+  if(obStep===5){
+    const btnHint=$('obEstHint');
+    const setEst=(e)=>{
+      ['obEstSeq','obEstSim','obEstCas'].forEach(id=>$(id)&&$(id).classList.remove('on'));
+      const labels={secuencial:'<b>Prioritaria primero:</b> Primero se cubren los aportes fijos de cada meta y luego todo el ahorro sobrante va a la meta #1 hasta llenarla.',
+        simultaneo:'<b>Simultáneo:</b> El ahorro se divide en paralelo entre todas las metas según los % y montos que configuren.',
+        cascada:'<b>En cascada:</b> Llena cada meta en orden estricto de prioridad, una por una, antes de pasar a la siguiente.'};
+      state.config.estrategia=e;
+      const activeId={secuencial:'obEstSeq',simultaneo:'obEstSim',cascada:'obEstCas'}[e];
+      $(activeId).classList.add('on');
+      if(btnHint)btnHint.innerHTML=labels[e];
+    };
+    $('obEstSeq').onclick=()=>setEst('secuencial');
+    $('obEstSim').onclick=()=>setEst('simultaneo');
+    $('obEstCas').onclick=()=>setEst('cascada');
+  }
+  if(obStep===6){
+    const pctInput=$('obPct'),preview=$('obPctPreview');
+    pctInput.addEventListener('input',()=>{
+      const v=Math.max(0,Math.min(100,parseInt(pctInput.value)||0));
+      if(preview)preview.innerHTML=`Por defecto: <b>${v}%</b> al bolsillo · <b>${100-v}%</b> al ahorro — editable por ítem`;
+    });
+  }
+  if(obStep===7){
+    const btnS=$('obTipoSueno'),btnP=$('obTipoImprev'),btnI=$('obTipoInvertir');
+    const TIPO_HINTS={sueno:'Una meta con fecha u objetivo concreto: viaje, carro, apartamento…',imprevistos:'Se llena primero cada mes, antes que las otras metas. Ideal como colchón de emergencias.',invertir:'Recibe lo que sobre del ahorro. Sin fecha límite; puedes definir cómo distribuirla abajo.'};
+    const renderObRep=()=>{
+      const box=$('obRepartoBox');if(!box)return;
+      const rSum=obReparto.reduce((s,r)=>s+(+r.pct||0),0);
+      box.innerHTML=obReparto.map((x,i)=>`<div class="grow" style="gap:6px"><input data-orn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo (ej: Acciones)" style="flex:1;font-family:var(--sans)"><input data-orp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">%<button class="del" data-ordel="${i}" style="margin-left:2px">×</button></div>`).join('');
+      const sec=$('obRepartoSec');const hintEl=sec&&sec.querySelector('.hint');
+      if(hintEl){hintEl.textContent=`Suma: ${rSum}%`+(obReparto.length&&rSum!==100?' · debería sumar 100%':'');hintEl.style.color=rSum!==100&&obReparto.length?'#a23':'var(--gs)';}
+      box.querySelectorAll('[data-ordel]').forEach(b=>b.onclick=()=>{obReparto.splice(+b.dataset.ordel,1);renderObRep();});
+      box.querySelectorAll('[data-orn]').forEach(el=>el.addEventListener('blur',()=>{obReparto[+el.dataset.orn].n=el.value.trim();}));
+      box.querySelectorAll('[data-orp]').forEach(el=>el.addEventListener('blur',()=>{obReparto[+el.dataset.orp].pct=Math.max(0,Math.min(100,parse(el.value)));renderObRep();}));
+    };
+    const setTipo=(t)=>{
+      obMetaTipo=t;
+      [btnS,btnP,btnI].forEach(b=>b&&b.classList.remove('on'));
+      ({sueno:btnS,imprevistos:btnP,invertir:btnI})[t].classList.add('on');
+      const hint=$('obTipoHint');if(hint)hint.textContent=TIPO_HINTS[t]||'';
+      const sec=$('obRepartoSec');if(sec)sec.style.display=t==='invertir'?'':'none';
+      const nom=$('obMetaNom');if(nom)nom.placeholder=t==='imprevistos'?'ej: Fondo de emergencias, Colchón…':'ej: Viaje a Europa, Carro, Apartamento…';
+    };
+    btnS.onclick=()=>setTipo('sueno');
+    btnP.onclick=()=>setTipo('imprevistos');
+    btnI.onclick=()=>setTipo('invertir');
+    renderObRep();
+    const ra=$('obRepartoAdd');
+    if(ra)ra.onclick=()=>{obReparto.push({n:'',pct:0});renderObRep();setTimeout(()=>{const box=$('obRepartoBox');if(box){const inp=box.querySelectorAll('[data-orn]');inp[inp.length-1]&&inp[inp.length-1].focus();}},50);};
+  }
+}
+function obSaveStep(){
+  const c=state.config;
+  if(obStep===1){c.nombreP1=$('obNom1').value.trim()||'Persona 1';c.nombreP2=$('obNom2').value.trim()||'Persona 2';}
+  if(obStep===3){c.nominaP1=parse($('obN1').value)||c.nominaP1;c.nominaP2=parse($('obN2').value)||c.nominaP2;const gv=parse($('obGas').value);if(gv)c.gastos=gv;}
+  if(obStep===4){const pp=parse($('obPP').value);if(pp)c.planPareja=pp;const l1=parse($('obL1').value);if(l1)c.libreP1=l1;const l2=parse($('obL2').value);if(l2)c.libreP2=l2;}
+  if(obStep===6){const pct=parseInt($('obPct').value)||c.pctPremio;c.pctPremio=Math.max(0,Math.min(100,pct));}
+  if(obStep===7){
+    const nom=$('obMetaNom')?$('obMetaNom').value.trim():'';
+    if(nom){
+      const obj=parse($('obMetaObj')?$('obMetaObj').value:'');
+      const existeInv=obMetaTipo==='invertir'&&inversionAbierta();
+      if(!existeInv){
+        const prio=metasCompartidas().length;
+        state.metas.push({id:uid(),nombre:nom,tipo:obMetaTipo,saldo:0,objetivo:obj||0,aporteFijo:0,aportePct:0,fecha:null,prioridad:prio,reparto:obMetaTipo==='invertir'?obReparto.map(r=>({n:r.n,pct:r.pct})):null});
+      }
+    }
+  }
+}
+function obDrawFlow(){
+  const el=$('obFlow');if(!el)return;
+  const c=state.config;
+  const v = avgVar() / 2;
+  const r = computeReparto(v, v);
+  const entra = Math.max(1, r.entra);
+  const pg = r.gastosDia / entra * 100;
+  const ppp = r.gustosPareja / entra * 100;
+  const pp1 = r.gustosP1 / entra * 100;
+  const pp2 = r.gustosP2 / entra * 100;
+  const pa = r.ahorro / entra * 100;
+
+  let h='<div class="casc">';
+  h+=`<div class="inc-row"><span class="inc-name">Entra este mes</span><span class="inc-val num">${fmt(r.entra)}</span></div>`;
+  h+=`<div class="hint" style="margin-top: -4px; margin-bottom: 12px; display: flex; justify-content: space-between; font-size: 11.5px; color: var(--gs)">
+    <span>Fijos (nóminas): <b>${fmt(r.nom)}</b></span>
+    <span>Variables (extras): <b>${fmt(r.comb)}</b></span>
+  </div>`;
+  h+=`<div class="stack">
+      <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
+      <span class="st-seg st-seg-a" style="flex:1"></span></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2)}</b></div>`;
+  h+=`<div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Para ahorrar e invertir</span><b>${fmt(r.ahorro)}</b></div>`;
+  h+='</div>';
+  el.innerHTML=h;
+}
+$('obNext').onclick=()=>{
+  obSaveStep();
+  if(obStep>=OB_TOTAL-1){finishOnboarding();return;}
+  obStep++;renderOb();
+};
+$('obSkip').onclick=()=>finishOnboarding();
+function finishOnboarding(){
+  state.config.onboarded=true;
+  $('onb').classList.remove('on');
+  save();go(0);
+}
+
+load();
+
+// Helper para detectar iOS / iPadOS
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Manejo de la instalación de PWA
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = $('bInstallPWA');
+  if (btn) btn.style.display = 'block';
+});
+
+// Registro de Service Worker para soporte offline e instalación de PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(reg => {
+        console.log('Service Worker registrado con éxito en el scope:', reg.scope);
+      })
+      .catch(err => {
+        console.error('Error al registrar el Service Worker:', err);
+      });
+  });
+}
