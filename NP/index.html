@@ -1199,13 +1199,23 @@ function renderHistoryDetail(mes, fromTab) {
   } else {
     const totalEntra = r.entra || (r.nom + r.comb);
     const totalEspecial = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
+    const totalEspecialAhorro = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto*(1-(ep.pctRetener||0)/100), 0) : 0;
     const entra = Math.max(1, totalEntra + totalEspecial);
-    const ahorro = Math.max(0, r.ahorro + totalEspecial);
+    const ahorro = Math.max(0, r.ahorro + totalEspecialAhorro);
     
+    let histExtraBolsilloP1=0,histExtraBolsilloP2=0;
+    (entry.especiales||[]).forEach(ep=>{
+      const toBolsillo=ep.monto*(ep.pctRetener||0)/100;
+      if(toBolsillo>0.5){
+        if(ep.persona==='p1')histExtraBolsilloP1+=toBolsillo;
+        else if(ep.persona==='p2')histExtraBolsilloP2+=toBolsillo;
+        else{histExtraBolsilloP1+=toBolsillo/2;histExtraBolsilloP2+=toBolsillo/2;}
+      }
+    });
     const pg = (r.gastosDia / entra * 100);
     const ppp = (r.gustosPareja / entra * 100);
-    const pp1 = (r.gustosP1 / entra * 100);
-    const pp2 = (r.gustosP2 / entra * 100);
+    const pp1 = ((r.gustosP1+histExtraBolsilloP1) / entra * 100);
+    const pp2 = ((r.gustosP2+histExtraBolsilloP2) / entra * 100);
     const pa = (ahorro / entra * 100);
     
     const recibe = Object.keys(r.dist || {}).map(id => ({
@@ -1218,10 +1228,14 @@ function renderHistoryDetail(mes, fromTab) {
       
       <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
         <div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>
-        <div style="display:flex;justify-content:space-between"><span>Extras (variables):</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>
-        ${entry.especiales && entry.especiales.length > 0 ? entry.especiales.map(ep => `
-          <div style="display:flex;justify-content:space-between"><span>Especial — ${ep.nombre}:</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>
-        `).join('') : ''}
+        ${r.comb > 0 ? `<div style="display:flex;justify-content:space-between"><span>Variables:</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>` : ''}
+        ${entry.especiales && entry.especiales.length > 0 ? entry.especiales.map(ep => {
+          const pctR=ep.pctRetener||0;
+          const toSave=ep.monto*(1-pctR/100);
+          const toBolsillo=ep.monto-toSave;
+          const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+          return `<div style="display:flex;justify-content:space-between"><span>Adicional — ${ep.nombre} (${persNom}):</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>${pctR>0?`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div><div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`:''}`;
+        }).join('') : ''}
       </div>
       
       <div class="stack">
@@ -1234,43 +1248,34 @@ function renderHistoryDetail(mes, fromTab) {
       
       <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
       <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
-      <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1)}</b></div>
-      <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2)}</b></div>
+      <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
+      ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
+      <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
+      ${histExtraBolsilloP2>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP2)}</b></div>`:''}
       <div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Ahorro e inversión</span><b>${fmt(ahorro)}</b></div>
       
-      ${recibe.length > 0 ? `
-        <div class="meta-block">
-          <div class="mt-title">Distribución del ahorro</div>
-          ${recibe.map(x => `
-            <div class="meta-lvl">
-              <div class="lvl-row">
-                <span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span>
-                <span class="lvl-val num">${fmt(x.v)}</span>
-              </div>
-              <div class="lvl-bar"><i style="width:${Math.max(3, Math.min(100, x.v / Math.max(1, ahorro) * 100)).toFixed(1)}%"></i></div>
-            </div>
-          `).join('')}
-        </div>
-      ` : `<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`}
-      
-      ${entry.especiales && entry.especiales.length > 0 ? `
-        <div class="meta-block">
-          <div class="mt-title">Destino de los ingresos especiales</div>
-          ${entry.especiales.map(ep => {
-            if (ep.meta === 'distribuir') {
-              return `<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} — según el plan (distribuido): ${fmt(ep.monto)}</div>`;
-            } else {
-              return `<div class="meta-lvl">
-                <div class="lvl-row">
-                  <span class="lvl-name">${ep.nombre} <span class="lvl-tag">· para ${ep.metaNombre}</span></span>
-                  <span class="lvl-val num">${fmt(ep.monto)}</span>
-                </div>
-                <div class="lvl-bar"><i style="width:100%"></i></div>
-              </div>`;
+      ${(()=>{
+        const especiales=entry.especiales||[];
+        if(especiales.length>0){
+          const unifiedDist={};
+          recibe.forEach(x=>{unifiedDist[x.m.id]={m:x.m,base:x.v,extra:0};});
+          especiales.forEach(ep=>{
+            const toSave=ep.monto*(1-(ep.pctRetener||0)/100);
+            if(toSave>0.5){
+              if(ep.meta==='distribuir'){
+                const distEsp=distribuirAhorro(toSave,true);
+                metasCompartidas().forEach(m=>{if(!unifiedDist[m.id])unifiedDist[m.id]={m,base:0,extra:0};unifiedDist[m.id].extra+=distEsp[m.id]||0;});
+              }else{const md=metaById(ep.meta);if(md){if(!unifiedDist[ep.meta])unifiedDist[ep.meta]={m:md,base:0,extra:0};unifiedDist[ep.meta].extra+=toSave;}}
             }
-          }).join('')}
-        </div>
-      ` : ''}
+          });
+          const uList=Object.values(unifiedDist).filter(x=>(x.base+x.extra)>0.5);
+          const totalAh=Math.max(1,ahorro);
+          let mh=uList.map(x=>{const tot=x.base+x.extra;return `<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(tot)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,tot/totalAh*100)).toFixed(1)}%"></i></div>${x.extra>0?`<div style="font-size:11px;color:var(--gb);margin-top:3px;padding-left:2px">↳ incluye +${fmt(x.extra)} de ingresos adicionales</div>`:''}</div>`;}).join('');
+          return mh?`<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${mh}</div>`:`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`;
+        }else{
+          return recibe.length>0?`<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${recibe.map(x=>`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,x.v/Math.max(1,ahorro)*100)).toFixed(1)}%"></i></div></div>`).join('')}</div>`:`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`;
+        }
+      })()}
     </div>`;
   }
   
@@ -1348,24 +1353,21 @@ function renderCerrar(){
   $('r2').innerHTML=`
 <header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
 <label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
-${especialesPendientes.length ? `<div style="margin-bottom:14px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
+${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
   const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
-  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
-<details id="detEspecial" class="card" style="margin-bottom:14px"><summary style="font-size:14px;font-weight:600;color:var(--ink)">+ Agregar ingreso adicional</summary>
-  <div class="dpad">
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:4px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epedit="${i}" style="font-size:14px;opacity:.65" title="Editar">✎</button><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
+<details id="detEspecial" class="card" style="margin-bottom:8px;padding:0"><summary style="font-size:14px;font-weight:600;color:var(--ink);padding:9px 14px">+ Agregar ingreso adicional</summary>
+  <div class="dpad" style="padding:0 12px 10px">
     <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Comisión enero, prima junio…"></label>
-    <div class="row2" style="margin-top:8px">
-      <label class="lbl">Mes<input class="sf" id="iMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
-      <label class="lbl">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
-    </div>
-    <div class="row2" style="margin-top:8px">
+    <label class="lbl" style="margin-top:5px">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
+    <div class="row2" style="margin-top:5px">
       <label class="lbl">¿De quién?<select class="sf" id="iPersona" style="margin-top:4px"><option value="p1">${c.nombreP1}</option><option value="p2">${c.nombreP2}</option><option value="ambos">Ambos</option></select></label>
       <label class="lbl">% al bolsillo<input class="sf" id="iPctRetener" type="number" min="0" max="100" placeholder="${c.pctPremio||0}" style="margin-top:4px"></label>
     </div>
-    <label class="lbl" style="margin-top:8px">¿A dónde va el resto?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
-    <button class="btn sm" id="iSave">Agregar</button>
+    <label class="lbl" style="margin-top:5px">¿A dónde va el resto?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
+    <button class="btn sm" id="iSave" style="padding:7px;margin-top:5px">Agregar</button>
   </div>
 </details>
 <div class="stitle">Reparto del mes</div>
@@ -1381,6 +1383,19 @@ ${especialesPendientes.length ? `<div style="margin-bottom:14px"><div style="fon
     especialesPendientes.splice(+b.dataset.epdel,1);
     renderCerrar();
     drawFlow();
+  });
+  $('r2').querySelectorAll('[data-epedit]').forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.epedit;
+    const ep=especialesPendientes[i];
+    especialesPendientes.splice(i,1);
+    renderCerrar();
+    drawFlow();
+    if($('iNom'))$('iNom').value=ep.nombre;
+    if($('iMonto'))$('iMonto').value=ep.monto;
+    if($('iPersona'))$('iPersona').value=ep.persona||'p1';
+    if($('iPctRetener'))$('iPctRetener').value=ep.pctRetener||'';
+    if($('iMeta'))$('iMeta').value=ep.meta||'distribuir';
+    const det=$('detEspecial');if(det)det.setAttribute('open','');
   });
   $('r2').querySelectorAll('.tap-hist').forEach(el => el.onclick = (e) => {
     if (e.target.closest('.delete-hist-btn')) return;
@@ -1409,8 +1424,17 @@ function drawFlow(animate){
   const ahorro=Math.max(0,r.ahorro+totalEspecialAhorro);
   const pg=(r.gastosDia/entra*100);
   const ppp=(r.gustosPareja/entra*100);
-  const pp1=(r.gustosP1/entra*100);
-  const pp2=(r.gustosP2/entra*100);
+  let extraBolsilloP1=0,extraBolsilloP2=0;
+  especialesPendientes.forEach(ep=>{
+    const toBolsillo=ep.monto*(ep.pctRetener||0)/100;
+    if(toBolsillo>0.5){
+      if(ep.persona==='p1')extraBolsilloP1+=toBolsillo;
+      else if(ep.persona==='p2')extraBolsilloP2+=toBolsillo;
+      else{extraBolsilloP1+=toBolsillo/2;extraBolsilloP2+=toBolsillo/2;}
+    }
+  });
+  const pp1=((r.gustosP1+extraBolsilloP1)/entra*100);
+  const pp2=((r.gustosP2+extraBolsilloP2)/entra*100);
   const pa=(ahorro/entra*100);
   const recibe=metasCompartidas().map(m=>({m,v:r.dist[m.id]||0})).filter(x=>x.v>0.5);
   const ah=Math.max(1,r.ahorro);
@@ -1453,62 +1477,59 @@ function drawFlow(animate){
       <span class="st-seg st-seg-a" style="flex:1"></span></div>`;
   h+=`<div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>`;
   h+=`<div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>`;
-  h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1} (bolsillo personal)</span><b>${fmt(r.gustosP1)}</b></div>`;
-  h+=`<div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2} (bolsillo personal)</span><b>${fmt(r.gustosP2)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1} (bolsillo personal)</span><b>${fmt(r.gustosP1+extraBolsilloP1)}</b></div>`;
+  if(extraBolsilloP1>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP1)}</b></div>`;
+  h+=`<div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2} (bolsillo personal)</span><b>${fmt(r.gustosP2+extraBolsilloP2)}</b></div>`;
+  if(extraBolsilloP2>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP2)}</b></div>`;
   h+=`<div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Para ahorrar e invertir</span><b>${fmt(ahorro)}</b></div>`;
-  if(recibe.length){
-    h+='<div class="meta-block"><div class="mt-title">A dónde va el ahorro</div>';
-    let delay=0;
-    recibe.forEach(x=>{
-      const st=animate?`animation-delay:${delay}ms`:'';delay+=160;
-      h+=`<div class="meta-lvl" style="${st}"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(x.v)}</span></div>
-        <div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,x.v/ah*100)).toFixed(1)}%"></i></div></div>`;
-    });
-    h+='</div>';
-  }else{
-    h+=`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">Aún no hay ahorro para repartir este mes.</div>`;
-  }
-  // bloque de destino de especiales pendientes
   if(especialesPendientes.length>0){
-    h+='<div class="meta-block"><div class="mt-title">Destino de los ingresos adicionales</div>';
+    // Vista unificada: base + ingresos adicionales fusionados por meta
+    const unifiedDist={};
+    metasCompartidas().forEach(m=>{unifiedDist[m.id]={m,base:r.dist[m.id]||0,extra:0};});
     especialesPendientes.forEach(ep=>{
-      const pctR=ep.pctRetener||0;
-      const toSave=ep.monto*(1-pctR/100);
-      const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
-      if(pctR>0){
-        const toBolsillo=ep.monto-toSave;
-        h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} (${persNom}):</div>`;
-        h+=`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gs);padding:3px 0 3px 10px;border-left:2px solid var(--line)"><span>Bolsillo personal (${pctR}%)</span><b style="color:var(--ink)">${fmt(toBolsillo)}</b></div>`;
-      }
+      const toSave=ep.monto*(1-(ep.pctRetener||0)/100);
       if(toSave>0.5){
         if(ep.meta==='distribuir'){
-          const distEsp=distribuirAhorro(toSave, true);
-          const recEsp=metasVisiblesEnFondos().map(m=>({m,v:distEsp[m.id]||0})).filter(x=>x.v>0.5);
-          if(pctR===0)h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} (${persNom}) — según el plan:</div>`;
-          else h+=`<div style="font-size:11px;color:var(--gs);margin:4px 0 4px 10px">Resto según el plan:</div>`;
-          recEsp.forEach(x=>{
-            const pct=Math.max(3,Math.min(100,x.v/Math.max(1,toSave)*100)).toFixed(1);
-            h+=`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· según el plan</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${pct}%"></i></div></div>`;
+          const distEsp=distribuirAhorro(toSave,true);
+          metasCompartidas().forEach(m=>{
+            if(!unifiedDist[m.id])unifiedDist[m.id]={m,base:0,extra:0};
+            unifiedDist[m.id].extra+=distEsp[m.id]||0;
           });
         }else{
           const metaDest=metaById(ep.meta);
           if(metaDest){
-            if(pctR===0)h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} (${persNom}):</div>`;
-            else h+=`<div style="font-size:11px;color:var(--gs);margin:4px 0 4px 10px">Resto a:</div>`;
-            const rp=metaDest.reparto&&metaDest.reparto.length?metaDest.reparto:null;
-            h+=`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${metaDest.nombre} <span class="lvl-tag">· ${tipoLabel(metaDest.tipo)}</span></span><span class="lvl-val num">${fmt(toSave)}</span></div><div class="lvl-bar"><i style="width:100%"></i></div></div>`;
-            if(rp){
-              h+=`<div style="margin-top:4px;font-size:11px;color:var(--gs);padding-left:2px">Reparto interno:</div>`;
-              rp.forEach(sub=>{
-                const vSub=toSave*(sub.pct||0)/100;
-                h+=`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gs);padding:3px 0 3px 10px;border-left:2px solid var(--line)"><span>${sub.n||'—'} (${sub.pct}%)</span><b style="color:var(--ink)">${fmt(vSub)}</b></div>`;
-              });
-            }
+            if(!unifiedDist[ep.meta])unifiedDist[ep.meta]={m:metaDest,base:0,extra:0};
+            unifiedDist[ep.meta].extra+=toSave;
           }
         }
       }
     });
-    h+='</div>';
+    const unifiedList=Object.values(unifiedDist).filter(x=>(x.base+x.extra)>0.5);
+    const totalAhorro=Math.max(1,ahorro);
+    if(unifiedList.length){
+      h+='<div class="meta-block"><div class="mt-title">A dónde va el ahorro</div>';
+      let delay=0;
+      unifiedList.forEach(x=>{
+        const total=x.base+x.extra;
+        const st=animate?`animation-delay:${delay}ms`:'';delay+=160;
+        h+=`<div class="meta-lvl" style="${st}"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(total)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,total/totalAhorro*100)).toFixed(1)}%"></i></div>${x.extra>0?`<div style="font-size:11px;color:var(--gb);margin-top:3px;padding-left:2px">↳ incluye +${fmt(x.extra)} de ingresos adicionales</div>`:''}</div>`;
+      });
+      h+='</div>';
+    }else{
+      h+=`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">Aún no hay ahorro para repartir este mes.</div>`;
+    }
+  }else{
+    if(recibe.length){
+      h+='<div class="meta-block"><div class="mt-title">A dónde va el ahorro</div>';
+      let delay=0;
+      recibe.forEach(x=>{
+        const st=animate?`animation-delay:${delay}ms`:'';delay+=160;
+        h+=`<div class="meta-lvl" style="${st}"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,x.v/ah*100)).toFixed(1)}%"></i></div></div>`;
+      });
+      h+='</div>';
+    }else{
+      h+=`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">Aún no hay ahorro para repartir este mes.</div>`;
+    }
   }
   const completedWithContributions = metasCompartidas().filter(m => m.objetivo > 0 && m.saldo >= m.objetivo && ((m.aporteFijo||0) > 0 || (m.aportePct||0) > 0));
   if(completedWithContributions.length > 0) {
@@ -1605,7 +1626,7 @@ function aplicar(){
   flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓');
 }
 function addIngreso(){
-  const nom=$('iNom').value.trim(),mes=$('iMes')?$('iMes').value:curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
+  const nom=$('iNom').value.trim(),mes=$('mMes')?$('mMes').value:curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
   if(!nom||!monto){flash('Completa concepto y monto');return;}
   const persona=$('iPersona')?$('iPersona').value:'ambos';
   const pctRaw=$('iPctRetener')?$('iPctRetener').value.trim():'';
@@ -1615,6 +1636,7 @@ function addIngreso(){
   $('iMonto').value='';
   if($('iPctRetener'))$('iPctRetener').value='';
   $('iMeta').value='distribuir';
+  if($('iPersona'))$('iPersona').value='p1';
   const det=$('detEspecial');if(det)det.removeAttribute('open');
   renderCerrar();
   drawFlow();
