@@ -22,10 +22,12 @@
   },
   "homepage": "https://github.com/germandnino/Nuestro_plan#readme",
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.4.0",
     "@capacitor/core": "^8.4.0"
   },
   "dependencies": {
-    "@capacitor/android": "^8.4.0"
+    "@capacitor/android": "^8.4.0",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4"
   }
 }

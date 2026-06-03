@@ -4,4 +4,5 @@
     <string name="title_activity_main">Nuestro Plan</string>
     <string name="package_name">com.nuestroplan.app</string>
     <string name="custom_url_scheme">com.nuestroplan.app</string>
+    <string name="server_client_id">486527605037-uh0u0ctmlq7tgb48d9128t8ugc3dkg8v.apps.googleusercontent.com</string>
 </resources>

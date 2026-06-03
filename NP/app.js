@@ -1659,6 +1659,60 @@ function renderPlan(){
   const detNombresOpen = $('detNombres') ? $('detNombres').hasAttribute('open') : false;
   const detRespaldoOpen = $('detRespaldo') ? $('detRespaldo').hasAttribute('open') : false;
   const detInstalarOpen = $('detInstalar') ? $('detInstalar').hasAttribute('open') : false;
+  const detInvitacionOpen = $('detInvitacion') ? $('detInvitacion').hasAttribute('open') : false;
+
+  let syncHtml = '';
+  if (currentUser) {
+    syncHtml = `
+      <div class="hint" style="margin-top:0;margin-bottom:12px;">Sesión iniciada como: <b style="color:var(--gold);">${currentUser.email || 'Usuario de Google'}</b></div>
+      <div class="hint" style="margin-top:0">Comparte este código o enlace con tu pareja para que sincronice sus teléfonos en tiempo real:</div>
+      <div style="background:rgba(246,241,230,.03);border:1px dashed var(--line);border-radius:10px;padding:12px;text-align:center;font-family:monospace;font-size:14.5px;color:var(--gold);margin-top:8px;word-break:break-all;user-select:all;" id="valPlanId">
+        ${currentPlanId || 'Cargando código...'}
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <button class="mini" id="bCopyCode" style="flex:1;">Copiar Código</button>
+        <button class="mini" id="bCopyLink" style="flex:1;">Copiar Enlace</button>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;">
+        <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55">Cerrar sesión</button>
+      </div>
+    `;
+  } else {
+    syncHtml = `
+      <div class="hint" style="margin-top:0;margin-bottom:12px;">Estado: <b style="color:var(--gs);">Modo Local (sin cuenta)</b></div>
+      <div class="hint" style="margin-top:0;margin-bottom:14px;">Inicia sesión para sincronizar tus datos en la nube y compartirlos con tu pareja.</div>
+      
+      <button class="btn gold" id="btnSettingsLoginGoogle" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+        Conectar con Google
+      </button>
+      
+      <button class="btn ghost" id="btnSettingsShowEmailAuth" style="margin-top:12px;width:100%;">
+        Conectar con Correo y Contraseña
+      </button>
+
+      <div id="settingsEmailAuthForm" style="display:none;flex-direction:column;gap:12px;text-align:left;margin-top:15px;background:rgba(246,241,230,.03);padding:14px;border:1px solid var(--line);border-radius:12px;">
+        <div class="ob-field" style="margin:0;">
+          <label class="lbl">Correo electrónico</label>
+          <input class="sf" type="email" id="settingsAuthEmail" placeholder="ejemplo@correo.com">
+        </div>
+        <div class="ob-field" style="margin:0;">
+          <label class="lbl">Contraseña (mínimo 6 caracteres)</label>
+          <input class="sf" type="password" id="settingsAuthPassword" placeholder="Contraseña">
+        </div>
+        <button class="btn gold" id="btnSettingsEmailSubmit" style="width:100%;margin-top:4px;">
+          Iniciar Sesión
+        </button>
+        <div style="text-align:center;margin-top:8px;">
+          <a href="#" id="linkSettingsToggleAuthMode" style="font-size:12.5px;color:var(--gold);text-decoration:underline;">¿No tienes cuenta? Regístrate</a>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn ghost" id="btnSettingsInviteCode" style="width:100%;">Tengo un código de invitación</button>
+      </div>
+    `;
+  }
 
   $('r4').innerHTML=`
 <header><div class="ey">Configuración</div><h1>Ajustes</h1></header>
@@ -1686,6 +1740,10 @@ function renderPlan(){
   <div class="seg" style="margin-top:8px"><button id="pfG" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button><button id="pfA" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button></div>
 </div></details>
 
+<details id="detInvitacion" ${detInvitacionOpen ? 'open' : ''}><summary>Sincronizar y Conectar Pareja</summary><div class="dpad">
+  ${syncHtml}
+</div></details>
+
 <details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary>Nombres de la pareja</summary><div class="dpad">
   <div class="row2"><label class="lbl">Persona 1<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px"></label>
     <label class="lbl">Persona 2<input class="sf" id="pNom2" value="${c.nombreP2.replace(/"/g,'&quot;')}" style="margin-top:4px"></label></div>
@@ -1711,7 +1769,7 @@ function renderPlan(){
   <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp">Restaurar</button>
   <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
   <button class="btn danger" id="bReset">Borrar todos los datos</button>
-  <button class="btn ghost" id="bOnb">Ver el tutorial otra vez</button>
+  <button class="btn ghost" id="bOnb" style="margin-top:10px">Ver el tutorial otra vez</button>
 </div></details>`;
   attachPlan();
 }
@@ -1725,6 +1783,162 @@ function attachPlan(){
   $('pfA').onclick=()=>{c.perfil='p2';save();rerenderPlanKeepOpen();};
   $('pNom1').addEventListener('blur',()=>{c.nombreP1=$('pNom1').value.trim()||'Persona 1';save();});
   $('pNom2').addEventListener('blur',()=>{c.nombreP2=$('pNom2').value.trim()||'Persona 2';save();});
+  
+  const bCopyCode = $('bCopyCode');
+  if (bCopyCode) {
+    bCopyCode.onclick = () => {
+      if (!currentPlanId) return;
+      navigator.clipboard.writeText(currentPlanId)
+        .then(() => flash('Código copiado ✓'))
+        .catch(() => alert('No se pudo copiar el código. Escríbelo a mano: ' + currentPlanId));
+    };
+  }
+
+  const bCopyLink = $('bCopyLink');
+  if (bCopyLink) {
+    bCopyLink.onclick = () => {
+      if (!currentPlanId) return;
+      const link = window.location.origin + window.location.pathname + '?plan=' + currentPlanId;
+      navigator.clipboard.writeText(link)
+        .then(() => flash('Enlace de invitación copiado ✓'))
+        .catch(() => alert('No se pudo copiar el enlace. Comparte este código: ' + currentPlanId));
+    };
+  }
+
+  const btnSettingsLoginGoogle = $('btnSettingsLoginGoogle');
+  if (btnSettingsLoginGoogle) {
+    btnSettingsLoginGoogle.onclick = async () => {
+      const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+      if (isCapacitor) {
+        try {
+          const { GoogleAuth } = window.Capacitor.Plugins;
+          const googleUser = await GoogleAuth.signIn();
+          const idToken = googleUser.authentication.idToken;
+          const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+          await auth.signInWithCredential(credential);
+        } catch(err) {
+          console.error('Error de autenticación nativa de Google:', err);
+          alert('Error de inicio de sesión con Google nativo: ' + (err.message || JSON.stringify(err)));
+        }
+      } else {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+          await auth.signInWithRedirect(provider);
+        } catch(err) {
+          alert('Error de conexión: ' + err.message);
+        }
+      }
+    };
+  }
+
+  const btnSettingsShowEmailAuth = $('btnSettingsShowEmailAuth');
+  const settingsEmailForm = $('settingsEmailAuthForm');
+  if (btnSettingsShowEmailAuth && settingsEmailForm) {
+    btnSettingsShowEmailAuth.onclick = () => {
+      settingsEmailForm.style.display = 'flex';
+      btnSettingsShowEmailAuth.style.display = 'none';
+    };
+  }
+
+  const linkSettingsToggle = $('linkSettingsToggleAuthMode');
+  const btnSettingsEmailSubmit = $('btnSettingsEmailSubmit');
+  let settingsIsRegisterMode = false;
+  if (linkSettingsToggle && btnSettingsEmailSubmit) {
+    linkSettingsToggle.onclick = (e) => {
+      e.preventDefault();
+      settingsIsRegisterMode = !settingsIsRegisterMode;
+      if (settingsIsRegisterMode) {
+        btnSettingsEmailSubmit.textContent = 'Registrarse y Crear Cuenta';
+        linkSettingsToggle.textContent = '¿Ya tienes cuenta? Inicia sesión';
+      } else {
+        btnSettingsEmailSubmit.textContent = 'Iniciar Sesión';
+        linkSettingsToggle.textContent = '¿No tienes cuenta? Regístrate';
+      }
+    };
+  }
+
+  if (btnSettingsEmailSubmit) {
+    btnSettingsEmailSubmit.onclick = async () => {
+      const email = $('settingsAuthEmail').value.trim();
+      const password = $('settingsAuthPassword').value;
+      if (!email || !password) {
+        alert('Por favor completa todos los campos.');
+        return;
+      }
+      if (password.length < 6) {
+        alert('La contraseña debe tener al menos 6 caracteres.');
+        return;
+      }
+      btnSettingsEmailSubmit.disabled = true;
+      btnSettingsEmailSubmit.textContent = 'Procesando...';
+      try {
+        if (settingsIsRegisterMode) {
+          await auth.createUserWithEmailAndPassword(email, password);
+        } else {
+          await auth.signInWithEmailAndPassword(email, password);
+        }
+      } catch(err) {
+        btnSettingsEmailSubmit.disabled = false;
+        btnSettingsEmailSubmit.textContent = settingsIsRegisterMode ? 'Registrarse y Crear Cuenta' : 'Iniciar Sesión';
+        if (err.code === 'auth/operation-not-allowed') {
+          alert('El inicio de sesión por correo no está activado en tu consola de Firebase. Actívalo en Authentication > Sign-in method.');
+        } else if (err.code === 'auth/email-already-in-use') {
+          alert('Este correo ya está registrado. Por favor inicia sesión.');
+        } else if (err.code === 'auth/invalid-credential') {
+          alert('Correo o contraseña incorrectos.');
+        } else {
+          alert('Error: ' + err.message);
+        }
+      }
+    };
+  }
+
+  const btnSettingsInviteCode = $('btnSettingsInviteCode');
+  if (btnSettingsInviteCode) {
+    btnSettingsInviteCode.onclick = () => {
+      const code = prompt("Pega el código de invitación o el enlace completo:");
+      if (code && code.trim()) {
+        let cleanCode = code.trim();
+        if (cleanCode.includes('plan=')) {
+          try {
+            if (cleanCode.startsWith('http') || cleanCode.startsWith('https')) {
+              const url = new URL(cleanCode);
+              cleanCode = url.searchParams.get('plan') || cleanCode;
+            } else {
+              const match = cleanCode.match(/plan=([^&]+)/);
+              if (match) cleanCode = match[1];
+            }
+          } catch(e) {
+            const match = cleanCode.match(/plan=([^&]+)/);
+            if (match) cleanCode = match[1];
+          }
+        }
+        localStorage.setItem('planId', cleanCode);
+        localStorage.setItem('isInvited', 'true');
+        flash('Código de plan cargado. Inicia sesión para conectar ✓');
+        rerenderPlanKeepOpen();
+      }
+    };
+  }
+
+  const bLogout = $('bLogout');
+  if (bLogout) {
+    bLogout.onclick = async () => {
+      if (!confirm('¿Cerrar sesión? Se detendrá la sincronización en este dispositivo.')) return;
+      try {
+        await auth.signOut();
+        localStorage.removeItem('planId');
+        localStorage.removeItem('isInvited');
+        state = { config: Object.assign({}, CFG_DEF), metas: metasEjemplo().concat(metasPersonales()), log: [], ingresos: [], gastos: [] };
+        save();
+        startOnboarding();
+        flash('Sesión cerrada ✓');
+      } catch(err) {
+        alert('Error al cerrar sesión: ' + err.message);
+      }
+    };
+  }
+
   $('bExp').onclick=()=>{$('bTxt').value=JSON.stringify(state);flash('Respaldo generado');};
   $('bImp').onclick=()=>{try{const o=JSON.parse($('bTxt').value);if(!o.metas)throw 0;
     const perfil=c.perfil,miPersonal=JSON.parse(JSON.stringify(metaPersonal(perfil)));
@@ -1765,16 +1979,39 @@ function renderOb(){
   let h='';
   if(obStep===0){
     const isInvited = localStorage.getItem('isInvited') === 'true' || new URLSearchParams(window.location.search).has('plan');
+    const emailFormHtml = `
+      <div id="emailAuthForm" style="display:none;flex-direction:column;gap:12px;text-align:left;margin-top:15px;background:rgba(246,241,230,.03);padding:14px;border:1px solid var(--line);border-radius:12px;">
+        <div class="ob-field" style="margin:0;">
+          <label class="lbl">Correo electrónico</label>
+          <input class="sf" type="email" id="authEmail" placeholder="ejemplo@correo.com">
+        </div>
+        <div class="ob-field" style="margin:0;">
+          <label class="lbl">Contraseña (mínimo 6 caracteres)</label>
+          <input class="sf" type="password" id="authPassword" placeholder="Contraseña">
+        </div>
+        <button class="btn gold" id="btnObEmailSubmit" style="width:100%;margin-top:4px;">
+          Iniciar Sesión
+        </button>
+        <div style="text-align:center;margin-top:8px;">
+          <a href="#" id="linkToggleAuthMode" style="font-size:12.5px;color:var(--gold);text-decoration:underline;">¿No tienes cuenta? Regístrate</a>
+        </div>
+      </div>
+    `;
+
     if(isInvited){
       h=`<div class="ob-step on">
         <div class="ob-mark">✦</div>
         <div class="ob-eyebrow">Te invitaron a Nuestro plan</div>
         <div class="ob-h">¡Únete al plan de tu pareja!</div>
-        <div class="ob-p">Al conectarte con tu cuenta de Google, se sincronizarán en tiempo real el presupuesto compartido, los gastos y las metas de ahorro.</div>
+        <div class="ob-p">Al conectarte, se sincronizarán en tiempo real el presupuesto compartido, los gastos y las metas de ahorro.</div>
         <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
           <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
           Conectar con Google
         </button>
+        <button class="btn ghost" id="btnShowEmailAuth" style="margin-top:12px;width:100%;">
+          Conectar con Correo y Contraseña
+        </button>
+        ${emailFormHtml}
         <button class="ob-skip" id="btnObCancelInvite" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
           Volver al inicio
         </button>
@@ -1789,6 +2026,10 @@ function renderOb(){
           <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
           Conectar con Google
         </button>
+        <button class="btn ghost" id="btnShowEmailAuth" style="margin-top:12px;width:100%;">
+          Conectar con Correo y Contraseña
+        </button>
+        ${emailFormHtml}
         <button class="btn ghost" id="btnObLocal" style="margin-top:12px;width:100%;">
           Comenzar en Modo Local (sin cuenta)
         </button>
@@ -1895,11 +2136,86 @@ function attachOb(){
     const btnL = $('btnObLogin');
     if(btnL) {
       btnL.onclick = async () => {
-        const provider = new firebase.auth.GoogleAuthProvider();
+        const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+        const hasGoogleAuth = isCapacitor && !!(window.Capacitor.Plugins && window.Capacitor.Plugins.GoogleAuth);
+        alert(`[DEBUG] isCapacitor=${isCapacitor} | hasGoogleAuth=${hasGoogleAuth} | Plugins=${JSON.stringify(Object.keys(window.Capacitor?.Plugins||{}))}`);
+        if (isCapacitor) {
+          try {
+            const { GoogleAuth } = window.Capacitor.Plugins;
+            const googleUser = await GoogleAuth.signIn();
+            const idToken = googleUser.authentication.idToken;
+            const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+            await auth.signInWithCredential(credential);
+          } catch(err) {
+            console.error('Error de autenticación nativa de Google:', err);
+            alert('Error de inicio de sesión con Google nativo: ' + (err.message || JSON.stringify(err)));
+          }
+        } else {
+          const provider = new firebase.auth.GoogleAuthProvider();
+          try {
+            await auth.signInWithRedirect(provider);
+          } catch(err) {
+            alert('Error de conexión: ' + err.message);
+          }
+        }
+      };
+    }
+    const btnShowEmail = $('btnShowEmailAuth');
+    const emailForm = $('emailAuthForm');
+    if(btnShowEmail && emailForm) {
+      btnShowEmail.onclick = () => {
+        emailForm.style.display = 'flex';
+        btnShowEmail.style.display = 'none';
+      };
+    }
+    const linkToggle = $('linkToggleAuthMode');
+    const btnEmailSubmit = $('btnObEmailSubmit');
+    let isRegisterMode = false;
+    if(linkToggle && btnEmailSubmit) {
+      linkToggle.onclick = (e) => {
+        e.preventDefault();
+        isRegisterMode = !isRegisterMode;
+        if(isRegisterMode) {
+          btnEmailSubmit.textContent = 'Registrarse y Crear Cuenta';
+          linkToggle.textContent = '¿Ya tienes cuenta? Inicia sesión';
+        } else {
+          btnEmailSubmit.textContent = 'Iniciar Sesión';
+          linkToggle.textContent = '¿No tienes cuenta? Regístrate';
+        }
+      };
+    }
+    if(btnEmailSubmit) {
+      btnEmailSubmit.onclick = async () => {
+        const email = $('authEmail').value.trim();
+        const password = $('authPassword').value;
+        if (!email || !password) {
+          alert('Por favor completa todos los campos.');
+          return;
+        }
+        if (password.length < 6) {
+          alert('La contraseña debe tener al menos 6 caracteres.');
+          return;
+        }
+        btnEmailSubmit.disabled = true;
+        btnEmailSubmit.textContent = 'Procesando...';
         try {
-          await auth.signInWithPopup(provider);
+          if (isRegisterMode) {
+            await auth.createUserWithEmailAndPassword(email, password);
+          } else {
+            await auth.signInWithEmailAndPassword(email, password);
+          }
         } catch(err) {
-          alert('Error de conexión: ' + err.message);
+          btnEmailSubmit.disabled = false;
+          btnEmailSubmit.textContent = isRegisterMode ? 'Registrarse y Crear Cuenta' : 'Iniciar Sesión';
+          if (err.code === 'auth/operation-not-allowed') {
+            alert('El inicio de sesión por correo no está activado en tu consola de Firebase. Actívalo en Authentication > Sign-in method.');
+          } else if (err.code === 'auth/email-already-in-use') {
+            alert('Este correo ya está registrado. Por favor inicia sesión.');
+          } else if (err.code === 'auth/invalid-credential') {
+            alert('Correo o contraseña incorrectos.');
+          } else {
+            alert('Error: ' + err.message);
+          }
         }
       };
     }
@@ -2073,6 +2389,13 @@ function finishOnboarding(){
   save();go(0);
 }
 
+// Manejar resultado de signInWithRedirect al volver de OAuth
+auth.getRedirectResult().catch(err => {
+  if (err && err.code !== 'auth/no-current-user') {
+    console.error('getRedirectResult error:', err);
+  }
+});
+
 // Listener de estado de autenticación de Firebase
 auth.onAuthStateChanged(async user => {
   currentUser = user;
@@ -2085,34 +2408,39 @@ auth.onAuthStateChanged(async user => {
   normalize();
 
   if (user) {
-    currentPlanId = getPlanId();
-    const metaDoc = await db.collection('meta').doc(currentPlanId).get();
-    
-    if (metaDoc.exists) {
-      isOwner = metaDoc.data().ownerUid === user.uid;
-      if (!isOwner) {
-        localStorage.setItem('isInvited', 'true');
-        // Si no está onboarded aún, ir al paso 2 para elegir perfil
-        if (!state.config.onboarded) {
-          obStep = 2;
+    try {
+      currentPlanId = getPlanId();
+      const metaDoc = await db.collection('meta').doc(currentPlanId).get();
+      
+      if (metaDoc.exists) {
+        isOwner = metaDoc.data().ownerUid === user.uid;
+        if (!isOwner) {
+          localStorage.setItem('isInvited', 'true');
+          // Si no está onboarded aún, ir al paso 2 para elegir perfil
+          if (!state.config.onboarded) {
+            obStep = 2;
+          }
         }
+      } else {
+        isOwner = true;
+        await syncRegisterOwner(currentPlanId, user.uid);
+        await syncSaveShared(currentPlanId, state);
       }
-    } else {
-      isOwner = true;
-      await syncRegisterOwner(currentPlanId, user.uid);
-      await syncSaveShared(currentPlanId, state);
+      // Intentar cargar datos de Firestore
+      const remote = await syncLoadShared(currentPlanId);
+      if (remote) {
+        const perfilLocal = state.config.perfil;
+        state.config = { ...remote.config, perfil: perfilLocal };
+        state.metas = (remote.metas || []).concat(state.metas.filter(m => m.tipo === 'personal'));
+        state.log = remote.log || [];
+        state.ingresos = remote.ingresos || [];
+        state.gastos = remote.gastos || [];
+      }
+      syncSubscribe(currentPlanId);
+    } catch (err) {
+      console.error("Error al sincronizar con Firestore en inicio de sesión:", err);
+      showSyncStatus("Error de sincronización (sin acceso)", true);
     }
-    // Intentar cargar datos de Firestore
-    const remote = await syncLoadShared(currentPlanId);
-    if (remote) {
-      const perfilLocal = state.config.perfil;
-      state.config = { ...remote.config, perfil: perfilLocal };
-      state.metas = (remote.metas || []).concat(state.metas.filter(m => m.tipo === 'personal'));
-      state.log = remote.log || [];
-      state.ingresos = remote.ingresos || [];
-      state.gastos = remote.gastos || [];
-    }
-    syncSubscribe(currentPlanId);
   } else {
     if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
     if (unsubscribeBolsillos) { unsubscribeBolsillos(); unsubscribeBolsillos = null; }
