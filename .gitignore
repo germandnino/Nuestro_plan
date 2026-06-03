@@ -38,3 +38,8 @@ node_modules/
 
 # Gradle cache
 .gradle/
+
+# Android build outputs and bundles
+*.apk
+*.aar
+*.aab
