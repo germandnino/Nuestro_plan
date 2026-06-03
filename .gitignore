@@ -26,3 +26,6 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Business & Monetization Plans (Private)
+plan_monetizacion.md
