@@ -1775,6 +1775,9 @@ function renderOb(){
           <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
           Conectar con Google
         </button>
+        <button class="ob-skip" id="btnObCancelInvite" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
+          Volver al inicio
+        </button>
       </div>`;
     } else {
       h=`<div class="ob-step on">
@@ -1788,6 +1791,9 @@ function renderOb(){
         </button>
         <button class="btn ghost" id="btnObLocal" style="margin-top:12px;width:100%;">
           Comenzar en Modo Local (sin cuenta)
+        </button>
+        <button class="ob-skip" id="btnObInviteCode" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
+          Tengo un código de invitación
         </button>
       </div>`;
     }
@@ -1902,6 +1908,44 @@ function attachOb(){
       btnLoc.onclick = () => {
         localStorage.setItem('isInvited', 'false');
         obStep = 1;
+        renderOb();
+      };
+    }
+    const btnCode = $('btnObInviteCode');
+    if(btnCode) {
+      btnCode.onclick = () => {
+        const code = prompt("Pega el código de invitación o el enlace completo:");
+        if (code && code.trim()) {
+          let cleanCode = code.trim();
+          if (cleanCode.includes('plan=')) {
+            try {
+              if (cleanCode.startsWith('http') || cleanCode.startsWith('https')) {
+                const url = new URL(cleanCode);
+                cleanCode = url.searchParams.get('plan') || cleanCode;
+              } else {
+                const match = cleanCode.match(/plan=([^&]+)/);
+                if (match) cleanCode = match[1];
+              }
+            } catch(e) {
+              const match = cleanCode.match(/plan=([^&]+)/);
+              if (match) cleanCode = match[1];
+            }
+          }
+          localStorage.setItem('planId', cleanCode);
+          localStorage.setItem('isInvited', 'true');
+          renderOb();
+          flash('Código de plan cargado ✓');
+        }
+      };
+    }
+    const btnCancel = $('btnObCancelInvite');
+    if(btnCancel) {
+      btnCancel.onclick = () => {
+        localStorage.removeItem('planId');
+        localStorage.removeItem('isInvited');
+        if (window.location.search) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
         renderOb();
       };
     }

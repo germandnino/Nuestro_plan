@@ -35,3 +35,6 @@ docs/superpowers/
 
 # Node dependencies
 node_modules/
+
+# Gradle cache
+.gradle/
