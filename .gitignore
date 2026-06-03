@@ -18,6 +18,7 @@ Thumbs.db
 
 # Log files
 *.log
+*.zip
 
 # Local environment files
 .env
