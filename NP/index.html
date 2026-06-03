@@ -340,9 +340,9 @@ function premioSplitFactor(p,e){
 }
 
 /* Reparto del ahorro entre metas compartidas.
-   Orden: (1) prioritaria primero si es secuencial,
-          (2) aportes fijos en $ de cada meta (limitados por su falta),
-          (3) cada meta toma su % del resto (post-fijos),
+   Orden: (1) aportes fijos en $ de cada meta (compromisos recurrentes, primero),
+          (2) prioritaria primero si es secuencial (recibe el remanente tras fijos),
+          (3) cada meta toma su % del resto (post-fijos y post-prioritaria),
           (4) lo que sobre -> inversión abierta. */
 function distribuirAhorro(monto, esEspecial = false){
   const c=state.config,res={};
@@ -1337,12 +1337,12 @@ function renderCerrar(){
   }
 
   $('r2').innerHTML=`
-<header><div class="ey">Este mes</div><h1>Aportar al plan</h1></header>
-<details id="detExtras" open><summary>Ingresos extras de este mes</summary>
+<header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
+<label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
+<details id="detExtras"><summary>Ingresos extras de este mes</summary>
   <div class="dpad">
     <div style="font-size:12px;color:var(--gs);margin-bottom:10px">Comisiones, bonos o ingresos variables. Las nóminas fijas ya están en el plan.</div>
-    <label class="lbl">Mes<input class="sf" id="mMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
-    <div class="row2" style="margin-top:10px">
+    <div class="row2" style="margin-top:4px">
       <label class="lbl">${c.nombreP1}<input class="sf money" id="mP1" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
       <label class="lbl">${c.nombreP2}<input class="sf money" id="mP2" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
     ${especialesPendientes.length ? `<div style="margin-top:14px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);margin-bottom:6px">Ingresos especiales agregados</div>${especialesPendientes.map((ep,i)=>{
@@ -1361,6 +1361,9 @@ function renderCerrar(){
 <div class="flow nofade" id="mflow"></div>
 <button class="btn" id="mApply" style="margin-top:12px">Aportar</button>
 <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
+  function updateMesDisplay(){const v=$('mMes').value;const d=$('mMesDisplay');if(d)d.textContent=fmtMes(v)||v;}
+  $('mMes').addEventListener('change',updateMesDisplay);
+  updateMesDisplay();
   $('mP1').addEventListener('input',drawFlow);
   $('mP2').addEventListener('input',drawFlow);
   $('mApply').onclick=aplicar;
