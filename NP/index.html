@@ -1114,8 +1114,8 @@ function renderHistoryList() {
   } else {
     h += sortedLog.map(e => {
       const ec = e.config || c;
-      const totalEspecial = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
-      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecial) : (e.p1 + e.p2);
+      const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
+      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
       const p1Total = (ec.nominaP1 || 0) + e.p1;
       const p2Total = (ec.nominaP2 || 0) + e.p2;
       return `<div class="card tap tap-hist-item" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
@@ -1320,8 +1320,8 @@ function renderCerrar(){
   } else {
     logH = showLogs.map(e => {
       const ec = e.config || c;
-      const totalEspecial = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
-      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecial) : (e.p1 + e.p2);
+      const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
+      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
       const p1Total = (ec.nominaP1 || 0) + e.p1;
       const p2Total = (ec.nominaP2 || 0) + e.p2;
       return `<div class="card tap tap-hist" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
@@ -1348,24 +1348,26 @@ function renderCerrar(){
   $('r2').innerHTML=`
 <header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
 <label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
-<details id="detExtras"><summary>Ingresos extras de este mes</summary>
+${especialesPendientes.length ? `<div style="margin-bottom:14px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
+  const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
+  const pctR=ep.pctRetener||0;
+  const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
+<details id="detEspecial" style="background:transparent;border:1px dashed rgba(28,58,44,.2);border-radius:12px;margin-bottom:14px"><summary style="color:var(--gs);font-size:13px;font-weight:600">+ Agregar ingreso adicional (comisiones, prima, bonos…)</summary>
   <div class="dpad">
-    <div style="font-size:12px;color:var(--gs);margin-bottom:10px">Comisiones, bonos o ingresos variables. Las nóminas fijas ya están en el plan.</div>
-    <div class="row2" style="margin-top:4px">
-      <label class="lbl">${c.nombreP1}<input class="sf money" id="mP1" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
-      <label class="lbl">${c.nombreP2}<input class="sf money" id="mP2" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
-    ${especialesPendientes.length ? `<div style="margin-top:14px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);margin-bottom:6px">Ingresos especiales agregados</div>${especialesPendientes.map((ep,i)=>{
-      const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${metaNom}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
-    <details id="detEspecial" style="margin-top:14px;background:transparent;border:1px dashed rgba(28,58,44,.2);border-radius:12px"><summary style="color:var(--gs);font-size:13px;font-weight:600">+ Agregar ingreso especial (prima, bono puntual…)</summary>
-      <div class="dpad">
-        <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Prima de junio"></label>
-        <div class="row2" style="margin-top:8px"><label class="lbl">Mes<input class="sf" id="iMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
-          <label class="lbl">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
-        <label class="lbl" style="margin-top:8px">¿A qué meta va?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
-        <button class="btn sm" id="iSave">Agregar ingreso especial</button>
-      </div></details>
-  </div></details>
+    <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Comisión enero, prima junio…"></label>
+    <div class="row2" style="margin-top:8px">
+      <label class="lbl">Mes<input class="sf" id="iMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
+      <label class="lbl">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
+    </div>
+    <div class="row2" style="margin-top:8px">
+      <label class="lbl">¿De quién?<select class="sf" id="iPersona" style="margin-top:4px"><option value="p1">${c.nombreP1}</option><option value="p2">${c.nombreP2}</option><option value="ambos">Ambos</option></select></label>
+      <label class="lbl">% al bolsillo<input class="sf" id="iPctRetener" type="number" min="0" max="100" placeholder="${c.pctPremio||0}" style="margin-top:4px"></label>
+    </div>
+    <label class="lbl" style="margin-top:8px">¿A dónde va el resto?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
+    <button class="btn sm" id="iSave">Agregar</button>
+  </div>
+</details>
 <div class="stitle">Reparto del mes</div>
 <div class="flow nofade" id="mflow"></div>
 <button class="btn" id="mApply" style="margin-top:12px">Aportar</button>
@@ -1373,8 +1375,6 @@ function renderCerrar(){
   function updateMesDisplay(){const v=$('mMes').value;const d=$('mMesDisplay');if(d)d.textContent=fmtMes(v)||v;}
   $('mMes').addEventListener('change',updateMesDisplay);
   updateMesDisplay();
-  $('mP1').addEventListener('input',drawFlow);
-  $('mP2').addEventListener('input',drawFlow);
   $('mApply').onclick=aplicar;
   $('iSave').onclick=addIngreso;
   $('r2').querySelectorAll('[data-epdel]').forEach(b=>b.onclick=()=>{
@@ -1401,13 +1401,12 @@ function renderCerrar(){
 }
 function drawFlow(animate){
   const el=$('mflow');if(!el)return;
-  const g=parse($('mP1')?$('mP1').value:''),a=parse($('mP2')?$('mP2').value:'');
-  const r=computeReparto(g,a),c=state.config;
-  // calcular total de especiales pendientes
+  const r=computeReparto(0,0),c=state.config;
   const totalEspecial=especialesPendientes.reduce((s,ep)=>s+ep.monto,0);
+  const totalEspecialAhorro=especialesPendientes.reduce((s,ep)=>s+ep.monto*(1-(ep.pctRetener||0)/100),0);
   const totalEntra=r.entra+totalEspecial;
   const entra=Math.max(1,totalEntra);
-  const ahorro=Math.max(0,r.ahorro+totalEspecial);
+  const ahorro=Math.max(0,r.ahorro+totalEspecialAhorro);
   const pg=(r.gastosDia/entra*100);
   const ppp=(r.gustosPareja/entra*100);
   const pp1=(r.gustosP1/entra*100);
@@ -1432,10 +1431,17 @@ function drawFlow(animate){
   // desglose: fijos, extras, especiales
   h+=`<div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">`;
   h+=`<div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>`;
-  h+=`<div style="display:flex;justify-content:space-between"><span>Extras (variables):</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>`;
   if(totalEspecial>0){
     especialesPendientes.forEach(ep=>{
-      h+=`<div style="display:flex;justify-content:space-between"><span>Especial — ${ep.nombre}:</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>`;
+      const pctR=ep.pctRetener||0;
+      const toSave=ep.monto*(1-pctR/100);
+      const toBolsillo=ep.monto-toSave;
+      const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+      h+=`<div style="display:flex;justify-content:space-between"><span>${ep.nombre} (${persNom}):</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>`;
+      if(pctR>0){
+        h+=`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div>`;
+        h+=`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`;
+      }
     });
   }
   h+=`</div>`;
@@ -1464,28 +1470,40 @@ function drawFlow(animate){
   }
   // bloque de destino de especiales pendientes
   if(especialesPendientes.length>0){
-    h+='<div class="meta-block"><div class="mt-title">Destino de los ingresos especiales</div>';
+    h+='<div class="meta-block"><div class="mt-title">Destino de los ingresos adicionales</div>';
     especialesPendientes.forEach(ep=>{
-      if(ep.meta==='distribuir'){
-        const distEsp=distribuirAhorro(ep.monto, true);
-        const recEsp=metasVisiblesEnFondos().map(m=>({m,v:distEsp[m.id]||0})).filter(x=>x.v>0.5);
-        h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} — según el plan:</div>`;
-        recEsp.forEach(x=>{
-          const pct=Math.max(3,Math.min(100,x.v/Math.max(1,ep.monto)*100)).toFixed(1);
-          h+=`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· según el plan</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${pct}%"></i></div></div>`;
-        });
-      }else{
-        const metaDest=metaById(ep.meta);
-        if(metaDest){
-          h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre}:</div>`;
-          const rp=metaDest.reparto&&metaDest.reparto.length?metaDest.reparto:null;
-          h+=`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${metaDest.nombre} <span class="lvl-tag">· ${tipoLabel(metaDest.tipo)}</span></span><span class="lvl-val num">${fmt(ep.monto)}</span></div><div class="lvl-bar"><i style="width:100%"></i></div></div>`;
-          if(rp){
-            h+=`<div style="margin-top:4px;font-size:11px;color:var(--gs);padding-left:2px">Reparto interno:</div>`;
-            rp.forEach(sub=>{
-              const vSub=ep.monto*(sub.pct||0)/100;
-              h+=`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gs);padding:3px 0 3px 10px;border-left:2px solid var(--line)"><span>${sub.n||'—'} (${sub.pct}%)</span><b style="color:var(--ink)">${fmt(vSub)}</b></div>`;
-            });
+      const pctR=ep.pctRetener||0;
+      const toSave=ep.monto*(1-pctR/100);
+      const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
+      if(pctR>0){
+        const toBolsillo=ep.monto-toSave;
+        h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} (${persNom}):</div>`;
+        h+=`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gs);padding:3px 0 3px 10px;border-left:2px solid var(--line)"><span>Bolsillo personal (${pctR}%)</span><b style="color:var(--ink)">${fmt(toBolsillo)}</b></div>`;
+      }
+      if(toSave>0.5){
+        if(ep.meta==='distribuir'){
+          const distEsp=distribuirAhorro(toSave, true);
+          const recEsp=metasVisiblesEnFondos().map(m=>({m,v:distEsp[m.id]||0})).filter(x=>x.v>0.5);
+          if(pctR===0)h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} (${persNom}) — según el plan:</div>`;
+          else h+=`<div style="font-size:11px;color:var(--gs);margin:4px 0 4px 10px">Resto según el plan:</div>`;
+          recEsp.forEach(x=>{
+            const pct=Math.max(3,Math.min(100,x.v/Math.max(1,toSave)*100)).toFixed(1);
+            h+=`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· según el plan</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${pct}%"></i></div></div>`;
+          });
+        }else{
+          const metaDest=metaById(ep.meta);
+          if(metaDest){
+            if(pctR===0)h+=`<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} (${persNom}):</div>`;
+            else h+=`<div style="font-size:11px;color:var(--gs);margin:4px 0 4px 10px">Resto a:</div>`;
+            const rp=metaDest.reparto&&metaDest.reparto.length?metaDest.reparto:null;
+            h+=`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${metaDest.nombre} <span class="lvl-tag">· ${tipoLabel(metaDest.tipo)}</span></span><span class="lvl-val num">${fmt(toSave)}</span></div><div class="lvl-bar"><i style="width:100%"></i></div></div>`;
+            if(rp){
+              h+=`<div style="margin-top:4px;font-size:11px;color:var(--gs);padding-left:2px">Reparto interno:</div>`;
+              rp.forEach(sub=>{
+                const vSub=toSave*(sub.pct||0)/100;
+                h+=`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gs);padding:3px 0 3px 10px;border-left:2px solid var(--line)"><span>${sub.n||'—'} (${sub.pct}%)</span><b style="color:var(--ink)">${fmt(vSub)}</b></div>`;
+              });
+            }
           }
         }
       }
@@ -1505,39 +1523,49 @@ function drawFlow(animate){
 }
 function aplicar(){
   const mes=$('mMes').value;if(!mes){flash('Elige el mes');return;}
-  const g=parse($('mP1').value),a=parse($('mP2').value);
   const ex=state.log.find(e=>e.mes===mes);
   if(ex&&ex.aplicado){if(!confirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.'))return;}
-  const r=computeReparto(g,a),c=state.config;
+  const r=computeReparto(0,0),c=state.config;
   if(r.ahorro < 0){flash('No se puede aportar: el ahorro es negativo');return;}
   state.metas.forEach(m=>{if(m.tipo!=='personal')m.saldo=Math.max(0,m.saldo+(r.dist[m.id]||0));});
-  // aplicar ingresos especiales pendientes
+  // aplicar ingresos adicionales pendientes
   especialesPendientes.forEach(ep=>{
-    state.ingresos.unshift({id:uid(),mes:ep.mes,nombre:ep.nombre,monto:ep.monto,meta:ep.meta});
-    if(ep.meta==='distribuir'){
-      const dist=distribuirAhorro(ep.monto, true);
-      state.metas.forEach(m=>{if(m.tipo!=='personal'&&(dist[m.id]||0)>0.5)m.saldo+=dist[m.id];});
-    }else{
-      const m=metaById(ep.meta);if(m)m.saldo+=ep.monto;
+    const pctR=ep.pctRetener||0;
+    const toSave=ep.monto*(1-pctR/100);
+    state.ingresos.unshift({id:uid(),mes:ep.mes,nombre:ep.nombre,monto:ep.monto,meta:ep.meta,persona:ep.persona||'ambos',pctRetener:pctR});
+    if(toSave>0.5){
+      if(ep.meta==='distribuir'){
+        const dist=distribuirAhorro(toSave, true);
+        state.metas.forEach(m=>{if(m.tipo!=='personal'&&(dist[m.id]||0)>0.5)m.saldo+=dist[m.id];});
+      }else{
+        const m=metaById(ep.meta);if(m)m.saldo+=toSave;
+      }
     }
   });
   const espSnapshot = especialesPendientes.map(ep => ({
     nombre: ep.nombre,
     monto: ep.monto,
     meta: ep.meta,
+    persona: ep.persona||'ambos',
+    pctRetener: ep.pctRetener||0,
     metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')
   }));
   especialesPendientes=[];
   // bolsillo personal del perfil de este teléfono
   const perfil=c.perfil,per=metaPersonal(perfil);
-  const pf=premioSplitFactor(perfil,{p1:g,p2:a});
-  const aporte=libreOf(perfil)+r.prem*pf;
+  const retenPersonal=especialesPendientes.reduce((s,ep)=>{
+    const ret=ep.monto*(ep.pctRetener||0)/100;
+    if(ep.persona===perfil)return s+ret;
+    if(ep.persona==='ambos')return s+ret*0.5;
+    return s;
+  },0);
+  const aporte=libreOf(perfil)+retenPersonal;
   const ya=per.aportes.find(x=>x.mes===mes);
   if(ya){per.saldo+=aporte-ya.monto;ya.monto=aporte;}else{per.saldo+=aporte;per.aportes.push({mes,monto:aporte});}
   const snapshot = {
     mes,
-    p1: g,
-    p2: a,
+    p1: 0,
+    p2: 0,
     aplicado: true,
     config: {
       nombreP1: c.nombreP1,
@@ -1579,15 +1607,18 @@ function aplicar(){
 function addIngreso(){
   const nom=$('iNom').value.trim(),mes=$('iMes')?$('iMes').value:curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
   if(!nom||!monto){flash('Completa concepto y monto');return;}
-  especialesPendientes.push({nombre:nom,mes,monto,meta:mid});
-  // limpiar formulario y colapsar el sub-details
+  const persona=$('iPersona')?$('iPersona').value:'ambos';
+  const pctRaw=$('iPctRetener')?$('iPctRetener').value.trim():'';
+  const pctRetener=pctRaw===''?(state.config.pctPremio||0):Math.min(100,Math.max(0,Number(pctRaw)||0));
+  especialesPendientes.push({nombre:nom,mes,monto,meta:mid,persona,pctRetener});
   $('iNom').value='';
   $('iMonto').value='';
+  if($('iPctRetener'))$('iPctRetener').value='';
   $('iMeta').value='distribuir';
   const det=$('detEspecial');if(det)det.removeAttribute('open');
   renderCerrar();
   drawFlow();
-  flash('Ingreso especial agregado — se aplicará al cerrar el mes ✓');
+  flash('Ingreso adicional agregado — se aplicará al aportar ✓');
 }
 
 /* =========================================================
