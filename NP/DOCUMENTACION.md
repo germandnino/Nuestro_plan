@@ -66,9 +66,11 @@ El motor principal reside en la función `distribuirAhorro(monto)`. Los pesos y 
 
 ### Estrategias de Ahorro:
 1.  **Prioritaria Primero (Secuencial):**
+    *   Primero, separa y asigna los **aportes fijos** en pesos (`aporteFijo`) de todas las metas compartidas activas (excepto fondos de imprevistos si no aplica).
     *   Determina la meta con prioridad más alta que aún no esté completada.
-    *   Deriva el 100% del ahorro mensual disponible a esta meta hasta cubrir el saldo restante para cumplir su objetivo.
-    *   Si sobra dinero, o si ya no hay metas prioritarias incompletas, se distribuye en paralelo entre las demás metas activas utilizando sus respectivos aportes fijos (`aporteFijo`) y porcentuales (`aportePct`).
+    *   Deriva el 100% del ahorro mensual restante a esta meta prioritaria hasta cubrir el saldo necesario para cumplir su objetivo.
+    *   Si sobra dinero, o si ya no hay metas prioritarias incompletas, se distribuye el remanente en paralelo entre las demás metas activas utilizando sus respectivos aportes porcentuales (`aportePct`).
+    *   Cualquier sobrante final se desvía a la inversión abierta.
 2.  **Simultáneo:**
     *   Distribuye el ahorro base mensual en paralelo entre todas las metas vigentes.
     *   Primero cubre los **aportes fijos** en pesos configurados de cada meta incompleta.
