@@ -1045,7 +1045,8 @@ function renderDetail(){
   if(m.tipo==='invertir'){
     const r=m.reparto||[];const sum=r.reduce((s,x)=>s+(+x.pct||0),0);
     body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-      <div class="k">Cómo repartes esta inversión</div>
+      <div class="k">Cómo distribuyes esta inversión</div>
+      <div class="hint" style="margin-bottom:8px">${r.length===0?'<b>Sin categorías aún.</b> Agrega tipos (acciones, bonos, cripto…) para ver cómo se reparte el saldo.':'Define qué % va a cada tipo. Puedes agregar o quitar en cualquier momento.'}</div>
       <div id="repBox">${r.map((x,i)=>`<div class="grow"><input data-drn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo" style="flex:1;font-family:var(--sans)"><input data-drp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">% <button class="del" data-drdel="${i}">×</button></div>`).join('')}</div>
       <button class="btn sm ghost" id="repAddD">+ Agregar tipo de inversión</button>
       <div class="hint" style="color:${sum!==100&&r.length?'#a23':'var(--gs)'}">Suma: ${sum}%${r.length&&sum!==100?' · debería sumar 100%':''}</div>
@@ -1112,15 +1113,19 @@ function renderHistoryList() {
     h += `<div class="card"><div class="empty">Aún no hay meses cerrados registrados.</div></div>`;
   } else {
     h += sortedLog.map(e => {
-      const cb = e.p1 + e.p2;
+      const ec = e.config || c;
+      const totalEspecial = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
+      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecial) : (e.p1 + e.p2);
+      const p1Total = (ec.nominaP1 || 0) + e.p1;
+      const p2Total = (ec.nominaP2 || 0) + e.p2;
       return `<div class="card tap tap-hist-item" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
         <div style="flex:1">
           <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
-          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${c.nombreP1} ${fmt(e.p1)} · ${c.nombreP2} ${fmt(e.p2)}</div>
+          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
           ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
-          <span class="num" style="font-size:15px;font-weight:600;">${fmt(cb)}</span>
+          <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
           <button class="ldel delete-hist-item-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
           <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
         </div>
@@ -1314,15 +1319,19 @@ function renderCerrar(){
     logH = '<div class="card"><div class="empty">Aún no hay meses cerrados.</div></div>';
   } else {
     logH = showLogs.map(e => {
-      const cb = e.p1 + e.p2;
+      const ec = e.config || c;
+      const totalEspecial = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
+      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecial) : (e.p1 + e.p2);
+      const p1Total = (ec.nominaP1 || 0) + e.p1;
+      const p2Total = (ec.nominaP2 || 0) + e.p2;
       return `<div class="card tap tap-hist" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
         <div style="flex:1">
           <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
-          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${c.nombreP1} ${fmt(e.p1)} · ${c.nombreP2} ${fmt(e.p2)}</div>
+          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
           ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
-          <span class="num" style="font-size:15px;font-weight:600;">${fmt(cb)}</span>
+          <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
           <button class="ldel delete-hist-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
           <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
         </div>
@@ -1759,7 +1768,7 @@ function rerenderPlanKeepOpen(){renderPlan();}
 /* =========================================================
    ONBOARDING (bienvenida + 5 pasos)
    ========================================================= */
-let obStep=0,obMetaTipo='sueno';
+let obStep=0,obMetaTipo='sueno',obReparto=[{n:'Renta variable',pct:50},{n:'Renta fija',pct:30},{n:'Reserva',pct:20}];
 const OB_TOTAL=9;
 function startOnboarding(){obStep=0;$('onb').classList.add('on');renderOb();}
 function obProgress(){$('obBar').style.width=Math.round((obStep)/(OB_TOTAL-1)*100)+'%';}
@@ -1845,15 +1854,25 @@ function renderOb(){
       </div>`;
   }else if(obStep===7){
     obMetaTipo='sueno';
+    const _rRows=obReparto.map((x,i)=>`<div class="grow" style="gap:6px"><input data-orn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo (ej: Acciones)" style="flex:1;font-family:var(--sans)"><input data-orp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">%<button class="del" data-ordel="${i}" style="margin-left:2px">×</button></div>`).join('');
+    const _rSum=obReparto.reduce((s,r)=>s+(+r.pct||0),0);
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 7 de 7</div>
-      <div class="ob-h">¿Tienen un sueño<br>o meta de ahorro?</div>
-      <div class="ob-p">Agrega su primera meta compartida: un viaje, un carro, lo que sea. Pueden ajustarla después o crearla cuando quieran.</div>
+      <div class="ob-h">¿Tienen una primera<br>meta de ahorro?</div>
+      <div class="ob-p">Agréguenla ahora o créenla después cuando quieran.</div>
       <div class="ob-field"><label class="lbl">¿Qué quieren lograr?</label><input class="sf" id="obMetaNom" placeholder="ej: Viaje a Europa, Carro, Apartamento…"></div>
       <div class="ob-field"><label class="lbl">Tipo</label>
-        <div class="seg dark-seg" style="margin-top:6px">
+        <div class="seg dark-seg" style="margin-top:6px;flex-wrap:wrap;gap:4px">
           <button id="obTipoSueno" class="on">🌟 Sueño</button>
+          <button id="obTipoImprev">🛡️ Imprevistos</button>
           <button id="obTipoInvertir">📈 Inversión</button>
         </div>
+        <div class="hint" id="obTipoHint" style="margin-top:8px">Una meta con fecha u objetivo concreto: viaje, carro, apartamento…</div>
+      </div>
+      <div class="ob-field" id="obRepartoSec" style="display:none">
+        <label class="lbl">Cómo distribuyen la inversión <span style="font-weight:400;opacity:.7;font-size:13px">— pueden cambiar después</span></label>
+        <div id="obRepartoBox">${_rRows}</div>
+        <button class="btn sm ghost" id="obRepartoAdd" style="margin-top:6px">+ Agregar tipo</button>
+        <div class="hint" style="margin-top:4px;color:${_rSum!==100&&obReparto.length?'#a23':'var(--gs)'}">Suma: ${_rSum}%${obReparto.length&&_rSum!==100?' · debería sumar 100%':''}</div>
       </div>
       <div class="ob-field"><label class="lbl">¿Cuánto necesitan? <span style="font-weight:400;opacity:.7">(opcional)</span></label><input class="amt money" id="obMetaObj" inputmode="numeric" placeholder="$0"></div>
       <div class="hint" style="margin-top:14px">Si aún no saben la cifra exacta, déjenlo en $0 y la ajustan después.</div>
@@ -1911,9 +1930,32 @@ function attachOb(){
     $('obModoCustom').onclick=()=>setModo('personalizado');
   }
   if(obStep===7){
-    const btnS=$('obTipoSueno'),btnI=$('obTipoInvertir');
-    btnS.onclick=()=>{obMetaTipo='sueno';btnS.classList.add('on');btnI.classList.remove('on');};
-    btnI.onclick=()=>{obMetaTipo='invertir';btnI.classList.add('on');btnS.classList.remove('on');};
+    const btnS=$('obTipoSueno'),btnP=$('obTipoImprev'),btnI=$('obTipoInvertir');
+    const TIPO_HINTS={sueno:'Una meta con fecha u objetivo concreto: viaje, carro, apartamento…',imprevistos:'Se llena primero cada mes, antes que las otras metas. Ideal como colchón de emergencias.',invertir:'Recibe lo que sobre del ahorro. Sin fecha límite; puedes definir cómo distribuirla abajo.'};
+    const renderObRep=()=>{
+      const box=$('obRepartoBox');if(!box)return;
+      const rSum=obReparto.reduce((s,r)=>s+(+r.pct||0),0);
+      box.innerHTML=obReparto.map((x,i)=>`<div class="grow" style="gap:6px"><input data-orn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo (ej: Acciones)" style="flex:1;font-family:var(--sans)"><input data-orp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">%<button class="del" data-ordel="${i}" style="margin-left:2px">×</button></div>`).join('');
+      const sec=$('obRepartoSec');const hintEl=sec&&sec.querySelector('.hint');
+      if(hintEl){hintEl.textContent=`Suma: ${rSum}%`+(obReparto.length&&rSum!==100?' · debería sumar 100%':'');hintEl.style.color=rSum!==100&&obReparto.length?'#a23':'var(--gs)';}
+      box.querySelectorAll('[data-ordel]').forEach(b=>b.onclick=()=>{obReparto.splice(+b.dataset.ordel,1);renderObRep();});
+      box.querySelectorAll('[data-orn]').forEach(el=>el.addEventListener('blur',()=>{obReparto[+el.dataset.orn].n=el.value.trim();}));
+      box.querySelectorAll('[data-orp]').forEach(el=>el.addEventListener('blur',()=>{obReparto[+el.dataset.orp].pct=Math.max(0,Math.min(100,parse(el.value)));renderObRep();}));
+    };
+    const setTipo=(t)=>{
+      obMetaTipo=t;
+      [btnS,btnP,btnI].forEach(b=>b&&b.classList.remove('on'));
+      ({sueno:btnS,imprevistos:btnP,invertir:btnI})[t].classList.add('on');
+      const hint=$('obTipoHint');if(hint)hint.textContent=TIPO_HINTS[t]||'';
+      const sec=$('obRepartoSec');if(sec)sec.style.display=t==='invertir'?'':'none';
+      const nom=$('obMetaNom');if(nom)nom.placeholder=t==='imprevistos'?'ej: Fondo de emergencias, Colchón…':'ej: Viaje a Europa, Carro, Apartamento…';
+    };
+    btnS.onclick=()=>setTipo('sueno');
+    btnP.onclick=()=>setTipo('imprevistos');
+    btnI.onclick=()=>setTipo('invertir');
+    renderObRep();
+    const ra=$('obRepartoAdd');
+    if(ra)ra.onclick=()=>{obReparto.push({n:'',pct:0});renderObRep();setTimeout(()=>{const box=$('obRepartoBox');if(box){const inp=box.querySelectorAll('[data-orn]');inp[inp.length-1]&&inp[inp.length-1].focus();}},50);};
   }
 }
 function obSaveStep(){
@@ -1929,7 +1971,7 @@ function obSaveStep(){
       const existeInv=obMetaTipo==='invertir'&&inversionAbierta();
       if(!existeInv){
         const prio=metasCompartidas().length;
-        state.metas.push({id:uid(),nombre:nom,tipo:obMetaTipo,saldo:0,objetivo:obj||0,aporteFijo:0,aportePct:0,fecha:null,prioridad:prio,reparto:obMetaTipo==='invertir'?[]:null});
+        state.metas.push({id:uid(),nombre:nom,tipo:obMetaTipo,saldo:0,objetivo:obj||0,aporteFijo:0,aportePct:0,fecha:null,prioridad:prio,reparto:obMetaTipo==='invertir'?obReparto.map(r=>({n:r.n,pct:r.pct})):null});
       }
     }
   }
