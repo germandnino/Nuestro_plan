@@ -32,3 +32,6 @@ plan_monetizacion.md
 
 # Superpowers folder
 docs/superpowers/
+
+# Node dependencies
+node_modules/

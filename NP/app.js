@@ -1,4 +1,4 @@
-﻿/* =========================================================
+/* =========================================================
    NUESTRO PLAN — modelo unificado de Meta
    tipos: imprevistos | invertir | sueno | personal(sistema)
    ========================================================= */
@@ -37,6 +37,12 @@ let curTab=0, detailKey=null, firstFlow=true;
 let mForm=null; // estado del formulario de meta en edición
 let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este cierre
 
+// Sync Firebase
+let currentUser = null;       // firebase.User | null
+let currentPlanId = null;     // string | null — ID del plan activo
+let isOwner = false;          // true si este usuario es el owner del plan
+let unsubscribeSync = null;   // función para cancelar listener de Firestore
+
 const store={
   async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
@@ -48,6 +54,13 @@ const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleS
 const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function flash(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1900);}
+function showSyncStatus(msg, isError = false) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.background = isError ? '#7a2222' : 'var(--green)';
+  el.style.display = msg ? 'block' : 'none';
+}
 const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function fmtMes(ym){if(!ym)return'';const[y,m]=ym.split('-');return MONTHS[(+m)-1]+' '+y;}
 function fmtFecha(d){if(!d)return'';const p=d.split('-');return p[2]+' '+MONTHS[(+p[1])-1]+' '+p[0];}
@@ -88,14 +101,148 @@ function normalize(){
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
   state.gastos=Array.isArray(state.gastos)?state.gastos:[];
 }
+
+// --- Firebase Sync Helpers ---
+let unsubscribeBolsillos = null;
+
+function getPlanId() {
+  const params = new URLSearchParams(window.location.search);
+  const urlPlan = params.get('plan');
+  if (urlPlan) {
+    localStorage.setItem('planId', urlPlan);
+    window.history.replaceState({}, '', window.location.pathname);
+    return urlPlan;
+  }
+  let id = localStorage.getItem('planId');
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem('planId', id);
+  }
+  return id;
+}
+
+async function syncLoadShared(planId) {
+  const doc = await db.collection('planes').doc(planId).collection('shared').doc('data').get();
+  if (!doc.exists) return null;
+  return doc.data();
+}
+
+async function syncSaveShared(planId, stateToSave) {
+  const { config, metas, log, ingresos, gastos } = stateToSave;
+  const configSinPerfil = { ...config };
+  delete configSinPerfil.perfil;
+  const metasSinBolsillo = metas.filter(m => m.tipo !== 'personal');
+  await db.collection('planes').doc(planId)
+    .collection('shared').doc('data')
+    .set({
+      config: configSinPerfil,
+      metas: metasSinBolsillo,
+      log,
+      ingresos,
+      gastos,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+}
+
+async function syncRegisterOwner(planId, uid) {
+  await db.collection('meta').doc(planId).set({
+    ownerUid: uid,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function syncCheckOwner(planId, uid) {
+  const doc = await db.collection('meta').doc(planId).get();
+  if (!doc.exists) return false;
+  return doc.data().ownerUid === uid;
+}
+
+function syncSubscribe(planId) {
+  if (unsubscribeSync) unsubscribeSync();
+  unsubscribeSync = db.collection('planes').doc(planId)
+    .collection('shared').doc('data')
+    .onSnapshot(doc => {
+      if (!doc.exists) return;
+      const remote = doc.data();
+      const perfilLocal = state.config.perfil;
+      const personalesLocales = state.metas.filter(m => m.tipo === 'personal');
+      const remoteMetas = remote.metas || [];
+      
+      state.config = { ...remote.config, perfil: perfilLocal };
+      state.metas = remoteMetas.concat(personalesLocales.filter(pl => !remoteMetas.some(rm => rm.id === pl.id)));
+      state.log = remote.log || [];
+      state.ingresos = remote.ingresos || [];
+      state.gastos = remote.gastos || [];
+      render();
+    });
+
+  if (unsubscribeBolsillos) unsubscribeBolsillos();
+  unsubscribeBolsillos = db.collection('planes').doc(planId).collection('bolsillos')
+    .onSnapshot(snapshot => {
+      snapshot.forEach(doc => {
+        const remoteBolsillo = doc.data().meta;
+        if (remoteBolsillo && remoteBolsillo.dueno) {
+          const idx = state.metas.findIndex(m => m.tipo === 'personal' && m.dueno === remoteBolsillo.dueno);
+          if (idx !== -1) {
+            state.metas[idx].saldo = remoteBolsillo.saldo;
+            state.metas[idx].aportes = remoteBolsillo.aportes || [];
+            state.metas[idx].nombre = remoteBolsillo.nombre || state.metas[idx].nombre;
+          }
+        }
+      });
+      render();
+    });
+}
+
+async function syncSaveBolsillo(planId, uid, bolsilloMeta) {
+  await db.collection('planes').doc(planId)
+    .collection('bolsillos').doc(uid)
+    .set({
+      meta: bolsilloMeta,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+}
+
 async function load(){
   const raw=await store.get();
   if(raw){try{state=JSON.parse(raw);}catch(e){}}
   normalize();
-  if(!state.config.onboarded){startOnboarding();}
-  else{go(0);}
 }
-async function save(){const ok=await store.set(JSON.stringify(state));if(!ok)$('banner').style.display='block';}
+async function save(){
+  const ok=await store.set(JSON.stringify(state));
+  if(!ok)$('banner').style.display='block';
+  
+  if (currentUser && currentPlanId && isOwner) {
+    syncSaveShared(currentPlanId, state)
+      .then(() => {
+        showSyncStatus('Sincronizado ✓');
+        setTimeout(() => showSyncStatus(''), 2000);
+      })
+      .catch(e => {
+        console.warn('Firestore shared save failed, local only:', e.message);
+        showSyncStatus('Solo local (sin conexión)', true);
+      });
+  }
+
+  if (currentUser && currentPlanId) {
+    const miBolsillo = state.metas.find(m => m.tipo === 'personal' && m.dueno === state.config.perfil);
+    if (miBolsillo) {
+      syncSaveBolsillo(currentPlanId, currentUser.uid, miBolsillo)
+        .then(() => {
+          if (!isOwner) {
+            showSyncStatus('Bolsillo sincronizado ✓');
+            setTimeout(() => showSyncStatus(''), 2000);
+          }
+        })
+        .catch(e => {
+          console.warn('Bolsillo sync failed, local only:', e.message);
+          if (!isOwner) {
+            showSyncStatus('Bolsillo local (sin conexión)', true);
+          }
+        });
+    }
+  }
+}
 
 /* ---------- selectores de metas ---------- */
 function metaById(id){return state.metas.find(m=>m.id===id);}
@@ -1612,14 +1759,38 @@ function obProgress(){$('obBar').style.width=Math.round((obStep)/(OB_TOTAL-1)*10
 function renderOb(){
   obProgress();
   const c=state.config;const inner=$('obInner');
-  $('obSkip').style.display=obStep===0?'none':'block';
-  $('obNext').textContent=obStep===OB_TOTAL-1?'Empezar':(obStep===0?'Empezar':'Continuar');
+  $('obNext').style.display=obStep===0?'none':'block';
+  $('obSkip').style.display=(obStep===0 || localStorage.getItem('isInvited') === 'true')?'none':'block';
+  $('obNext').textContent=obStep===OB_TOTAL-1?'Empezar':'Continuar';
   let h='';
   if(obStep===0){
-    h=`<div class="ob-step on"><div class="ob-mark">✦</div>
-      <div class="ob-eyebrow">Nuestro plan</div>
-      <div class="ob-h">Organicen su plata,<br>juntos.</div>
-      <div class="ob-p">Definan a dónde va cada peso cada mes y avancen hacia sus sueños, inversiones y lo que quieran lograr juntos. Configurarlo toma un par de minutos.</div></div>`;
+    const isInvited = localStorage.getItem('isInvited') === 'true' || new URLSearchParams(window.location.search).has('plan');
+    if(isInvited){
+      h=`<div class="ob-step on">
+        <div class="ob-mark">✦</div>
+        <div class="ob-eyebrow">Te invitaron a Nuestro plan</div>
+        <div class="ob-h">¡Únete al plan de tu pareja!</div>
+        <div class="ob-p">Al conectarte con tu cuenta de Google, se sincronizarán en tiempo real el presupuesto compartido, los gastos y las metas de ahorro.</div>
+        <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+          Conectar con Google
+        </button>
+      </div>`;
+    } else {
+      h=`<div class="ob-step on">
+        <div class="ob-mark">✦</div>
+        <div class="ob-eyebrow">Nuestro plan</div>
+        <div class="ob-h">Organicen su plata,<br>juntos.</div>
+        <div class="ob-p">Definan a dónde va cada peso y avancen hacia sus sueños e inversiones. Conéctense para sincronizar sus teléfonos y ver los cambios al instante.</div>
+        <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+          Conectar con Google
+        </button>
+        <button class="btn ghost" id="btnObLocal" style="margin-top:12px;width:100%;">
+          Comenzar en Modo Local (sin cuenta)
+        </button>
+      </div>`;
+    }
   }else if(obStep===1){
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 7</div>
       <div class="ob-h">¿Quiénes son?</div>
@@ -1714,6 +1885,27 @@ function renderOb(){
 }
 function attachOb(){
   const c=state.config;
+  if(obStep===0){
+    const btnL = $('btnObLogin');
+    if(btnL) {
+      btnL.onclick = async () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+          await auth.signInWithPopup(provider);
+        } catch(err) {
+          alert('Error de conexión: ' + err.message);
+        }
+      };
+    }
+    const btnLoc = $('btnObLocal');
+    if(btnLoc) {
+      btnLoc.onclick = () => {
+        localStorage.setItem('isInvited', 'false');
+        obStep = 1;
+        renderOb();
+      };
+    }
+  }
   if(obStep===2){
     $('obPf1').onclick=()=>{c.perfil='p1';renderOb();};
     $('obPf2').onclick=()=>{c.perfil='p2';renderOb();};
@@ -1822,6 +2014,11 @@ function obDrawFlow(){
 }
 $('obNext').onclick=()=>{
   obSaveStep();
+  const isInv = localStorage.getItem('isInvited') === 'true';
+  if(isInv && obStep === 2) {
+    finishOnboarding();
+    return;
+  }
   if(obStep>=OB_TOTAL-1){finishOnboarding();return;}
   obStep++;renderOb();
 };
@@ -1832,7 +2029,64 @@ function finishOnboarding(){
   save();go(0);
 }
 
-load();
+// Listener de estado de autenticación de Firebase
+auth.onAuthStateChanged(async user => {
+  currentUser = user;
+  
+  // Cargar datos locales primero
+  const raw = await store.get();
+  if (raw) {
+    try { state = { ...state, ...JSON.parse(raw) }; } catch(e) {}
+  }
+  normalize();
+
+  if (user) {
+    currentPlanId = getPlanId();
+    const metaDoc = await db.collection('meta').doc(currentPlanId).get();
+    
+    if (metaDoc.exists) {
+      isOwner = metaDoc.data().ownerUid === user.uid;
+      if (!isOwner) {
+        localStorage.setItem('isInvited', 'true');
+        // Si no está onboarded aún, ir al paso 2 para elegir perfil
+        if (!state.config.onboarded) {
+          obStep = 2;
+        }
+      }
+    } else {
+      isOwner = true;
+      await syncRegisterOwner(currentPlanId, user.uid);
+      await syncSaveShared(currentPlanId, state);
+    }
+    // Intentar cargar datos de Firestore
+    const remote = await syncLoadShared(currentPlanId);
+    if (remote) {
+      const perfilLocal = state.config.perfil;
+      state.config = { ...remote.config, perfil: perfilLocal };
+      state.metas = (remote.metas || []).concat(state.metas.filter(m => m.tipo === 'personal'));
+      state.log = remote.log || [];
+      state.ingresos = remote.ingresos || [];
+      state.gastos = remote.gastos || [];
+    }
+    syncSubscribe(currentPlanId);
+  } else {
+    if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
+    if (unsubscribeBolsillos) { unsubscribeBolsillos(); unsubscribeBolsillos = null; }
+    currentPlanId = null;
+    isOwner = false;
+  }
+
+  // Decidir qué pantalla mostrar
+  if (!state.config.onboarded) {
+    if (localStorage.getItem('isInvited') === 'true' && currentUser) {
+      obStep = 2;
+    }
+    $('onb').classList.add('on');
+    renderOb();
+  } else {
+    go(0);
+  }
+});
 
 // Helper para detectar iOS / iPadOS
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);

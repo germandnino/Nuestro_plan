@@ -1,0 +1,31 @@
+{
+  "name": "nuestro-plan",
+  "version": "1.0.0",
+  "description": "**Nuestro Plan** es una aplicación web (Single Page Application y Progressive Web App) diseñada especialmente para ayudar a parejas a gestionar sus finanzas personales, organizar sus ingresos conjuntos e individuales, distribuir gastos de forma equitativa y ahorrar para metas comunes e individuales de manera inteligente y automatizada.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/germandnino/Nuestro_plan.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/germandnino/Nuestro_plan/issues"
+  },
+  "homepage": "https://github.com/germandnino/Nuestro_plan#readme",
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0"
+  }
+}
