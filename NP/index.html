@@ -1353,7 +1353,7 @@ ${especialesPendientes.length ? `<div style="margin-bottom:14px"><div style="fon
   const pctR=ep.pctRetener||0;
   const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
   return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
-<details id="detEspecial" style="background:rgba(28,58,44,.04);border:1.5px solid rgba(28,58,44,.18);border-radius:12px;margin-bottom:14px"><summary style="color:var(--gb);font-size:14px;font-weight:700;padding:2px 0">+ Agregar ingreso adicional</summary>
+<details id="detEspecial" class="card" style="margin-bottom:14px"><summary style="font-size:14px;font-weight:600;color:var(--ink)">+ Agregar ingreso adicional</summary>
   <div class="dpad">
     <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Comisión enero, prima junio…"></label>
     <div class="row2" style="margin-top:8px">
