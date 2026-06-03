@@ -189,6 +189,7 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
   <section class="sec" id="s4"><div class="wrap" id="r4"></div></section>
   <section class="sec" id="sd"><div class="wrap" id="rd"></div></section>
   <section class="sec" id="sf"><div class="wrap" id="rf"></div></section>
+  <section class="sec" id="sh"><div class="wrap" id="rh"></div></section>
 </div>
 
 <nav class="nav" id="mainnav">
@@ -350,13 +351,7 @@ function distribuirAhorro(monto, esEspecial = false){
   let rem=monto;
   const comp=metasCompartidas();
 
-  if(c.estrategia==='secuencial'){
-    const prio=getMetaPrioritaria();
-    if(prio){
-      const falta=Math.max(0,prio.objetivo-(prio.saldo+res[prio.id]));
-      const add=Math.min(rem,falta);res[prio.id]+=add;rem-=add;
-    }
-  } else if(c.estrategia==='cascada'){
+  if(c.estrategia==='cascada'){
     const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
     for(let i=0;i<sorted.length;i++){
       const m=sorted[i];
@@ -375,9 +370,8 @@ function distribuirAhorro(monto, esEspecial = false){
     }
     return res;
   }
-  if(rem<=0.5)return res;
 
-  // (2) aportes fijos en $
+  // (1) aportes fijos en $ (se cubren de primero para evitar desatender compromisos mensuales recurrentes)
   if(!esEspecial){
     comp.filter(m=>(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')&&(m.aporteFijo||0)>0).forEach(m=>{
       let add=m.aporteFijo;
@@ -387,7 +381,17 @@ function distribuirAhorro(monto, esEspecial = false){
     if(rem<=0.5)return res;
   }
 
-  // (3) cada meta toma su % del resto (base fija = remanente tras fijos)
+  // (2) prioritaria primero si es secuencial
+  if(c.estrategia==='secuencial'){
+    const prio=getMetaPrioritaria();
+    if(prio){
+      const falta=Math.max(0,prio.objetivo-(prio.saldo+res[prio.id]));
+      const add=Math.min(rem,falta);res[prio.id]+=add;rem-=add;
+    }
+    if(rem<=0.5)return res;
+  }
+
+  // (3) cada meta toma su % del resto (base fija = remanente tras fijos y prioritario)
   const baseRem=rem;
   comp.filter(m=>(m.aportePct||0)>0&&(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')).forEach(m=>{
     let add=baseRem*m.aportePct/100;
@@ -409,7 +413,7 @@ function go(t){
   curTab=t;detailKey=null;
   $('mainnav').classList.remove('hide');
   document.querySelectorAll('.nt').forEach((b,i)=>b.classList.toggle('on',i===t));
-  ['s0','s1','s2','s3','s4','sd','sf'].forEach(id=>$(id).classList.remove('on'));
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(id=>$(id).classList.remove('on'));
   $('s'+t).classList.add('on');
   RENDER[t]();
   $('s'+t).scrollTop=0;
@@ -620,9 +624,14 @@ function drawSavingsHistoryCard() {
   }
 
   const historyData = state.log.slice(0, 6).reverse().map(e => {
-    const base = computeBase();
-    const comb = e.p1 + e.p2;
-    const ahorro = base + comb * (1 - state.config.pctPremio / 100);
+    let ahorro = 0;
+    if (e.reparto && typeof e.reparto.ahorro === 'number') {
+      ahorro = e.reparto.ahorro + (e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0);
+    } else {
+      const base = computeBase();
+      const comb = e.p1 + e.p2;
+      ahorro = base + comb * (1 - state.config.pctPremio / 100);
+    }
     return {
       mesLabel: fmtMes(e.mes),
       ahorro: ahorro
@@ -838,7 +847,7 @@ function openMetaForm(id){
   const existing=id?metaById(id):null;
   mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:'sueno',saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,prioridad:metasCompartidas().length,reparto:null};
   detailKey=null;
-  ['s0','s1','s2','s3','sd','sf'].forEach(x=>$(x).classList.remove('on'));
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
   $('sf').classList.add('on');$('sf').scrollTop=0;
   $('mainnav').classList.add('hide');
   renderMetaForm(!!existing);
@@ -953,8 +962,14 @@ function updateDeriv(){
     const isPrio = prio && prio.id === mForm.id;
     if (isPrio) {
       const falta = Math.max(0, obj - saldo);
-      const meses = est > 0 ? Math.ceil(falta / est) : '—';
-      txt = `Estrategia actual: <b>Prioritaria primero</b>. Todo el ahorro base de <b>${fmt(est)}/mes</b> va a esta meta primero por ser la de máxima prioridad. Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
+      const fijosOtros = metasCompartidas().filter(m => m.id !== prio.id && m.tipo !== 'imprevistos').reduce((s, m) => s + (m.aporteFijo || 0), 0);
+      const estPrio = Math.max(0, est - fijosOtros);
+      const meses = estPrio > 0 ? Math.ceil(falta / estPrio) : '—';
+      if (fijosOtros > 0) {
+        txt = `Estrategia actual: <b>Prioritaria primero</b>. Esta meta recibe el ahorro base restante de <b>${fmt(estPrio)}/mes</b> (tras cubrir aportes fijos de otras metas). Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
+      } else {
+        txt = `Estrategia actual: <b>Prioritaria primero</b>. Todo el ahorro base de <b>${fmt(est)}/mes</b> va a esta meta primero por ser la de máxima prioridad. Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
+      }
     } else {
       const prioNom = prio ? prio.nombre : 'la meta principal';
       if(obj&&fecha){
@@ -1014,7 +1029,7 @@ function attachMetaForm(editing){
 
 /* ---------- detalle de meta ---------- */
 function openDetail(id){detailKey=id;renderDetail();
-  ['s0','s1','s2','s3','sd','sf'].forEach(x=>$(x).classList.remove('on'));$('sd').classList.add('on');$('sd').scrollTop=0;
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));$('sd').classList.add('on');$('sd').scrollTop=0;
   $('mainnav').classList.add('hide');}
 function gastosDe(id){return state.gastos.filter(g=>g.meta===id);}
 function renderDetail(){
@@ -1074,6 +1089,202 @@ function renderDetail(){
   $('rd').querySelectorAll('[data-drp]').forEach(el=>el.addEventListener('blur',()=>{m.reparto[+el.dataset.drp].pct=Math.max(0,Math.min(100,parse(el.value)));save();renderDetail();}));
 }
 
+/* ---------- historial de meses cerrados ---------- */
+function openHistoryList() {
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
+  $('sh').classList.add('on');
+  $('sh').scrollTop=0;
+  $('mainnav').classList.add('hide');
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const c=state.config;
+  const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
+  
+  let h = `<button class="bk" id="hListBack">‹ Volver a Aportar</button>
+    <header style="padding-top:6px">
+      <div class="ey">Registro Histórico</div>
+      <h1>Meses cerrados</h1>
+    </header>`;
+    
+  if (sortedLog.length === 0) {
+    h += `<div class="card"><div class="empty">Aún no hay meses cerrados registrados.</div></div>`;
+  } else {
+    h += sortedLog.map(e => {
+      const cb = e.p1 + e.p2;
+      return `<div class="card tap tap-hist-item" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
+        <div style="flex:1">
+          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
+          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${c.nombreP1} ${fmt(e.p1)} · ${c.nombreP2} ${fmt(e.p2)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
+          <span class="num" style="font-size:15px;font-weight:600;">${fmt(cb)}</span>
+          <button class="ldel delete-hist-item-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
+          <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  
+  $('rh').innerHTML = h;
+  
+  $('hListBack').onclick = () => {
+    go(2);
+  };
+  
+  $('rh').querySelectorAll('.tap-hist-item').forEach(el => el.onclick = (e) => {
+    if (e.target.closest('.delete-hist-item-btn')) return;
+    openHistoryDetail(el.dataset.hmes, 'list');
+  });
+  
+  $('rh').querySelectorAll('.delete-hist-item-btn').forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    state.log = state.log.filter(x => x.mes !== b.dataset.logm);
+    save();
+    renderHistoryList();
+  });
+}
+
+function openHistoryDetail(mes, fromTab) {
+  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
+  $('sh').classList.add('on');
+  $('sh').scrollTop=0;
+  $('mainnav').classList.add('hide');
+  renderHistoryDetail(mes, fromTab);
+}
+
+function renderHistoryDetail(mes, fromTab) {
+  const entry = state.log.find(e => e.mes === mes);
+  if (!entry) {
+    if (fromTab === 'list') renderHistoryList(); else go(2);
+    return;
+  }
+  
+  const backFn = () => {
+    if (fromTab === 'list') renderHistoryList(); else go(2);
+  };
+  
+  const c = entry.config || state.config;
+  const r = entry.reparto;
+  
+  let h = `<button class="bk" id="hDetailBack">‹ Volver</button>
+    <header style="padding-top:6px">
+      <div class="ey">Detalle de Cierre</div>
+      <h1>${fmtMes(entry.mes)}</h1>
+    </header>`;
+    
+  if (!r) {
+    const cb = entry.p1 + entry.p2;
+    h += `<div class="card">
+      <div class="k" style="margin-bottom:12px;">Resumen del mes</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px;">
+        <div style="display:flex;justify-content:space-between"><span>Extra ${c.nombreP1}:</span><b class="num">${fmt(entry.p1)}</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Extra ${c.nombreP2}:</span><b class="num">${fmt(entry.p2)}</b></div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px;font-weight:700;">
+          <span>Total extra:</span><b class="num">${fmt(cb)}</b>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:16px;line-height:1.45;">
+        ℹ️ Los detalles completos de reparto y gráficos no están disponibles para meses cerrados antes de la actualización de historial.
+      </div>
+    </div>`;
+  } else {
+    const totalEntra = r.entra || (r.nom + r.comb);
+    const totalEspecial = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
+    const entra = Math.max(1, totalEntra + totalEspecial);
+    const ahorro = Math.max(0, r.ahorro + totalEspecial);
+    
+    const pg = (r.gastosDia / entra * 100);
+    const ppp = (r.gustosPareja / entra * 100);
+    const pp1 = (r.gustosP1 / entra * 100);
+    const pp2 = (r.gustosP2 / entra * 100);
+    const pa = (ahorro / entra * 100);
+    
+    const recibe = Object.keys(r.dist || {}).map(id => ({
+      m: metaById(id) || { nombre: id, tipo: 'Desconocido' },
+      v: r.dist[id] || 0
+    })).filter(x => x.v > 0.5);
+    
+    h += `<div class="casc nofade">
+      <div class="inc-row"><span class="inc-name">Ingresos totales</span><span class="inc-val num">${fmt(totalEntra + totalEspecial)}</span></div>
+      
+      <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
+        <div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Extras (variables):</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>
+        ${entry.especiales && entry.especiales.length > 0 ? entry.especiales.map(ep => `
+          <div style="display:flex;justify-content:space-between"><span>Especial — ${ep.nombre}:</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>
+        `).join('') : ''}
+      </div>
+      
+      <div class="stack">
+        <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-a" style="flex:1"></span>
+      </div>
+      
+      <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
+      <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
+      <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1)}</b></div>
+      <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2)}</b></div>
+      <div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Ahorro e inversión</span><b>${fmt(ahorro)}</b></div>
+      
+      ${recibe.length > 0 ? `
+        <div class="meta-block">
+          <div class="mt-title">Distribución del ahorro</div>
+          ${recibe.map(x => `
+            <div class="meta-lvl">
+              <div class="lvl-row">
+                <span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span>
+                <span class="lvl-val num">${fmt(x.v)}</span>
+              </div>
+              <div class="lvl-bar"><i style="width:${Math.max(3, Math.min(100, x.v / Math.max(1, ahorro) * 100)).toFixed(1)}%"></i></div>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`}
+      
+      ${entry.especiales && entry.especiales.length > 0 ? `
+        <div class="meta-block">
+          <div class="mt-title">Destino de los ingresos especiales</div>
+          ${entry.especiales.map(ep => {
+            if (ep.meta === 'distribuir') {
+              return `<div style="font-size:11.5px;font-weight:700;color:var(--gs);margin:8px 0 4px">${ep.nombre} — según el plan (distribuido): ${fmt(ep.monto)}</div>`;
+            } else {
+              return `<div class="meta-lvl">
+                <div class="lvl-row">
+                  <span class="lvl-name">${ep.nombre} <span class="lvl-tag">· para ${ep.metaNombre}</span></span>
+                  <span class="lvl-val num">${fmt(ep.monto)}</span>
+                </div>
+                <div class="lvl-bar"><i style="width:100%"></i></div>
+              </div>`;
+            }
+          }).join('')}
+        </div>
+      ` : ''}
+    </div>`;
+  }
+  
+  h += `<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
+    <button class="btn danger" id="btnDelHistEntry">Eliminar registro</button>
+  </div>`;
+  
+  $('rh').innerHTML = h;
+  
+  $('hDetailBack').onclick = backFn;
+  
+  $('btnDelHistEntry').onclick = () => {
+    if (!confirm(`¿Eliminar el registro de ${fmtMes(entry.mes)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    state.log = state.log.filter(e => e.mes !== entry.mes);
+    save();
+    backFn();
+  };
+}
+
 /* =========================================================
    CERRAR MES (cascada)
    ========================================================= */
@@ -1094,9 +1305,37 @@ function computeReparto(g,a){
 }
 function renderCerrar(){
   const c=state.config;
-  let logH=state.log.length?state.log.map(e=>{const cb=e.p1+e.p2;
-    return `<div class="lrow"><div><div class="lm">${fmtMes(e.mes)}</div><div class="ls">${c.nombreP1} ${fmt(e.p1)} · ${c.nombreP2} ${fmt(e.p2)}</div></div>
-      <div style="display:flex;align-items:center;gap:8px">${e.aplicado?'<span class="tag ok">✓</span>':''}<span class="num" style="font-size:16px">${fmt(cb)}</span><button class="ldel" data-logm="${e.mes}">×</button></div></div>`;}).join(''):'<div class="empty">Aún no hay meses cerrados.</div>';
+  const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
+  const showLimit = 2;
+  const showLogs = sortedLog.slice(0, showLimit);
+
+  let logH = '';
+  if (sortedLog.length === 0) {
+    logH = '<div class="card"><div class="empty">Aún no hay meses cerrados.</div></div>';
+  } else {
+    logH = showLogs.map(e => {
+      const cb = e.p1 + e.p2;
+      return `<div class="card tap tap-hist" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
+        <div style="flex:1">
+          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
+          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${c.nombreP1} ${fmt(e.p1)} · ${c.nombreP2} ${fmt(e.p2)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
+          <span class="num" style="font-size:15px;font-weight:600;">${fmt(cb)}</span>
+          <button class="ldel delete-hist-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
+          <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    if (sortedLog.length > showLimit) {
+      logH += `<button class="btn ghost sm" id="btnFullHistory" style="margin-top:8px;width:100%;">Ver historial completo (${sortedLog.length} meses) ›</button>`;
+    } else {
+      logH += `<button class="btn ghost sm" id="btnFullHistory" style="margin-top:8px;width:100%;">Abrir historial completo ›</button>`;
+    }
+  }
+
   $('r2').innerHTML=`
 <header><div class="ey">Este mes</div><h1>Aportar al plan</h1></header>
 <details id="detExtras" open><summary>Ingresos extras de este mes</summary>
@@ -1121,7 +1360,7 @@ function renderCerrar(){
 <div class="stitle">Reparto del mes</div>
 <div class="flow nofade" id="mflow"></div>
 <button class="btn" id="mApply" style="margin-top:12px">Aportar</button>
-<div class="card" style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
+<div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
   $('mP1').addEventListener('input',drawFlow);
   $('mP2').addEventListener('input',drawFlow);
   $('mApply').onclick=aplicar;
@@ -1131,7 +1370,21 @@ function renderCerrar(){
     renderCerrar();
     drawFlow();
   });
-  $('r2').querySelectorAll('[data-logm]').forEach(b=>b.onclick=()=>{state.log=state.log.filter(e=>e.mes!==b.dataset.logm);save();renderCerrar();});
+  $('r2').querySelectorAll('.tap-hist').forEach(el => el.onclick = (e) => {
+    if (e.target.closest('.delete-hist-btn')) return;
+    openHistoryDetail(el.dataset.hmes, 'cerrar');
+  });
+  $('r2').querySelectorAll('.delete-hist-btn').forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    state.log = state.log.filter(x => x.mes !== b.dataset.logm);
+    save();
+    renderCerrar();
+  });
+  const btnFull = $('btnFullHistory');
+  if (btnFull) {
+    btnFull.onclick = () => openHistoryList();
+  }
   drawFlow();
 }
 function drawFlow(animate){
@@ -1256,6 +1509,12 @@ function aplicar(){
       const m=metaById(ep.meta);if(m)m.saldo+=ep.monto;
     }
   });
+  const espSnapshot = especialesPendientes.map(ep => ({
+    nombre: ep.nombre,
+    monto: ep.monto,
+    meta: ep.meta,
+    metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')
+  }));
   especialesPendientes=[];
   // bolsillo personal del perfil de este teléfono
   const perfil=c.perfil,per=metaPersonal(perfil);
@@ -1263,7 +1522,42 @@ function aplicar(){
   const aporte=libreOf(perfil)+r.prem*pf;
   const ya=per.aportes.find(x=>x.mes===mes);
   if(ya){per.saldo+=aporte-ya.monto;ya.monto=aporte;}else{per.saldo+=aporte;per.aportes.push({mes,monto:aporte});}
-  state.log=state.log.filter(e=>e.mes!==mes);state.log.push({mes,p1:g,p2:a,aplicado:true});
+  const snapshot = {
+    mes,
+    p1: g,
+    p2: a,
+    aplicado: true,
+    config: {
+      nombreP1: c.nombreP1,
+      nombreP2: c.nombreP2,
+      nominaP1: c.nominaP1,
+      nominaP2: c.nominaP2,
+      gastos: c.gastos,
+      planPareja: c.planPareja,
+      libreP1: c.libreP1,
+      libreP2: c.libreP2,
+      pctPremio: c.pctPremio,
+      modoPremio: c.modoPremio,
+      pctPremioP1: c.pctPremioP1,
+      estrategia: c.estrategia
+    },
+    reparto: {
+      base: r.base,
+      comb: r.comb,
+      prem: r.prem,
+      ahorro: r.ahorro,
+      gastosDia: r.gastosDia,
+      gustos: r.gustos,
+      gustosPareja: r.gustosPareja,
+      gustosP1: r.gustosP1,
+      gustosP2: r.gustosP2,
+      nom: r.nom,
+      entra: r.entra,
+      dist: Object.assign({}, r.dist)
+    },
+    especiales: espSnapshot
+  };
+  state.log=state.log.filter(e=>e.mes!==mes);state.log.push(snapshot);
   state.log.sort((x,y)=>y.mes.localeCompare(x.mes));
   save();
   // animar la cascada como confirmación
@@ -1368,7 +1662,7 @@ function renderPlan(){
     <button id="estCas" class="${c.estrategia==='cascada'?'on':''}">En cascada</button>
   </div>
   <div class="hint">
-    ${c.estrategia==='secuencial'?'<b>Prioritaria primero</b>: Llena primero la meta de máxima prioridad al 100%; luego reparte al resto en simultáneo.'
+    ${c.estrategia==='secuencial'?'<b>Prioritaria primero</b>: Cubre los aportes fijos de todas las metas y luego destina todo el ahorro restante a la meta de máxima prioridad.'
       :c.estrategia==='simultaneo'?'<b>Simultáneo</b>: Reparte en paralelo entre todas las metas (incluyendo la prioritaria si tiene aportes) desde el inicio.'
       :'<b>En cascada</b>: Llena las metas una por una en estricto orden de prioridad (número menor a mayor), ignorando porcentajes y fijos.'}
   </div>
@@ -1518,7 +1812,7 @@ function renderOb(){
         </div>
       </div>
       <div id="obEstHint" style="margin-top:14px;background:rgba(246,241,230,.1);border:1px solid rgba(246,241,230,.2);border-radius:12px;padding:12px 14px;font-size:13.5px;color:rgba(246,241,230,.85);line-height:1.5">
-        ${c.estrategia==='secuencial'?'<b style="color:var(--gb)">Prioritaria primero:</b> Toda la energía del ahorro va a la meta #1 hasta llenarla; luego se reparte al resto.'
+        ${c.estrategia==='secuencial'?'<b style="color:var(--gb)">Prioritaria primero:</b> Primero se cubren los aportes fijos de cada meta y luego todo el ahorro sobrante va a la meta #1 hasta llenarla.'
           :c.estrategia==='simultaneo'?'<b style="color:var(--gb)">Simultáneo:</b> El ahorro se divide en paralelo entre todas las metas según los % y montos que configuren.'
           :'<b style="color:var(--gb)">En cascada:</b> Llena cada meta en orden estricto de prioridad, una por una, antes de pasar a la siguiente.'}
       </div>
@@ -1581,7 +1875,7 @@ function attachOb(){
     const btnHint=$('obEstHint');
     const setEst=(e)=>{
       ['obEstSeq','obEstSim','obEstCas'].forEach(id=>$(id)&&$(id).classList.remove('on'));
-      const labels={secuencial:'<b>Prioritaria primero:</b> Toda la energía del ahorro va a la meta #1 hasta llenarla; luego se reparte al resto.',
+      const labels={secuencial:'<b>Prioritaria primero:</b> Primero se cubren los aportes fijos de cada meta y luego todo el ahorro sobrante va a la meta #1 hasta llenarla.',
         simultaneo:'<b>Simultáneo:</b> El ahorro se divide en paralelo entre todas las metas según los % y montos que configuren.',
         cascada:'<b>En cascada:</b> Llena cada meta en orden estricto de prioridad, una por una, antes de pasar a la siguiente.'};
       state.config.estrategia=e;
