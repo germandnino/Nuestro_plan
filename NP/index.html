@@ -1711,19 +1711,9 @@ function renderPlan(){
   </div>
 </div></details>
 
-<details id="detExtras" ${detExtrasOpen ? 'open' : ''}><summary>Reparto de ingresos extras</summary><div class="dpad">
-  <label class="lbl">% de ingresos extras que van a sus bolsillos</label><input class="sf" id="pPct" inputmode="numeric" value="${c.pctPremio}">
-  <div class="hint">De los ingresos extras (comisiones, bonos), este porcentaje se reparte como dinero libre entre los dos. El resto (${100-c.pctPremio}%) se va al ahorro compartido.</div>
-  
-  <label class="lbl" style="margin-top:12px">¿Cómo se divide ese % entre los dos?</label>
-  <select class="sf" id="pModo">
-    <option value="igual"${c.modoPremio==='igual'?' selected':''}>Por igual (50% / 50%)</option>
-    <option value="proporcional"${c.modoPremio==='proporcional'?' selected':''}>Proporcional a lo que aportó cada uno</option>
-    <option value="personalizado"${c.modoPremio==='personalizado'?' selected':''}>Porcentaje personalizado</option>
-  </select>
-  <div class="hint">Ese dinero libre se abona al bolsillo personal de cada uno, sin rendir cuentas.</div>
-  
-  ${c.modoPremio==='personalizado'?`<label class="lbl" style="margin-top:10px">% para ${c.nombreP1}<input class="sf" id="pPctP1" inputmode="numeric" value="${c.pctPremioP1}" style="margin-top:4px"></label>`:''}
+<details id="detExtras" ${detExtrasOpen ? 'open' : ''}><summary>Ingresos adicionales</summary><div class="dpad">
+  <label class="lbl">% por defecto al bolsillo</label><input class="sf" id="pPct" inputmode="numeric" value="${c.pctPremio}">
+  <div class="hint">Al agregar un ingreso adicional (comisión, bono, prima…) este porcentaje se pre-rellena en el campo "% al bolsillo". Pueden cambiarlo por ítem.</div>
 </div></details>
 
 <details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary>Perfil de este teléfono</summary><div class="dpad">
@@ -1763,8 +1753,6 @@ function renderPlan(){
 function attachPlan(){
   const c=state.config;
   $('pPct').addEventListener('blur',()=>{c.pctPremio=Math.max(0,Math.min(100,parse($('pPct').value)));save();rerenderPlanKeepOpen();});
-  $('pModo').onchange=()=>{c.modoPremio=$('pModo').value;save();rerenderPlanKeepOpen();};
-  const pp1=$('pPctP1');if(pp1)pp1.addEventListener('blur',()=>{c.pctPremioP1=Math.max(0,Math.min(100,parse(pp1.value)));save();});
   $('estSeq').onclick=()=>{c.estrategia='secuencial';save();rerenderPlanKeepOpen();};
   $('estSim').onclick=()=>{c.estrategia='simultaneo';save();rerenderPlanKeepOpen();};
   $('estCas').onclick=()=>{c.estrategia='cascada';save();rerenderPlanKeepOpen();};
@@ -1862,24 +1850,12 @@ function renderOb(){
       </div>`;
   }else if(obStep===6){
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 6 de 7</div>
-      <div class="ob-h">¿Reciben<br>ingresos extras?</div>
-      <div class="ob-p">Comisiones, bonos, freelances… Configuren cuánto de eso va a sus bolsillos y cuánto al ahorro compartido. Si no tienen, den continuar.</div>
-      <div class="ob-field"><label class="lbl">% de los ingresos extras para sus bolsillos</label>
+      <div class="ob-h">¿Reciben<br>ingresos adicionales?</div>
+      <div class="ob-p">Comisiones, bonos, prima, freelances… Al registrar cada ingreso pueden elegir qué % va a su bolsillo y qué % va al ahorro. Aquí configuren el porcentaje por defecto.</div>
+      <div class="ob-field"><label class="lbl">% por defecto al bolsillo</label>
         <input class="amt" id="obPct" inputmode="numeric" value="${c.pctPremio}" placeholder="20" style="margin-top:6px">
         <div id="obPctPreview" style="margin-top:8px;font-size:13px;color:rgba(246,241,230,.7);line-height:1.4">
-          Del extra que entre: <b>${c.pctPremio}%</b> para sus bolsillos · <b>${100-c.pctPremio}%</b> al ahorro
-        </div>
-      </div>
-      <div class="ob-field"><label class="lbl">¿Cómo se divide entre los dos?</label>
-        <div class="seg dark-seg" style="margin-top:6px">
-          <button id="obModoIgual" class="${c.modoPremio==='igual'?'on':''}">50 / 50</button>
-          <button id="obModoProp" class="${c.modoPremio==='proporcional'?'on':''}">Proporcional</button>
-          <button id="obModoCustom" class="${c.modoPremio==='personalizado'?'on':''}">Personalizado</button>
-        </div>
-        <div id="obModoHint" style="margin-top:10px;font-size:12.5px;color:rgba(246,241,230,.65);line-height:1.4">
-          ${c.modoPremio==='igual'?'Cada uno recibe la misma parte sin importar quién trajo el extra.'
-            :c.modoPremio==='proporcional'?'Quien más aportó al extra, más recibe de ese %.'
-            :'Tú defines el % exacto para cada uno en Ajustes.'}
+          Por defecto: <b>${c.pctPremio}%</b> al bolsillo · <b>${100-c.pctPremio}%</b> al ahorro — editable por ítem
         </div>
       </div>
       </div>`;
@@ -1941,24 +1917,11 @@ function attachOb(){
     $('obEstCas').onclick=()=>setEst('cascada');
   }
   if(obStep===6){
-    const pctInput=$('obPct'),preview=$('obPctPreview'),modoHint=$('obModoHint');
+    const pctInput=$('obPct'),preview=$('obPctPreview');
     pctInput.addEventListener('input',()=>{
       const v=Math.max(0,Math.min(100,parseInt(pctInput.value)||0));
-      if(preview)preview.innerHTML=`Del extra que entre: <b>${v}%</b> para sus bolsillos · <b>${100-v}%</b> al ahorro`;
+      if(preview)preview.innerHTML=`Por defecto: <b>${v}%</b> al bolsillo · <b>${100-v}%</b> al ahorro — editable por ítem`;
     });
-    const setModo=(m)=>{
-      ['obModoIgual','obModoProp','obModoCustom'].forEach(id=>$(id)&&$(id).classList.remove('on'));
-      const activeId={igual:'obModoIgual',proporcional:'obModoProp',personalizado:'obModoCustom'}[m];
-      if($(activeId))$(activeId).classList.add('on');
-      state.config.modoPremio=m;
-      const hints={igual:'Cada uno recibe la misma parte sin importar quién trajo el extra.',
-        proporcional:'Quien más aportó al extra, más recibe de ese %.',
-        personalizado:'Tú defines el % exacto para cada uno en Ajustes.'};
-      if(modoHint)modoHint.textContent=hints[m];
-    };
-    $('obModoIgual').onclick=()=>setModo('igual');
-    $('obModoProp').onclick=()=>setModo('proporcional');
-    $('obModoCustom').onclick=()=>setModo('personalizado');
   }
   if(obStep===7){
     const btnS=$('obTipoSueno'),btnP=$('obTipoImprev'),btnI=$('obTipoInvertir');
