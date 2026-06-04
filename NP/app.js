@@ -1804,6 +1804,12 @@ function renderPlan(){
 
     syncHtml = `
       ${userCardHtml}
+      ${!isGoogle ? `
+      <button class="btn gold" id="btnSettingsLinkGoogle" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-bottom:16px;">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+        Vincular Cuenta de Google
+      </button>
+      ` : ''}
       ${partnerInfoHtml}
       ${isOwner ? `
       <div class="hint" style="margin-top:0">Comparte este código o enlace con tu pareja para sincronizar en tiempo real:</div>
@@ -1815,7 +1821,8 @@ function renderPlan(){
         <button class="mini" id="bCopyLink" style="flex:1;margin:0;">Copiar Enlace</button>
       </div>
       ` : ''}
-      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;">
+      <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn ghost" id="btnSettingsInviteCode" style="width:100%;margin:0;">Tengo un código de invitación</button>
         <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55;margin:0;">Cerrar sesión</button>
       </div>
     `;
@@ -1940,6 +1947,10 @@ function attachPlan(){
       if (isCapacitor) {
         try {
           const { GoogleAuth } = window.Capacitor.Plugins;
+          await GoogleAuth.initialize({
+            clientId: '486527605037-uh0u0ctmlq7tgb48d9128t8ugc3dkg8v.apps.googleusercontent.com',
+            scopes: ['profile', 'email'],
+          });
           const googleUser = await GoogleAuth.signIn();
           const idToken = googleUser.authentication.idToken;
           const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
@@ -1954,6 +1965,39 @@ function attachPlan(){
           await auth.signInWithRedirect(provider);
         } catch(err) {
           alert('Error de conexión: ' + err.message);
+        }
+      }
+    };
+  }
+
+  const btnSettingsLinkGoogle = $('btnSettingsLinkGoogle');
+  if (btnSettingsLinkGoogle) {
+    btnSettingsLinkGoogle.onclick = async () => {
+      if (!currentUser) return;
+      const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+      if (isCapacitor) {
+        try {
+          const { GoogleAuth } = window.Capacitor.Plugins;
+          await GoogleAuth.initialize({
+            clientId: '486527605037-uh0u0ctmlq7tgb48d9128t8ugc3dkg8v.apps.googleusercontent.com',
+            scopes: ['profile', 'email'],
+          });
+          const googleUser = await GoogleAuth.signIn();
+          const idToken = googleUser.authentication.idToken;
+          const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+          await currentUser.linkWithCredential(credential);
+          flash('Cuenta de Google vinculada con éxito ✓');
+          rerenderPlanKeepOpen();
+        } catch(err) {
+          console.error('Error al vincular Google nativo:', err);
+          alert('Error al vincular cuenta: ' + (err.message || JSON.stringify(err)));
+        }
+      } else {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+          await currentUser.linkWithRedirect(provider);
+        } catch(err) {
+          alert('Error al conectar: ' + err.message);
         }
       }
     };
@@ -2043,8 +2087,12 @@ function attachPlan(){
         }
         localStorage.setItem('planId', cleanCode);
         localStorage.setItem('isInvited', 'true');
-        flash('Código de plan cargado. Inicia sesión para conectar ✓');
-        rerenderPlanKeepOpen();
+        if (typeof currentUser !== 'undefined' && currentUser) {
+          window.location.reload();
+        } else {
+          flash('Código de plan cargado. Inicia sesión para conectar ✓');
+          rerenderPlanKeepOpen();
+        }
       }
     };
   }
@@ -2569,9 +2617,47 @@ auth.onAuthStateChanged(async user => {
   }
   normalize();
 
+  // Decidir qué pantalla mostrar de forma inmediata (render offline-first ultrarrápido)
+  if (!state.config.onboarded) {
+    if (user) {
+      if (localStorage.getItem('isInvited') === 'true') {
+        obStep = 2;
+      } else if (obStep === 0) {
+        obStep = 1;
+      }
+    }
+    $('onb').classList.add('on');
+    renderOb();
+  } else {
+    go(0);
+  }
+
   if (user) {
     try {
-      currentPlanId = getPlanId();
+      let planIdToUse = getPlanId();
+
+      // Si no hay datos locales reales (onboarding sin hacer, sin historial y sin metas con saldo),
+      // buscamos si este usuario ya tiene un plan existente en Firestore para cargarlo.
+      const hasLocalData = state.config.onboarded || 
+                           state.metas.some(m => m.tipo !== 'personal' && m.saldo > 0) || 
+                           (state.log && state.log.length > 0);
+
+      if (!hasLocalData) {
+        const ownerQuery = await db.collection('meta').where('ownerUid', '==', user.uid).limit(1).get();
+        if (!ownerQuery.empty) {
+          planIdToUse = ownerQuery.docs[0].id;
+          localStorage.setItem('planId', planIdToUse);
+        } else {
+          const partnerQuery = await db.collection('meta').where('partnerUid', '==', user.uid).limit(1).get();
+          if (!partnerQuery.empty) {
+            planIdToUse = partnerQuery.docs[0].id;
+            localStorage.setItem('planId', planIdToUse);
+            localStorage.setItem('isInvited', 'true');
+          }
+        }
+      }
+
+      currentPlanId = planIdToUse;
       const metaDoc = await db.collection('meta').doc(currentPlanId).get();
       
       if (metaDoc.exists) {
@@ -2604,6 +2690,7 @@ auth.onAuthStateChanged(async user => {
         });
         await syncSaveShared(currentPlanId, state);
       }
+      
       // Intentar cargar datos de Firestore
       const remote = await syncLoadShared(currentPlanId);
       if (remote) {
@@ -2613,6 +2700,22 @@ auth.onAuthStateChanged(async user => {
         state.log = remote.log || [];
         state.ingresos = remote.ingresos || [];
         state.gastos = remote.gastos || [];
+        
+        save();
+        if (state.config.onboarded) {
+          // Si el onboarding estaba visible y ahora ya cargamos el plan remoto completo,
+          // quitamos la pantalla de onboarding e iniciamos
+          const wasOnbVisible = $('onb').classList.contains('on');
+          if (wasOnbVisible) {
+            $('onb').classList.remove('on');
+            go(0);
+          } else {
+            rerender();
+          }
+        } else {
+          $('onb').classList.add('on');
+          renderOb();
+        }
       }
       syncSubscribe(currentPlanId);
     } catch (err) {
@@ -2626,22 +2729,6 @@ auth.onAuthStateChanged(async user => {
     currentPlanId = null;
     isOwner = false;
     planMeta = null;
-  }
-
-  // Decidir qué pantalla mostrar
-  if (!state.config.onboarded) {
-    if (currentUser) {
-      if (localStorage.getItem('isInvited') === 'true') {
-        obStep = 2;
-      } else if (obStep === 0) {
-        // Dueño ya autenticado: avanzar del welcome al primer paso del onboarding
-        obStep = 1;
-      }
-    }
-    $('onb').classList.add('on');
-    renderOb();
-  } else {
-    go(0);
   }
 });
 
