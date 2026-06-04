@@ -2326,65 +2326,77 @@ function renderOb(){
   if (backBtn) backBtn.style.display = (obStep > minStep) ? 'block' : 'none';
   let h='';
   if(obStep===0){
-    const isInvited = localStorage.getItem('isInvited') === 'true' || new URLSearchParams(window.location.search).has('plan');
-    const emailFormHtml = `
-      <div id="emailAuthForm" style="display:none;flex-direction:column;gap:12px;text-align:left;margin-top:15px;background:rgba(246,241,230,.03);padding:14px;border:1px solid var(--line);border-radius:12px;">
-        <div class="ob-field" style="margin:0;">
-          <label class="lbl">Correo electrónico</label>
-          <input class="sf" type="email" id="authEmail" placeholder="ejemplo@correo.com">
-        </div>
-        <div class="ob-field" style="margin:0;">
-          <label class="lbl">Contraseña (mínimo 6 caracteres)</label>
-          <input class="sf" type="password" id="authPassword" placeholder="Contraseña">
-        </div>
-        <button class="btn gold" id="btnObEmailSubmit" style="width:100%;margin-top:4px;">
-          Iniciar Sesión
-        </button>
-        <div style="text-align:center;margin-top:8px;">
-          <a href="#" id="linkToggleAuthMode" style="font-size:12.5px;color:var(--gold);text-decoration:underline;">¿No tienes cuenta? Regístrate</a>
-        </div>
-      </div>
-    `;
-
-    if(isInvited){
-      h=`<div class="ob-step on">
-        <div class="ob-mark">✦</div>
-        <div class="ob-eyebrow">Te invitaron a Nuestro plan</div>
-        <div class="ob-h">¡Únete al plan de tu pareja!</div>
-        <div class="ob-p">Al conectarte, se sincronizarán en tiempo real el presupuesto compartido, los gastos y las metas de ahorro.</div>
-        <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
-          <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
-          Conectar con Google
-        </button>
-        <button class="btn ghost" id="btnShowEmailAuth" style="margin-top:12px;width:100%;">
-          Conectar con Correo y Contraseña
-        </button>
-        ${emailFormHtml}
-        <button class="ob-skip" id="btnObCancelInvite" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
-          Volver al inicio
-        </button>
-      </div>`;
-    } else {
-      h=`<div class="ob-step on">
+    if (currentUser) {
+      h = `<div class="ob-step on" style="text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:280px; gap:12px;">
         <div class="ob-mark">✦</div>
         <div class="ob-eyebrow">Nuestro plan</div>
-        <div class="ob-h">Organicen su plata,<br>juntos.</div>
-        <div class="ob-p">Definan a dónde va cada peso y avancen hacia sus sueños e inversiones. Conéctense para sincronizar sus teléfonos y ver los cambios al instante.</div>
-        <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
-          <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
-          Conectar con Google
-        </button>
-        <button class="btn ghost" id="btnShowEmailAuth" style="margin-top:12px;width:100%;">
-          Conectar con Correo y Contraseña
-        </button>
-        ${emailFormHtml}
-        <button class="btn ghost" id="btnObLocal" style="margin-top:12px;width:100%;">
-          Comenzar en Modo Local (sin cuenta)
-        </button>
-        <button class="ob-skip" id="btnObInviteCode" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
-          Tengo un código de invitación
-        </button>
+        <div class="ob-h" style="margin-top:6px;">Conectando...</div>
+        <div class="ob-p" style="margin-top:4px; font-size:13.5px; opacity:0.85;">Cargando tu plan y sincronizando datos desde la nube.</div>
+        <div style="margin-top:24px;">
+          <div class="spinner"></div>
+        </div>
       </div>`;
+    } else {
+      const isInvited = localStorage.getItem('isInvited') === 'true' || new URLSearchParams(window.location.search).has('plan');
+      const emailFormHtml = `
+        <div id="emailAuthForm" style="display:none;flex-direction:column;gap:12px;text-align:left;margin-top:15px;background:rgba(246,241,230,.03);padding:14px;border:1px solid var(--line);border-radius:12px;">
+          <div class="ob-field" style="margin:0;">
+            <label class="lbl">Correo electrónico</label>
+            <input class="sf" type="email" id="authEmail" placeholder="ejemplo@correo.com">
+          </div>
+          <div class="ob-field" style="margin:0;">
+            <label class="lbl">Contraseña (mínimo 6 caracteres)</label>
+            <input class="sf" type="password" id="authPassword" placeholder="Contraseña">
+          </div>
+          <button class="btn gold" id="btnObEmailSubmit" style="width:100%;margin-top:4px;">
+            Iniciar Sesión
+          </button>
+          <div style="text-align:center;margin-top:8px;">
+            <a href="#" id="linkToggleAuthMode" style="font-size:12.5px;color:var(--gold);text-decoration:underline;">¿No tienes cuenta? Regístrate</a>
+          </div>
+        </div>
+      `;
+
+      if(isInvited){
+        h=`<div class="ob-step on">
+          <div class="ob-mark">✦</div>
+          <div class="ob-eyebrow">Te invitaron a Nuestro plan</div>
+          <div class="ob-h">¡Únete al plan de tu pareja!</div>
+          <div class="ob-p">Al conectarte, se sincronizarán en tiempo real el presupuesto compartido, los gastos y las metas de ahorro.</div>
+          <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+            Conectar con Google
+          </button>
+          <button class="btn ghost" id="btnShowEmailAuth" style="margin-top:12px;width:100%;">
+            Conectar con Correo y Contraseña
+          </button>
+          ${emailFormHtml}
+          <button class="ob-skip" id="btnObCancelInvite" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
+            Volver al inicio
+          </button>
+        </div>`;
+      } else {
+        h=`<div class="ob-step on">
+          <div class="ob-mark">✦</div>
+          <div class="ob-eyebrow">Nuestro plan</div>
+          <div class="ob-h">Organicen su plata,<br>juntos.</div>
+          <div class="ob-p">Definan a dónde va cada peso y avancen hacia sus sueños e inversiones. Conéctense para sincronizar sus teléfonos y ver los cambios al instante.</div>
+          <button class="btn gold" id="btnObLogin" style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;width:100%;">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+            Conectar con Google
+          </button>
+          <button class="btn ghost" id="btnShowEmailAuth" style="margin-top:12px;width:100%;">
+            Conectar con Correo y Contraseña
+          </button>
+          ${emailFormHtml}
+          <button class="btn ghost" id="btnObLocal" style="margin-top:12px;width:100%;">
+            Comenzar en Modo Local (sin cuenta)
+          </button>
+          <button class="ob-skip" id="btnObInviteCode" style="margin-top:20px;display:block;width:100%;text-align:center;background:none;border:none;">
+            Tengo un código de invitación
+          </button>
+        </div>`;
+      }
     }
   }else if(obStep===1){
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 7</div>
@@ -2810,11 +2822,9 @@ auth.onAuthStateChanged(async user => {
   // Decidir qué pantalla mostrar de forma inmediata (render offline-first ultrarrápido)
   if (!state.config.onboarded) {
     if (user) {
-      if (localStorage.getItem('isInvited') === 'true') {
-        obStep = 2;
-      } else if (obStep === 0) {
-        obStep = 1;
-      }
+      // Mantenemos obStep = 0 (mostrará el spinner de carga "Conectando...")
+      // mientras se realiza la consulta/descarga remota de Firestore.
+      obStep = 0;
     }
     $('onb').classList.add('on');
     renderOb();
@@ -2915,6 +2925,23 @@ auth.onAuthStateChanged(async user => {
             rerender();
           }
         } else {
+          // Plan remoto cargado pero no está marcado como onboarded
+          if (localStorage.getItem('isInvited') === 'true') {
+            obStep = 2;
+          } else {
+            obStep = 1;
+          }
+          $('onb').classList.add('on');
+          renderOb();
+        }
+      } else {
+        // No se pudo cargar remote o es un plan nuevo/vacío sin datos
+        if (!state.config.onboarded) {
+          if (localStorage.getItem('isInvited') === 'true') {
+            obStep = 2;
+          } else {
+            obStep = 1;
+          }
           $('onb').classList.add('on');
           renderOb();
         }
@@ -2923,6 +2950,16 @@ auth.onAuthStateChanged(async user => {
     } catch (err) {
       console.error("Error al sincronizar con Firestore en inicio de sesión:", err);
       showSyncStatus("Error de sincronización (sin acceso)", true);
+      // Fallback en caso de error para que no quede la pantalla bloqueada
+      if (!state.config.onboarded) {
+        if (localStorage.getItem('isInvited') === 'true') {
+          obStep = 2;
+        } else {
+          obStep = 1;
+        }
+        $('onb').classList.add('on');
+        renderOb();
+      }
     }
   } else {
     if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
