@@ -177,6 +177,14 @@ function addMonths(n){const d=new Date();d.setMonth(d.getMonth()+Math.max(0,Math
 function perfilNombre(p){return p==='p1'?state.config.nombreP1:state.config.nombreP2;}
 function libreOf(p){return p==='p1'?state.config.libreP1:state.config.libreP2;}
 
+/* ---------- teclado virtual: ocultar fade ---------- */
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75;
+    document.body.classList.toggle('keyboard-open', keyboardOpen);
+  });
+}
+
 /* ---------- persistencia ---------- */
 function normalize(){
   state.config=Object.assign({},CFG_DEF,state.config||{});
