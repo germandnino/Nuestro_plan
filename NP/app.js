@@ -59,6 +59,102 @@ const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleS
 const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function flash(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1900);}
+function showCustomModal({ title, message, type = 'alert', placeholder = '', isDestructive = false }) {
+  return new Promise((resolve) => {
+    let overlay = $('custom-modal-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'custom-modal-overlay';
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
+    }
+    let buttonsHtml = '';
+    let inputHtml = '';
+    if (type === 'prompt') {
+      inputHtml = `
+        <div class="modal-input-wrapper">
+          <input type="text" id="modal-input" class="sf" value="${placeholder}" autocomplete="off" />
+        </div>
+      `;
+      buttonsHtml = `
+        <button class="btn ghost" id="modal-btn-cancel">Cancelar</button>
+        <button class="btn gold" id="modal-btn-ok">Aceptar</button>
+      `;
+    } else if (type === 'confirm') {
+      const confirmClass = isDestructive ? 'btn danger' : 'btn';
+      buttonsHtml = `
+        <button class="btn ghost" id="modal-btn-cancel">Cancelar</button>
+        <button class="${confirmClass}" id="modal-btn-ok">Confirmar</button>
+      `;
+    } else {
+      buttonsHtml = `
+        <button class="btn" id="modal-btn-ok">Entendido</button>
+      `;
+    }
+    overlay.innerHTML = `
+      <div class="modal-card animate-in">
+        <h3 class="modal-title">${title || 'Atención'}</h3>
+        <p class="modal-msg">${message}</p>
+        ${inputHtml}
+        <div class="modal-actions">
+          ${buttonsHtml}
+        </div>
+      </div>
+    `;
+    overlay.style.display = 'flex';
+    if (type === 'prompt') {
+      setTimeout(() => {
+        const inp = $('modal-input');
+        if (inp) {
+          inp.focus();
+          inp.select();
+        }
+      }, 50);
+    }
+    const btnOk = $('modal-btn-ok');
+    const btnCancel = $('modal-btn-cancel');
+    const inputField = $('modal-input');
+    const cleanup = () => {
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+      document.removeEventListener('keydown', handleKeydown);
+    };
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape') {
+        cleanup();
+        resolve(type === 'prompt' ? null : false);
+      } else if (e.key === 'Enter') {
+        if (document.activeElement !== btnCancel) {
+          btnOk.click();
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeydown);
+    btnOk.onclick = () => {
+      let value = true;
+      if (type === 'prompt') {
+        value = inputField ? inputField.value : '';
+      }
+      cleanup();
+      resolve(value);
+    };
+    if (btnCancel) {
+      btnCancel.onclick = () => {
+        cleanup();
+        resolve(type === 'prompt' ? null : false);
+      };
+    }
+  });
+}
+function customAlert(message) {
+  return showCustomModal({ title: 'Atención', message, type: 'alert' });
+}
+function customConfirm(message, isDestructive = false) {
+  return showCustomModal({ title: 'Confirmar', message, type: 'confirm', isDestructive });
+}
+function customPrompt(message, defaultText = '') {
+  return showCustomModal({ title: 'Ingresar dato', message, type: 'prompt', placeholder: defaultText });
+}
 function showSyncStatus(msg, isError = false) {
   const el = document.getElementById('syncStatus');
   if (!el) return;
@@ -1055,7 +1151,7 @@ function attachMetaForm(editing){
     mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
   };
   const del=$('fDel');
-  if(del)del.onclick=()=>{if(!confirm('¿Eliminar esta meta?'))return;state.metas=state.metas.filter(x=>x.id!==mForm.id);mForm=null;save();go(1);flash('Meta eliminada');};
+  if(del)del.onclick=async()=>{if(!await customConfirm('¿Eliminar esta meta?',true))return;state.metas=state.metas.filter(x=>x.id!==mForm.id);mForm=null;save();go(1);flash('Meta eliminada');};
 }
 
 /* ---------- detalle de meta ---------- */
@@ -1181,9 +1277,9 @@ function renderHistoryList() {
     openHistoryDetail(el.dataset.hmes, 'list');
   });
   
-  $('rh').querySelectorAll('.delete-hist-item-btn').forEach(b => b.onclick = (e) => {
+  $('rh').querySelectorAll('.delete-hist-item-btn').forEach(b => b.onclick = async (e) => {
     e.stopPropagation();
-    if (!confirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    if (!await customConfirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`, true)) return;
     state.log = state.log.filter(x => x.mes !== b.dataset.logm);
     save();
     renderHistoryList();
@@ -1324,8 +1420,8 @@ function renderHistoryDetail(mes, fromTab) {
   
   $('hDetailBack').onclick = backFn;
   
-  $('btnDelHistEntry').onclick = () => {
-    if (!confirm(`¿Eliminar el registro de ${fmtMes(entry.mes)} del historial? (Esto no modificará los saldos actuales).`)) return;
+  $('btnDelHistEntry').onclick = async () => {
+    if (!await customConfirm(`¿Eliminar el registro de ${fmtMes(entry.mes)} del historial? (Esto no modificará los saldos actuales).`, true)) return;
     state.log = state.log.filter(e => e.mes !== entry.mes);
     save();
     backFn();
@@ -1441,9 +1537,9 @@ ${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,3
     if (e.target.closest('.delete-hist-btn')) return;
     openHistoryDetail(el.dataset.hmes, 'cerrar');
   });
-  $('r2').querySelectorAll('.delete-hist-btn').forEach(b => b.onclick = (e) => {
+  $('r2').querySelectorAll('.delete-hist-btn').forEach(b => b.onclick = async (e) => {
     e.stopPropagation();
-    if (!confirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`)) return;
+    if (!await customConfirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`, true)) return;
     state.log = state.log.filter(x => x.mes !== b.dataset.logm);
     save();
     renderCerrar();
@@ -1582,11 +1678,11 @@ function drawFlow(animate){
   el.className='flow';
   el.innerHTML=h;
 }
-function aplicar(){
+async function aplicar(){
   if (!canEditShared()) { flash('No tienes permisos para aportar'); return; }
   const mes=$('mMes').value;if(!mes){flash('Elige el mes');return;}
   const ex=state.log.find(e=>e.mes===mes);
-  if(ex&&ex.aplicado){if(!confirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.'))return;}
+  if(ex&&ex.aplicado){if(!await customConfirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.', false))return;}
   const r=computeReparto(0,0),c=state.config;
   if(r.ahorro < 0){flash('No se puede aportar: el ahorro es negativo');return;}
   state.metas.forEach(m=>{if(m.tipo!=='personal')m.saldo=Math.max(0,m.saldo+(r.dist[m.id]||0));});
@@ -2107,22 +2203,28 @@ function attachPlan(){
   
   const bCopyCode = $('bCopyCode');
   if (bCopyCode) {
-    bCopyCode.onclick = () => {
+    bCopyCode.onclick = async () => {
       if (!currentPlanId) return;
-      navigator.clipboard.writeText(currentPlanId)
-        .then(() => flash('Código copiado ✓'))
-        .catch(() => alert('No se pudo copiar el código. Escríbelo a mano: ' + currentPlanId));
+      try {
+        await navigator.clipboard.writeText(currentPlanId);
+        flash('Código copiado ✓');
+      } catch (err) {
+        await customAlert('No se pudo copiar el código. Escríbelo a mano: ' + currentPlanId);
+      }
     };
   }
 
   const bCopyLink = $('bCopyLink');
   if (bCopyLink) {
-    bCopyLink.onclick = () => {
+    bCopyLink.onclick = async () => {
       if (!currentPlanId) return;
       const link = window.location.origin + window.location.pathname + '?plan=' + currentPlanId;
-      navigator.clipboard.writeText(link)
-        .then(() => flash('Enlace de invitación copiado ✓'))
-        .catch(() => alert('No se pudo copiar el enlace. Comparte este código: ' + currentPlanId));
+      try {
+        await navigator.clipboard.writeText(link);
+        flash('Enlace de invitación copiado ✓');
+      } catch (err) {
+        await customAlert('No se pudo copiar el enlace. Comparte este código: ' + currentPlanId);
+      }
     };
   }
 
@@ -2143,14 +2245,14 @@ function attachPlan(){
           await auth.signInWithCredential(credential);
         } catch(err) {
           console.error('Error de autenticación nativa de Google:', err);
-          alert('Error de inicio de sesión con Google nativo: ' + (err.message || JSON.stringify(err)));
+          await customAlert('Error de inicio de sesión con Google nativo: ' + (err.message || JSON.stringify(err)));
         }
       } else {
         const provider = new firebase.auth.GoogleAuthProvider();
         try {
           await auth.signInWithRedirect(provider);
         } catch(err) {
-          alert('Error de conexión: ' + err.message);
+          await customAlert('Error de conexión: ' + err.message);
         }
       }
     };
@@ -2176,14 +2278,14 @@ function attachPlan(){
           rerenderPlanKeepOpen();
         } catch(err) {
           console.error('Error al vincular Google nativo:', err);
-          alert('Error al vincular cuenta: ' + (err.message || JSON.stringify(err)));
+          await customAlert('Error al vincular cuenta: ' + (err.message || JSON.stringify(err)));
         }
       } else {
         const provider = new firebase.auth.GoogleAuthProvider();
         try {
           await currentUser.linkWithRedirect(provider);
         } catch(err) {
-          alert('Error al conectar: ' + err.message);
+          await customAlert('Error al conectar: ' + err.message);
         }
       }
     };
@@ -2220,11 +2322,11 @@ function attachPlan(){
       const email = $('settingsAuthEmail').value.trim();
       const password = $('settingsAuthPassword').value;
       if (!email || !password) {
-        alert('Por favor completa todos los campos.');
+        await customAlert('Por favor completa todos los campos.');
         return;
       }
       if (password.length < 6) {
-        alert('La contraseña debe tener al menos 6 caracteres.');
+        await customAlert('La contraseña debe tener al menos 6 caracteres.');
         return;
       }
       btnSettingsEmailSubmit.disabled = true;
@@ -2239,13 +2341,13 @@ function attachPlan(){
         btnSettingsEmailSubmit.disabled = false;
         btnSettingsEmailSubmit.textContent = settingsIsRegisterMode ? 'Registrarse y Crear Cuenta' : 'Iniciar Sesión';
         if (err.code === 'auth/operation-not-allowed') {
-          alert('El inicio de sesión por correo no está activado en tu consola de Firebase. Actívalo en Authentication > Sign-in method.');
+          await customAlert('El inicio de sesión por correo no está activado en tu consola de Firebase. Actívalo en Authentication > Sign-in method.');
         } else if (err.code === 'auth/email-already-in-use') {
-          alert('Este correo ya está registrado. Por favor inicia sesión.');
+          await customAlert('Este correo ya está registrado. Por favor inicia sesión.');
         } else if (err.code === 'auth/invalid-credential') {
-          alert('Correo o contraseña incorrectos.');
+          await customAlert('Correo o contraseña incorrectos.');
         } else {
-          alert('Error: ' + err.message);
+          await customAlert('Error: ' + err.message);
         }
       }
     };
@@ -2253,8 +2355,8 @@ function attachPlan(){
 
   const btnSettingsInviteCode = $('btnSettingsInviteCode');
   if (btnSettingsInviteCode) {
-    btnSettingsInviteCode.onclick = () => {
-      const code = prompt("Pega el código de invitación o el enlace completo:");
+    btnSettingsInviteCode.onclick = async () => {
+      const code = await customPrompt("Pega el código de invitación o el enlace completo:");
       if (code && code.trim()) {
         let cleanCode = code.trim();
         if (cleanCode.includes('plan=')) {
@@ -2286,7 +2388,7 @@ function attachPlan(){
   const bLogout = $('bLogout');
   if (bLogout) {
     bLogout.onclick = async () => {
-      if (!confirm('¿Cerrar sesión? Se detendrá la sincronización en este dispositivo.')) return;
+      if (!await customConfirm('¿Cerrar sesión? Se detendrá la sincronización en este dispositivo.', true)) return;
       try {
         await auth.signOut();
         localStorage.removeItem('planId');
@@ -2296,7 +2398,7 @@ function attachPlan(){
         startOnboarding();
         flash('Sesión cerrada ✓');
       } catch(err) {
-        alert('Error al cerrar sesión: ' + err.message);
+        await customAlert('Error al cerrar sesión: ' + err.message);
       }
     };
   }
@@ -2315,8 +2417,8 @@ function attachPlan(){
   }
   const bResetSaldos = $('bResetSaldos');
   if (bResetSaldos) {
-    bResetSaldos.onclick = () => {
-      if (!confirm('¿Reiniciar todos los saldos y el historial a $0? Se mantendrán tus metas creadas, nombres, nóminas y gastos fijos configurados.')) return;
+    bResetSaldos.onclick = async () => {
+      if (!await customConfirm('¿Reiniciar todos los saldos y el historial a $0? Se mantendrán tus metas creadas, nombres, nóminas y gastos fijos configurados.', true)) return;
       
       // Reiniciar saldos de todas las metas (incluyendo las personales)
       state.metas.forEach(m => {
@@ -2334,7 +2436,7 @@ function attachPlan(){
       flash('Saldos e historial reiniciados ✓');
     };
   }
-  $('bReset').onclick=()=>{if(!confirm('¿Borrar todos los datos?'))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
+  $('bReset').onclick=async()=>{if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
   if (bInst) {
@@ -2360,7 +2462,7 @@ function attachPlan(){
         });
         flash('Permiso cambiado a Editor ✓');
       } catch (e) {
-        alert('Error al actualizar permisos: ' + e.message);
+        await customAlert('Error al actualizar permisos: ' + e.message);
       }
     };
   }
@@ -2375,7 +2477,7 @@ function attachPlan(){
         });
         flash('Permiso cambiado a Lector ✓');
       } catch (e) {
-        alert('Error al actualizar permisos: ' + e.message);
+        await customAlert('Error al actualizar permisos: ' + e.message);
       }
     };
   }
@@ -2610,14 +2712,14 @@ function attachOb(){
             await auth.signInWithCredential(credential);
           } catch(err) {
             console.error('Error de autenticación nativa de Google:', err);
-            alert('Error de inicio de sesión con Google nativo: ' + (err.message || JSON.stringify(err)));
+            await customAlert('Error de inicio de sesión con Google nativo: ' + (err.message || JSON.stringify(err)));
           }
         } else {
           const provider = new firebase.auth.GoogleAuthProvider();
           try {
             await auth.signInWithRedirect(provider);
           } catch(err) {
-            alert('Error de conexión: ' + err.message);
+            await customAlert('Error de conexión: ' + err.message);
           }
         }
       };
@@ -2651,11 +2753,11 @@ function attachOb(){
         const email = $('authEmail').value.trim();
         const password = $('authPassword').value;
         if (!email || !password) {
-          alert('Por favor completa todos los campos.');
+          await customAlert('Por favor completa todos los campos.');
           return;
         }
         if (password.length < 6) {
-          alert('La contraseña debe tener al menos 6 caracteres.');
+          await customAlert('La contraseña debe tener al menos 6 caracteres.');
           return;
         }
         btnEmailSubmit.disabled = true;
@@ -2670,13 +2772,13 @@ function attachOb(){
           btnEmailSubmit.disabled = false;
           btnEmailSubmit.textContent = isRegisterMode ? 'Registrarse y Crear Cuenta' : 'Iniciar Sesión';
           if (err.code === 'auth/operation-not-allowed') {
-            alert('El inicio de sesión por correo no está activado en tu consola de Firebase. Actívalo en Authentication > Sign-in method.');
+            await customAlert('El inicio de sesión por correo no está activado en tu consola de Firebase. Actívalo en Authentication > Sign-in method.');
           } else if (err.code === 'auth/email-already-in-use') {
-            alert('Este correo ya está registrado. Por favor inicia sesión.');
+            await customAlert('Este correo ya está registrado. Por favor inicia sesión.');
           } else if (err.code === 'auth/invalid-credential') {
-            alert('Correo o contraseña incorrectos.');
+            await customAlert('Correo o contraseña incorrectos.');
           } else {
-            alert('Error: ' + err.message);
+            await customAlert('Error: ' + err.message);
           }
         }
       };
@@ -2691,8 +2793,8 @@ function attachOb(){
     }
     const btnCode = $('btnObInviteCode');
     if(btnCode) {
-      btnCode.onclick = () => {
-        const code = prompt("Pega el código de invitación o el enlace completo:");
+      btnCode.onclick = async () => {
+        const code = await customPrompt("Pega el código de invitación o el enlace completo:");
         if (code && code.trim()) {
           let cleanCode = code.trim();
           if (cleanCode.includes('plan=')) {
