@@ -1523,8 +1523,10 @@ function renderDetail(){
     <div class="hint">El saldo se actualiza solo al cerrar el mes. Edítalo a mano únicamente para corregir el punto de partida.</div>`;
 
   // Transferencia Manual
-  const isIndividualGoal = (state.config.modo === 'individual' && m.tipo !== 'personal') ||
-                           (state.config.modo === 'pareja' && m.dueno === state.config.perfil);
+  const isIndividualGoal = m.tipo !== 'personal' && (
+                           (state.config.modo === 'individual') ||
+                           (state.config.modo === 'pareja' && m.dueno === state.config.perfil)
+  );
   if (isIndividualGoal && canEdit) {
     const per = metaPersonal(state.config.perfil);
     const maxBolsillo = per ? per.saldo : 0;
