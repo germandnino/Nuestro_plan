@@ -4,9 +4,10 @@
 
 ## 1. Arquitectura y Stack Tecnológico
 
-*   **Stack:** Vanilla HTML, CSS (CSS Vanilla moderno con variables CSS y tema oscuro) y JavaScript contenidos en un único archivo (`index.html`). No requiere dependencias externas ni frameworks de frontend, garantizando una carga instantánea y funcionamiento offline como una PWA ligera.
+*   **Stack:** Vanilla HTML, CSS (CSS Vanilla moderno con variables CSS y tema oscuro) y JavaScript contenidos en un único archivo (`index.html`). Se ejecuta como una PWA en navegadores web y está empaquetado como aplicación nativa para Android utilizando **Capacitor**.
+*   **Base de Datos y Sincronización:** Integra **Firebase (Auth y Firestore)** para permitir la autenticación de usuarios y la sincronización en tiempo real de los datos del plan compartido.
 *   **Diseño (UI/UX):** Enfoque móvil (Mobile-first) con un diseño oscuro premium. Utiliza tipografías de Google Fonts: `Fraunces` para títulos y números destacados, y `Hanken Grotesk` para textos generales. Cuenta con microanimaciones SVG, gráficos interactivos integrados y transiciones suaves.
-*   **Almacenamiento y Persistencia:** Utiliza `localStorage` para almacenar la información de forma persistente localmente. Posee una capa de abstracción para entornos específicos que soporta `window.storage` si está disponible. Cuenta con un banner de alerta para avisar al usuario si el acceso al almacenamiento local está restringido.
+*   **Almacenamiento y Persistencia:** Utiliza `localStorage` para almacenar la información de forma persistente localmente (offline-first). Al estar conectado, se sincroniza bidireccionalmente en tiempo real con Firestore. Posee una capa de abstracción para entornos específicos que soporta `window.storage` si está disponible. Cuenta con un banner de alerta para avisar al usuario si el acceso al almacenamiento local está restringido.
 *   **Gestión de Estado:** El estado completo de la aplicación se centraliza en un único objeto global `state` que contiene:
     *   `config`: Opciones de presupuesto, nombres, perfil activo, estrategia y configuraciones de distribución.
     *   `metas`: Un listado unificado de metas financieras (compartidas y personales).
@@ -54,9 +55,15 @@ Configuración base del flujo de caja mensual regular (presupuesto estático):
 ### ⚙️ Ajustes (Configuración)
 Panel de control estratégico de la aplicación:
 *   **Estrategia de Ahorro:** Selección de la lógica de distribución (`secuencial`, `simultaneo` o `cascada`).
-*   **Reparto de Ingresos Extras:** Configuración del porcentaje de los ingresos variables del mes que se asigna como premio libre ("bolsillo") y el método para dividirlo (mitad y mitad, proporcional a lo aportado o personalizado).
+*   **Reparto de Ingresos Extras:** Configuración del porcentaje de los ingresos variables del mes que se asigna como premio libre ("bolsillo") y el método para dividirlo.
 *   **Perfil Local:** Define a quién pertenece el dispositivo actual (Persona 1 o Persona 2) para blindar la visibilidad y edición del bolsillo libre individual correspondiente.
-*   **Nombres y Respaldo:** Personalización de los nombres y exportación/importación del estado de la aplicación mediante un bloque de texto JSON.
+*   **Sincronizar y Conectar Pareja:** 
+    *   **Identificación del Usuario:** Muestra una tarjeta de perfil con el nombre, correo y el proveedor de autenticación (Google o Correo).
+    *   **Estado de Conexión de Pareja:** Muestra en tiempo real el correo de la pareja conectada o el estado de espera.
+    *   **Gestión de Roles (Editor vs. Lector):** Permite al creador/dueño del plan configurar el permiso de su pareja:
+        *   *Editor:* Permiso de lectura y escritura completo sobre el presupuesto, metas compartidas y aportes.
+        *   *Lector:* Permiso de solo lectura. El usuario puede ver todo el progreso, pero no puede editar metas, registrar salidas de dinero, modificar presupuestos ni aplicar cierres de mes. El bolsillo personal del lector permanece editable localmente.
+*   **Nombres y Respaldo:** Personalización de los nombres y exportación/importación del estado de la aplicación mediante un bloque de texto JSON (deshabilitado en modo Lector).
 
 ---
 
@@ -100,3 +107,19 @@ Para facilitar la adopción inicial del sistema, la aplicación inicia un asiste
 *   **Paso 6:** Configuración del porcentaje de premios por ingresos extra y su método de división.
 *   **Paso 7:** Creación y configuración inicial de su primera meta (Sueño o Inversión).
 *   **Paso 8 (Visualización):** Generación automática de una simulación interactiva con la cascada de distribución para que la pareja comprenda visualmente cómo operará el motor en un mes regular con ingresos extra.
+
+---
+
+## 5. Integración Móvil y Despliegue Nativo (Capacitor & Android)
+
+La aplicación incluye adaptaciones específicas para ejecutarse de manera óptima como un APK nativo en dispositivos Android:
+
+*   **Autenticación de Google Nativa:** 
+    *   Utiliza el plugin `@codetrix-studio/capacitor-google-auth`.
+    *   Para evitar fallos de inicialización (crashes por `NullPointerException` al obtener el `SignInIntent`), el código inicializa de manera explícita el cliente mediante `GoogleAuth.initialize({ clientId, scopes })` antes de invocar la pantalla de login.
+    *   Usa el client ID de tipo Web (Web client ID) para el intercambio seguro del ID Token de Firebase.
+*   **Gestión del Service Worker y Caché:**
+    *   En dispositivos nativos (Capacitor), los archivos de la app ya se empaquetan localmente dentro del APK, por lo que el Service Worker no es necesario.
+    *   Para evitar que el Service Worker y la caché del navegador WebView congelen versiones de código desactualizadas, al detectar una plataforma nativa (`window.Capacitor.isNativePlatform()`), la aplicación desregistra programáticamente los Service Workers activos y purga todas las cachés locales.
+*   **Ocultación de la Tarjeta de Instalación (PWA):**
+    *   La tarjeta de "Instalar en el teléfono" se oculta automáticamente cuando la app corre de manera nativa en Capacitor, ya que carece de sentido en un entorno empaquetado.

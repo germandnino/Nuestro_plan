@@ -42,6 +42,8 @@ let currentUser = null;       // firebase.User | null
 let currentPlanId = null;     // string | null — ID del plan activo
 let isOwner = false;          // true si este usuario es el owner del plan
 let unsubscribeSync = null;   // función para cancelar listener de Firestore
+let planMeta = null;          // Objeto con metadatos del plan (owner, partner, roles)
+let unsubscribeMeta = null;   // función para cancelar listener de metadatos
 
 const store={
   async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
@@ -60,6 +62,11 @@ function showSyncStatus(msg, isError = false) {
   el.textContent = msg;
   el.style.background = isError ? '#7a2222' : 'var(--green)';
   el.style.display = msg ? 'block' : 'none';
+}
+function canEditShared() {
+  if (!currentUser) return true;
+  if (isOwner) return true;
+  return planMeta && planMeta.partnerRole !== 'viewer';
 }
 const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function fmtMes(ym){if(!ym)return'';const[y,m]=ym.split('-');return MONTHS[(+m)-1]+' '+y;}
@@ -173,7 +180,16 @@ function syncSubscribe(planId) {
       state.log = remote.log || [];
       state.ingresos = remote.ingresos || [];
       state.gastos = remote.gastos || [];
-      render();
+      rerender();
+    });
+
+  if (unsubscribeMeta) unsubscribeMeta();
+  unsubscribeMeta = db.collection('meta').doc(planId)
+    .onSnapshot(doc => {
+      if (!doc.exists) return;
+      planMeta = doc.data();
+      rerenderPlanKeepOpen();
+      rerender();
     });
 
   if (unsubscribeBolsillos) unsubscribeBolsillos();
@@ -190,7 +206,7 @@ function syncSubscribe(planId) {
           }
         }
       });
-      render();
+      rerender();
     });
 }
 
@@ -212,7 +228,7 @@ async function save(){
   const ok=await store.set(JSON.stringify(state));
   if(!ok)$('banner').style.display='block';
   
-  if (currentUser && currentPlanId && isOwner) {
+  if (currentUser && currentPlanId && canEditShared()) {
     syncSaveShared(currentPlanId, state)
       .then(() => {
         showSyncStatus('Sincronizado ✓');
@@ -698,7 +714,7 @@ function renderMetas(){
   h+='<div class="stitle">Personal</div>'+card(metaPersonal(state.config.perfil));
   h+=`<div style="height:72px;flex-shrink:0;"></div>
   <div style="position:sticky;bottom:0;background:linear-gradient(to top, var(--gd) 85%, transparent);padding:20px 0 16px;z-index:20;margin-top:auto">
-    <button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>
+    ${canEditShared() ? '<button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>' : '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.5);font-weight:600;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px;">Rol: Lector (Solo Lectura)</div>'}
   </div>`;
   $('r1').innerHTML=h;
   const helpBtn = $('helpPrioBtn');
@@ -717,11 +733,12 @@ function renderMetas(){
     }
     openDetail(el.dataset.mid);
   });
-  $('addMeta').onclick=()=>openMetaForm(null);
+  if ($('addMeta')) $('addMeta').onclick=()=>openMetaForm(null);
   initReorder();
 }
 
 function initReorder(){
+  if (!canEditShared()) return;
   const container=$('sharedMetasContainer');
   if(!container)return;
   let draggedEl=null,startY=0,hasDragged=false;
@@ -787,6 +804,10 @@ function initReorder(){
 
 /* ---------- formulario único de meta ---------- */
 function openMetaForm(id){
+  if (!canEditShared()) {
+    flash('No tienes permisos de editor');
+    return;
+  }
   const existing=id?metaById(id):null;
   mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:'sueno',saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,prioridad:metasCompartidas().length,reparto:null};
   detailKey=null;
@@ -978,6 +999,7 @@ function gastosDe(id){return state.gastos.filter(g=>g.meta===id);}
 function renderDetail(){
   const m=metaById(detailKey);if(!m){go(1);return;}
   const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):0,falta=Math.max(0,obj-m.saldo);
+  const canEdit = canEditShared();
   let body='';
   if(obj){
     body+=`<div class="bar light"><i style="width:${pct.toFixed(1)}%"></i></div>
@@ -990,32 +1012,37 @@ function renderDetail(){
     body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
       <div class="k">Cómo distribuyes esta inversión</div>
       <div class="hint" style="margin-bottom:8px">${r.length===0?'<b>Sin categorías aún.</b> Agrega tipos (acciones, bonos, cripto…) para ver cómo se reparte el saldo.':'Define qué % va a cada tipo. Puedes agregar o quitar en cualquier momento.'}</div>
-      <div id="repBox">${r.map((x,i)=>`<div class="grow"><input data-drn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo" style="flex:1;font-family:var(--sans)"><input data-drp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center">% <button class="del" data-drdel="${i}">×</button></div>`).join('')}</div>
-      <button class="btn sm ghost" id="repAddD">+ Agregar tipo de inversión</button>
+      <div id="repBox">${r.map((x,i)=>`<div class="grow"><input data-drn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" placeholder="Tipo" style="flex:1;font-family:var(--sans)" ${!canEdit ? 'disabled' : ''}><input data-drp="${i}" inputmode="numeric" value="${x.pct}" style="width:54px;text-align:center" ${!canEdit ? 'disabled' : ''}>% ${canEdit ? `<button class="del" data-drdel="${i}">×</button>` : ''}</div>`).join('')}</div>
+      ${canEdit ? '<button class="btn sm ghost" id="repAddD">+ Agregar tipo de inversión</button>' : ''}
       <div class="hint" style="color:${sum!==100&&r.length?'#a23':'var(--gs)'}">Suma: ${sum}%${r.length&&sum!==100?' · debería sumar 100%':''}</div>
       ${r.length?'<div class="esc" style="margin-top:8px">'+r.map(e=>`<div class="ep">${e.pct}%</div><div class="et">${e.n||'—'}</div><div class="ev num">${fmt(m.saldo*e.pct/100)}</div>`).join('')+'</div>':''}
     </div>`;
   }
   // editor saldo
-  body+=`<label class="lbl" style="margin-top:14px">Saldo actual</label><input class="amt money" id="dSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}">
+  body+=`<label class="lbl" style="margin-top:14px">Saldo actual</label><input class="amt money" id="dSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" ${!canEdit ? 'disabled style="opacity:0.65;pointer-events:none;"' : ''}>
     <div class="hint">El saldo se actualiza solo al cerrar el mes. Edítalo a mano únicamente para corregir el punto de partida.</div>`;
   // gastos (no para personal)
   let ghist='';
   if(m.tipo!=='personal'){
     const gs=gastosDe(m.id).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha));
     ghist=gs.length?gs.map(g=>`<div class="lrow"><div><div class="lm">${g.nota||'Salida'}</div><div class="ls">${fmtFecha(g.fecha)}</div></div>
-      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px">−${fmt(g.monto)}</span><button class="ldel" data-gdel="${g.id}">×</button></div></div>`).join(''):'<div class="empty">Sin salidas registradas.</div>';
-    body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">Registrar salida</div>
-      <div class="row2"><label class="lbl">Fecha<input class="sf" type="date" id="dFecha" value="${today()}" style="margin-top:4px"></label>
-      <label class="lbl">Monto<input class="sf money" id="dMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
-      <label class="lbl" style="margin-top:10px">Nota<input class="sf" id="dNota" placeholder="¿En qué fue?" style="margin-top:4px"></label>
-      <button class="btn sm" id="dGasto">Registrar salida</button>
-      <div style="margin-top:16px"><div class="k">Salidas</div>${ghist}</div></div>`;
+      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px">−${fmt(g.monto)}</span>${canEdit ? `<button class="ldel" data-gdel="${g.id}">×</button>` : ''}</div></div>`).join(''):'<div class="empty">Sin salidas registradas.</div>';
+    
+    if (canEdit) {
+      body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">Registrar salida</div>
+        <div class="row2"><label class="lbl">Fecha<input class="sf" type="date" id="dFecha" value="${today()}" style="margin-top:4px"></label>
+        <label class="lbl">Monto<input class="sf money" id="dMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
+        <label class="lbl" style="margin-top:10px">Nota<input class="sf" id="dNota" placeholder="¿En qué fue?" style="margin-top:4px"></label>
+        <button class="btn sm" id="dGasto">Registrar salida</button>
+        <div style="margin-top:16px"><div class="k">Salidas</div>${ghist}</div></div>`;
+    } else {
+      body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">Salidas</div>${ghist}</div>`;
+    }
   }
   $('rd').innerHTML=`<button class="bk" id="dBack">‹ Volver a Metas</button>
     <header style="padding-top:6px"><div class="ey">${m.tipo==='personal'?'Personal':tipoLabel(m.tipo)}</div><h1>${m.nombre}</h1></header>
     <div class="card"><div class="k">Saldo</div><div class="num big">${fmt(m.saldo)}</div>${body}</div>
-    ${m.tipo!=='personal'?'<button class="btn ghost" id="dEdit" style="border-color:rgba(246,241,230,.24);color:var(--cream)">Editar esta meta</button>':''}`;
+    ${m.tipo!=='personal' && canEdit ?'<button class="btn ghost" id="dEdit" style="border-color:rgba(246,241,230,.24);color:var(--cream)">Editar esta meta</button>':''}`;
   $('dBack').onclick=()=>go(1);
   const ds=$('dSaldo');
   ds.addEventListener('focus',()=>{ds.value=String(m.saldo||0);ds.select();});
@@ -1261,6 +1288,8 @@ function renderCerrar(){
   const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
   const showLimit = 2;
   const showLogs = sortedLog.slice(0, showLimit);
+  const canEdit = canEditShared();
+  const dis = !canEdit ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
 
   let logH = '';
   if (sortedLog.length === 0) {
@@ -1280,7 +1309,7 @@ function renderCerrar(){
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
           ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
           <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
-          <button class="ldel delete-hist-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
+          ${canEdit ? `<button class="ldel delete-hist-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>` : ''}
           <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
         </div>
       </div>`;
@@ -1300,8 +1329,8 @@ ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(-
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
   const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
-  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:4px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span><button class="ldel" data-epedit="${i}" style="font-size:14px;opacity:.65" title="Editar">✎</button><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button></div></div>`;}).join('')}</div>` : ''}
-<details id="detEspecial" class="card" style="margin-bottom:8px;padding:0"><summary style="font-size:14px;font-weight:600;color:var(--ink);padding:9px 14px">+ Agregar ingreso adicional</summary>
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:4px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span>${canEdit ? `<button class="ldel" data-epedit="${i}" style="font-size:14px;opacity:.65" title="Editar">✎</button><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button>` : ''}</div></div>`;}).join('')}</div>` : ''}
+${canEdit ? `<details id="detEspecial" class="card" style="margin-bottom:8px;padding:0"><summary style="font-size:14px;font-weight:600;color:var(--ink);padding:9px 14px">+ Agregar ingreso adicional</summary>
   <div class="dpad" style="padding:0 12px 10px">
     <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Comisión enero, prima junio…"></label>
     <label class="lbl" style="margin-top:5px">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
@@ -1312,10 +1341,11 @@ ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(-
     <label class="lbl" style="margin-top:5px">¿A dónde va el resto?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
     <button class="btn sm" id="iSave" style="padding:7px;margin-top:5px">Agregar</button>
   </div>
-</details>
+</details>` : ''}
 <div class="stitle">Reparto del mes</div>
 <div class="flow nofade" id="mflow"></div>
-<button class="btn" id="mApply" style="margin-top:12px">Aportar</button>
+<button class="btn" id="mApply" style="margin-top:12px" ${dis}>Aportar</button>
+${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;">⚠️ <b>Rol: Lector</b>. Solo los editores autorizados pueden realizar aportes al plan.</div>` : ''}
 <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
   function updateMesDisplay(){const v=$('mMes').value;const d=$('mMesDisplay');if(d)d.textContent=fmtMes(v)||v;}
   $('mMes').addEventListener('change',updateMesDisplay);
@@ -1598,6 +1628,7 @@ function renderFlujo(){
   const pL1=total?Math.round(c.libreP1/total*100):0;
   const pL2=total?Math.round(c.libreP2/total*100):0;
   const pAh=Math.max(0,100-pGas-pPP-pL1-pL2);
+  const dis = !canEditShared() ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
   $('r3').innerHTML=`
 <header><div class="ey">Presupuesto mensual</div><h1>Flujo</h1></header>
 <div class="card dark">
@@ -1618,23 +1649,23 @@ function renderFlujo(){
 <div class="stitle">Nóminas netas</div>
 <div class="card">
   <label class="lbl">Nómina neta de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
-  <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px">
+  <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px" ${dis}>
   <label class="lbl" style="margin-top:12px">Nómina neta de ${c.nombreP2}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
-  <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px">
+  <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px" ${dis}>
 </div>
 <div class="stitle">Gastos del hogar</div>
 <div class="card">
   <label class="lbl">Total gastos fijos</label>
-  <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px">
+  <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px" ${dis}>
   <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
 </div>
 <div class="stitle">Gustos · para disfrutar</div>
 <div class="card">
   <label class="lbl">En pareja (citas, salidas…)</label>
-  <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px">
+  <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px" ${dis}>
   <div class="row2" style="margin-top:12px">
-    <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px"></label>
-    <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px"></label>
+    <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px" ${dis}></label>
+    <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px" ${dis}></label>
   </div>
   <div class="hint">Lo de "en pareja" se gasta juntos; el "libre" de cada uno va a su bolsillo sin rendir cuentas.</div>
 </div>`;
@@ -1661,20 +1692,131 @@ function renderPlan(){
   const detInstalarOpen = $('detInstalar') ? $('detInstalar').hasAttribute('open') : false;
   const detInvitacionOpen = $('detInvitacion') ? $('detInvitacion').hasAttribute('open') : false;
 
+  const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+  let installHtml = '';
+  if (!isCapacitor) {
+    installHtml = `
+<details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary>Instalar en el teléfono</summary><div class="dpad">
+  <div class="hint" style="margin-top:0">Instala "Nuestro plan" en tu pantalla de inicio para usarla como una aplicación, más rápido y sin conexión a internet.</div>
+  <button class="btn gold" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
+  <div id="pwaIosHint" style="display:${isIOS()?'block':'none'};margin-top:10px;background:rgba(246,241,230,.05);border:1px solid var(--line);border-radius:10px;padding:12px;color:rgba(246,241,230,.85)">
+    <div style="font-weight:700;margin-bottom:6px;color:var(--gb)">Instrucciones para iPhone / iPad (Safari):</div>
+    <ol style="padding-left:18px;font-size:12.5px;line-height:1.45;display:flex;flex-direction:column;gap:6px">
+      <li>Toca el botón de <b>Compartir</b> <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:middle;display:inline-block"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> en Safari.</li>
+      <li>Desplaza la lista hacia abajo y selecciona <b>Agregar al inicio</b> (o "Add to Home Screen").</li>
+      <li>Presiona <b>Agregar</b> arriba a la derecha.</li>
+    </ol>
+  </div>
+  <div id="pwaGenericHint" style="margin-top:10px;font-size:12px;color:rgba(246,241,230,.5);line-height:1.4">
+    ${isIOS() ? '' : 'Si tu navegador no muestra el botón de instalación directa, abre el menú de opciones (tres puntos) y selecciona <b>Instalar aplicación</b> o <b>Agregar a pantalla de inicio</b>.'}
+  </div>
+</div></details>
+    `;
+  }
+
+  const dis = !canEditShared() ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
+
   let syncHtml = '';
   if (currentUser) {
+    const isGoogle = currentUser.providerData && currentUser.providerData.some(p => p.providerId === 'google.com');
+    const photoUrl = currentUser.photoURL;
+    const name = currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : 'Usuario');
+    const email = currentUser.email || 'Sin correo';
+
+    const badgeHtml = isGoogle
+      ? `<span class="pill" style="display:inline-flex;align-items:center;gap:5px;background:rgba(217,168,74,0.15);color:var(--gb);border:1px solid rgba(217,168,74,0.3);padding:3px 8px;text-transform:none;letter-spacing:normal;">
+          <svg viewBox="0 0 24 24" style="width:11px;height:11px;fill:currentColor;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.435 0-6.237-2.836-6.237-6.314s2.802-6.314 6.237-6.314c1.558 0 2.978.577 4.073 1.528l3.055-3.056C19.3 2.766 16.03 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c5.897 0 10.741-4.148 10.741-11.24 0-.67-.063-1.34-.188-1.955H12.24z"/></svg>
+          Google
+         </span>`
+      : `<span class="pill" style="display:inline-flex;align-items:center;gap:5px;background:rgba(246,241,230,0.08);color:var(--cream);border:1px solid rgba(246,241,230,0.2);padding:3px 8px;text-transform:none;letter-spacing:normal;">
+          <svg viewBox="0 0 24 24" style="width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>
+          Correo
+         </span>`;
+
+    const avatarHtml = photoUrl
+      ? `<img src="${photoUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid var(--gb);box-shadow:0 2px 6px rgba(0,0,0,0.15);" referrerpolicy="no-referrer" />`
+      : `<div style="width:40px;height:40px;border-radius:50%;background:var(--gs);color:var(--cream);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;border:2px solid rgba(246,241,230,0.2);">
+          ${name.charAt(0).toUpperCase()}
+         </div>`;
+
+    const userCardHtml = `
+      <div style="background:var(--green);color:var(--cream);border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        ${avatarHtml}
+        <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:14px;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+          <div style="font-size:12px;color:rgba(246,241,230,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${email}</div>
+          <div style="margin-top:2px;">${badgeHtml}</div>
+        </div>
+      </div>
+    `;
+
+    let partnerInfoHtml = '';
+    if (isOwner) {
+      if (planMeta && planMeta.partnerEmail) {
+        partnerInfoHtml = `
+          <div style="background:rgba(217,168,74,0.06);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;">
+            <div class="k" style="margin-bottom:4px;color:var(--gb);">Pareja Conectada</div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${planMeta.partnerEmail}</div>
+            <div style="margin-top:10px;">
+              <label class="lbl" style="font-size:11px;margin-bottom:6px;">Permisos de tu pareja:</label>
+              <div class="seg dark-seg" style="margin-top:0;">
+                <button id="btnRoleEditor" class="${planMeta.partnerRole !== 'viewer' ? 'on' : ''}">Editor</button>
+                <button id="btnRoleViewer" class="${planMeta.partnerRole === 'viewer' ? 'on' : ''}">Lector</button>
+              </div>
+              <div class="hint" style="margin-top:6px;font-size:11px;">
+                ${planMeta.partnerRole === 'viewer'
+                  ? '<b>Lector</b>: Tu pareja puede ver el plan pero no puede realizar aportes ni editar metas.'
+                  : '<b>Editor</b>: Ambos pueden realizar aportes, editar metas y modificar el presupuesto.'}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        partnerInfoHtml = `
+          <div style="background:rgba(28,58,44,0.03);border:1px dashed var(--line);border-radius:12px;padding:12px;margin-bottom:14px;text-align:center;">
+            <div style="font-size:12.5px;color:var(--gs);">Esperando a tu pareja...</div>
+            <div class="hint" style="margin-top:4px;font-size:11px;">Comparte el código o enlace de abajo para conectarse.</div>
+          </div>
+        `;
+      }
+    } else {
+      const ownerEmail = (planMeta && planMeta.ownerEmail) || 'Tu pareja';
+      const isViewer = planMeta && planMeta.partnerRole === 'viewer';
+      partnerInfoHtml = `
+        <div style="background:rgba(28,58,44,0.03);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;">
+          <div class="k" style="margin-bottom:4px;color:var(--gs);">Conectado al Plan de</div>
+          <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${ownerEmail}</div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:11px;font-weight:700;color:var(--gs);">Tu Rol:</span>
+            ${isViewer
+              ? `<span class="pill" style="background:rgba(122,34,34,0.08);color:#7a2222;border:1px solid rgba(122,34,34,0.15);text-transform:none;letter-spacing:normal;padding:2px 7px;">Lector (Solo Ver)</span>`
+              : `<span class="pill" style="background:rgba(47,90,68,0.15);color:var(--green);border:1px solid rgba(47,90,68,0.25);text-transform:none;letter-spacing:normal;padding:2px 7px;">Editor</span>`
+            }
+          </div>
+          <div class="hint" style="margin-top:8px;font-size:11px;line-height:1.4;">
+            ${isViewer
+              ? '⚠️ <b>Modo lectura activado</b>. Solo puedes visualizar la información de las metas compartidas, los gastos y el presupuesto. Tu bolsillo personal sigue estando disponible.'
+              : '✓ Tienes permisos de <b>Editor</b>. Puedes realizar aportes, modificar metas y rellenar presupuestos.'}
+          </div>
+        </div>
+      `;
+    }
+
     syncHtml = `
-      <div class="hint" style="margin-top:0;margin-bottom:12px;">Sesión iniciada como: <b style="color:var(--gold);">${currentUser.email || 'Usuario de Google'}</b></div>
-      <div class="hint" style="margin-top:0">Comparte este código o enlace con tu pareja para que sincronice sus teléfonos en tiempo real:</div>
-      <div style="background:rgba(246,241,230,.03);border:1px dashed var(--line);border-radius:10px;padding:12px;text-align:center;font-family:monospace;font-size:14.5px;color:var(--gold);margin-top:8px;word-break:break-all;user-select:all;" id="valPlanId">
+      ${userCardHtml}
+      ${partnerInfoHtml}
+      ${isOwner ? `
+      <div class="hint" style="margin-top:0">Comparte este código o enlace con tu pareja para sincronizar en tiempo real:</div>
+      <div style="background:rgba(28,58,44,.04);border:1px dashed var(--line);border-radius:10px;padding:12px;text-align:center;font-family:monospace;font-size:14.5px;color:var(--gold);margin-top:8px;word-break:break-all;user-select:all;" id="valPlanId">
         ${currentPlanId || 'Cargando código...'}
       </div>
       <div style="display:flex;gap:10px;margin-top:12px;">
-        <button class="mini" id="bCopyCode" style="flex:1;">Copiar Código</button>
-        <button class="mini" id="bCopyLink" style="flex:1;">Copiar Enlace</button>
+        <button class="mini" id="bCopyCode" style="flex:1;margin:0;">Copiar Código</button>
+        <button class="mini" id="bCopyLink" style="flex:1;margin:0;">Copiar Enlace</button>
       </div>
+      ` : ''}
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;">
-        <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55">Cerrar sesión</button>
+        <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55;margin:0;">Cerrar sesión</button>
       </div>
     `;
   } else {
@@ -1690,7 +1832,7 @@ function renderPlan(){
       <button class="btn ghost" id="btnSettingsShowEmailAuth" style="margin-top:12px;width:100%;">
         Conectar con Correo y Contraseña
       </button>
-
+ 
       <div id="settingsEmailAuthForm" style="display:none;flex-direction:column;gap:12px;text-align:left;margin-top:15px;background:rgba(246,241,230,.03);padding:14px;border:1px solid var(--line);border-radius:12px;">
         <div class="ob-field" style="margin:0;">
           <label class="lbl">Correo electrónico</label>
@@ -1707,21 +1849,21 @@ function renderPlan(){
           <a href="#" id="linkSettingsToggleAuthMode" style="font-size:12.5px;color:var(--gold);text-decoration:underline;">¿No tienes cuenta? Regístrate</a>
         </div>
       </div>
-
+ 
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
         <button class="btn ghost" id="btnSettingsInviteCode" style="width:100%;">Tengo un código de invitación</button>
       </div>
     `;
   }
-
+ 
   $('r4').innerHTML=`
 <header><div class="ey">Configuración</div><h1>Ajustes</h1></header>
-
+ 
 <details id="detEstrategia" ${detEstrategiaOpen ? 'open' : ''}><summary>Estrategia de ahorro</summary><div class="dpad">
   <div class="seg">
-    <button id="estSeq" class="${c.estrategia==='secuencial'?'on':''}">Prioritaria primero</button>
-    <button id="estSim" class="${c.estrategia==='simultaneo'?'on':''}">Simultáneo</button>
-    <button id="estCas" class="${c.estrategia==='cascada'?'on':''}">En cascada</button>
+    <button id="estSeq" class="${c.estrategia==='secuencial'?'on':''}" ${dis}>Prioritaria primero</button>
+    <button id="estSim" class="${c.estrategia==='simultaneo'?'on':''}" ${dis}>Simultáneo</button>
+    <button id="estCas" class="${c.estrategia==='cascada'?'on':''}" ${dis}>En cascada</button>
   </div>
   <div class="hint">
     ${c.estrategia==='secuencial'?'<b>Prioritaria primero</b>: Cubre los aportes fijos de todas las metas y luego destina todo el ahorro restante a la meta de máxima prioridad.'
@@ -1729,47 +1871,33 @@ function renderPlan(){
       :'<b>En cascada</b>: Llena las metas una por una en estricto orden de prioridad (número menor a mayor), ignorando porcentajes y fijos.'}
   </div>
 </div></details>
-
+ 
 <details id="detExtras" ${detExtrasOpen ? 'open' : ''}><summary>Ingresos adicionales</summary><div class="dpad">
-  <label class="lbl">% por defecto al bolsillo</label><input class="sf" id="pPct" inputmode="numeric" value="${c.pctPremio}">
+  <label class="lbl">% por defecto al bolsillo</label><input class="sf" id="pPct" inputmode="numeric" value="${c.pctPremio}" ${dis}>
   <div class="hint">Al agregar un ingreso adicional (comisión, bono, prima…) este porcentaje se pre-rellena en el campo "% al bolsillo". Pueden cambiarlo por ítem.</div>
 </div></details>
-
+ 
 <details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary>Perfil de este teléfono</summary><div class="dpad">
   <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Tú ves y llenas tu bolsillo personal.</div>
   <div class="seg" style="margin-top:8px"><button id="pfG" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button><button id="pfA" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button></div>
 </div></details>
-
+ 
 <details id="detInvitacion" ${detInvitacionOpen ? 'open' : ''}><summary>Sincronizar y Conectar Pareja</summary><div class="dpad">
   ${syncHtml}
 </div></details>
-
+ 
 <details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary>Nombres de la pareja</summary><div class="dpad">
-  <div class="row2"><label class="lbl">Persona 1<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px"></label>
-    <label class="lbl">Persona 2<input class="sf" id="pNom2" value="${c.nombreP2.replace(/"/g,'&quot;')}" style="margin-top:4px"></label></div>
+  <div class="row2"><label class="lbl">Persona 1<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label>
+    <label class="lbl">Persona 2<input class="sf" id="pNom2" value="${c.nombreP2.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label></div>
 </div></details>
-
-<details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary>Instalar en el teléfono</summary><div class="dpad">
-  <div class="hint" style="margin-top:0">Instala "Nuestro plan" en tu pantalla de inicio para usarla como una aplicación, más rápido y sin conexión a internet.</div>
-  <button class="btn gold" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
-  <div id="pwaIosHint" style="display:${isIOS()?'block':'none'};margin-top:10px;background:rgba(246,241,230,.05);border:1px solid var(--line);border-radius:10px;padding:12px;color:rgba(246,241,230,.85)">
-    <div style="font-weight:700;margin-bottom:6px;color:var(--gb)">Instrucciones para iPhone / iPad (Safari):</div>
-    <ol style="padding-left:18px;font-size:12.5px;line-height:1.45;display:flex;flex-direction:column;gap:6px">
-      <li>Toca el botón de <b>Compartir</b> <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:middle;display:inline-block"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> en Safari.</li>
-      <li>Desplaza la lista hacia abajo y selecciona <b>Agregar al inicio</b> (o "Add to Home Screen").</li>
-      <li>Presiona <b>Agregar</b> arriba a la derecha.</li>
-    </ol>
-  </div>
-  <div id="pwaGenericHint" style="margin-top:10px;font-size:12px;color:rgba(246,241,230,.5);line-height:1.4">
-    ${isIOS() ? '' : 'Si tu navegador no muestra el botón de instalación directa, abre el menú de opciones (tres puntos) y selecciona <b>Instalar aplicación</b> o <b>Agregar a pantalla de inicio</b>.'}
-  </div>
-</div></details>
-
+ 
+${installHtml}
+ 
 <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
-  <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp">Restaurar</button>
+  <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp" ${dis}>Restaurar</button>
   <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
-  <button class="btn danger" id="bReset">Borrar todos los datos</button>
-  <button class="btn ghost" id="bOnb" style="margin-top:10px">Ver el tutorial otra vez</button>
+  <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
+  <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
 </div></details>`;
   attachPlan();
 }
@@ -1960,6 +2088,36 @@ function attachPlan(){
       bInst.disabled = false;
     };
   }
+
+  const btnRoleEditor = $('btnRoleEditor');
+  if (btnRoleEditor) {
+    btnRoleEditor.onclick = async () => {
+      if (!currentPlanId || !isOwner) return;
+      try {
+        await db.collection('meta').doc(currentPlanId).update({
+          partnerRole: 'editor'
+        });
+        flash('Permiso cambiado a Editor ✓');
+      } catch (e) {
+        alert('Error al actualizar permisos: ' + e.message);
+      }
+    };
+  }
+
+  const btnRoleViewer = $('btnRoleViewer');
+  if (btnRoleViewer) {
+    btnRoleViewer.onclick = async () => {
+      if (!currentPlanId || !isOwner) return;
+      try {
+        await db.collection('meta').doc(currentPlanId).update({
+          partnerRole: 'viewer'
+        });
+        flash('Permiso cambiado a Lector ✓');
+      } catch (e) {
+        alert('Error al actualizar permisos: ' + e.message);
+      }
+    };
+  }
 }
 function rerenderPlanKeepOpen(){renderPlan();}
 
@@ -2137,11 +2295,15 @@ function attachOb(){
     if(btnL) {
       btnL.onclick = async () => {
         const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
-        const hasGoogleAuth = isCapacitor && !!(window.Capacitor.Plugins && window.Capacitor.Plugins.GoogleAuth);
-        alert(`[DEBUG] isCapacitor=${isCapacitor} | hasGoogleAuth=${hasGoogleAuth} | Plugins=${JSON.stringify(Object.keys(window.Capacitor?.Plugins||{}))}`);
         if (isCapacitor) {
           try {
             const { GoogleAuth } = window.Capacitor.Plugins;
+            // El plugin RC no construye el GoogleSignInClient nativo en load();
+            // initialize() lo fuerza. clientId = Web client (type 3), requerido por requestIdToken.
+            await GoogleAuth.initialize({
+              clientId: '486527605037-uh0u0ctmlq7tgb48d9128t8ugc3dkg8v.apps.googleusercontent.com',
+              scopes: ['profile', 'email'],
+            });
             const googleUser = await GoogleAuth.signIn();
             const idToken = googleUser.authentication.idToken;
             const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
@@ -2413,17 +2575,33 @@ auth.onAuthStateChanged(async user => {
       const metaDoc = await db.collection('meta').doc(currentPlanId).get();
       
       if (metaDoc.exists) {
-        isOwner = metaDoc.data().ownerUid === user.uid;
-        if (!isOwner) {
+        const data = metaDoc.data();
+        isOwner = data.ownerUid === user.uid;
+        if (isOwner) {
+          await db.collection('meta').doc(currentPlanId).update({
+            ownerEmail: user.email || 'Usuario de Google',
+            ownerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario')
+          }).catch(e => {});
+        } else {
           localStorage.setItem('isInvited', 'true');
-          // Si no está onboarded aún, ir al paso 2 para elegir perfil
+          await db.collection('meta').doc(currentPlanId).update({
+            partnerUid: user.uid,
+            partnerEmail: user.email || 'Usuario de Google',
+            partnerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario')
+          }).catch(e => {});
           if (!state.config.onboarded) {
             obStep = 2;
           }
         }
       } else {
         isOwner = true;
-        await syncRegisterOwner(currentPlanId, user.uid);
+        await db.collection('meta').doc(currentPlanId).set({
+          ownerUid: user.uid,
+          ownerEmail: user.email || 'Usuario de Google',
+          ownerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario'),
+          partnerRole: 'editor',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
         await syncSaveShared(currentPlanId, state);
       }
       // Intentar cargar datos de Firestore
@@ -2444,14 +2622,21 @@ auth.onAuthStateChanged(async user => {
   } else {
     if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
     if (unsubscribeBolsillos) { unsubscribeBolsillos(); unsubscribeBolsillos = null; }
+    if (unsubscribeMeta) { unsubscribeMeta(); unsubscribeMeta = null; }
     currentPlanId = null;
     isOwner = false;
+    planMeta = null;
   }
 
   // Decidir qué pantalla mostrar
   if (!state.config.onboarded) {
-    if (localStorage.getItem('isInvited') === 'true' && currentUser) {
-      obStep = 2;
+    if (currentUser) {
+      if (localStorage.getItem('isInvited') === 'true') {
+        obStep = 2;
+      } else if (obStep === 0) {
+        // Dueño ya autenticado: avanzar del welcome al primer paso del onboarding
+        obStep = 1;
+      }
     }
     $('onb').classList.add('on');
     renderOb();
@@ -2472,15 +2657,25 @@ window.addEventListener('beforeinstallprompt', (e) => {
   if (btn) btn.style.display = 'block';
 });
 
-// Registro de Service Worker para soporte offline e instalación de PWA
-if ('serviceWorker' in navigator) {
+// Service Worker: SOLO en navegador/PWA. En Capacitor nativo se desactiva
+// (los assets ya van bundled) y se purga cualquier SW/cache viejo, que de otro
+// modo congela el código viejo dentro del WebView.
+const __inCapacitor = typeof window.Capacitor !== 'undefined'
+  && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+
+if (__inCapacitor) {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then(rs => rs.forEach(r => r.unregister()))
+      .catch(() => {});
+  }
+  if (window.caches) {
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
+  }
+} else if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js')
-      .then(reg => {
-        console.log('Service Worker registrado con éxito en el scope:', reg.scope);
-      })
-      .catch(err => {
-        console.error('Error al registrar el Service Worker:', err);
-      });
+      .then(reg => console.log('Service Worker registrado con éxito en el scope:', reg.scope))
+      .catch(err => console.error('Error al registrar el Service Worker:', err));
   });
 }

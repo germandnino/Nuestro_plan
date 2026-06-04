@@ -9,8 +9,7 @@
         "email"
       ],
       "clientId": "486527605037-uh0u0ctmlq7tgb48d9128t8ugc3dkg8v.apps.googleusercontent.com",
-      "androidClientId": "486527605037-o6bcolho7dbpd76qduv3gav0855emjrr.apps.googleusercontent.com",
-      "forceCodeForRefreshToken": true
+      "androidClientId": "486527605037-o6bcolho7dbpd76qduv3gav0855emjrr.apps.googleusercontent.com"
     }
   }
 }

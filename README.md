@@ -38,9 +38,11 @@ El proyecto está diseñado con un enfoque premium, móvil y offline-first, perm
 ## 🛠️ Stack Tecnológico
 
 *   **Frontend:** Vanilla HTML5, CSS3 moderno (con variables CSS y modo oscuro premium) y JavaScript puro (ES6+).
-*   **Sin Dependencias:** 100% libre de frameworks pesados o librerías externas, garantizando un rendimiento óptimo e instantáneo.
-*   **PWA (Progressive Web App):** Incluye `service-worker.js` y `manifest.json` para poder ser instalada en dispositivos móviles y funcionar offline.
-*   **Almacenamiento:** Persistencia local a través de `localStorage` con capas de abstracción seguras.
+*   **Sin Dependencias:** 100% libre de frameworks o librerías de frontend pesadas (React, Vue, etc.), garantizando una carga instantánea y rendimiento óptimo.
+*   **PWA (Progressive Web App):** Incluye `service-worker.js` y `manifest.json` para ejecución offline e instalación directa desde navegador.
+*   **Nativo (Capacitor/Android):** Empaquetado nativo mediante **Capacitor** para ejecutarse como aplicación Android con inicio de sesión nativo de Google.
+*   **Base de Datos y Sincronización:** Integración en la nube en tiempo real mediante **Firebase (Firestore y Authentication)**.
+*   **Almacenamiento Local:** Persistencia local a través de `localStorage` con capas de abstracción seguras (offline-first).
 
 ---
 
@@ -48,14 +50,15 @@ El proyecto está diseñado con un enfoque premium, móvil y offline-first, perm
 
 ```text
 Nuestro-Plan/
-├── NP/
+├── NP/                       # Código fuente de la Web-App/PWA
 │   ├── index.html            # Aplicación principal (HTML, CSS y JS unificados)
 │   ├── service-worker.js     # Soporte para modo offline (PWA)
 │   ├── manifest.json         # Configuración de la PWA para instalación
-│   ├── icon-180.png          # Icono de la app (180x180)
-│   ├── icon-192.png          # Icono de la app (192x192)
-│   ├── icon-512.png          # Icono de la app (512x512)
+│   ├── icon-*.png            # Iconos de la app
 │   └── DOCUMENTACION.md      # Detalles técnicos de la aplicación
+├── android/                  # Carpeta del proyecto nativo Android (Capacitor)
+├── capacitor.config.json     # Configuración del empaquetador Capacitor
+├── package.json              # Dependencias de npm y scripts
 ├── .gitignore                # Archivos omitidos en Git
 └── README.md                 # Guía general del proyecto (este archivo)
 ```
@@ -64,9 +67,7 @@ Nuestro-Plan/
 
 ## 💻 ¿Cómo Ejecutar el Proyecto?
 
-Al ser una SPA en Vanilla JavaScript, no requiere de compilación ni de un servidor web complejo. 
-
-### Opción 1: Abrir Localmente
+### Opción 1: Abrir Localmente (Solo Web)
 Simplemente haz doble clic en el archivo [NP/index.html](file:///c:/Dev/Nuestro-Plan/NP/index.html) en tu navegador preferido.
 
 ### Opción 2: Servidor Local (Recomendado para Service Workers y PWA)
@@ -80,3 +81,15 @@ Puedes usar cualquier servidor de desarrollo rápido:
     ```bash
     npx serve NP
     ```
+
+### Opción 3: Dispositivo Android (Nativo con Capacitor)
+Para sincronizar tus cambios web y compilar la aplicación en tu celular Android conectado:
+1. Sincroniza los assets web con el proyecto Android:
+   ```bash
+   npx cap sync android
+   ```
+2. Compila e instala la APK de depuración en tu dispositivo:
+   ```powershell
+   cd android
+   .\gradlew installDebug
+   ```
