@@ -1752,8 +1752,8 @@ function renderHistoryDetail(mes, fromTab) {
           const pctR=ep.pctRetener||0;
           const toSave=ep.monto*(1-pctR/100);
           const toBolsillo=ep.monto-toSave;
-          const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
-          return `<div style="display:flex;justify-content:space-between"><span>Adicional — ${ep.nombre} (${persNom}):</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>${pctR>0?`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div><div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`:''}`;
+          const persNom=c.modo==='individual'?'':` (${ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos'})`;
+          return `<div style="display:flex;justify-content:space-between"><span>Adicional — ${ep.nombre}${persNom}:</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>${pctR>0?`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div><div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`:''}`;
         }).join('') : ''}
       </div>
       
@@ -1885,14 +1885,14 @@ function renderCerrar(){
 ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
-  const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
-  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?` · ${pctR}% al bolsillo`:''} · ${metaNom}</div></div><div style="display:flex;align-items:center;gap:4px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span>${canEdit ? `<button class="ldel" data-epedit="${i}" style="font-size:14px;opacity:.65" title="Editar">✎</button><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button>` : ''}</div></div>`;}).join('')}</div>` : ''}
+  const persNom=c.modo==='individual'?'':`${ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos'} · `;
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><div><div style="font-weight:700;color:var(--ink)">${ep.nombre}</div><div style="font-size:11px;color:var(--gs);margin-top:2px">${persNom}${pctR>0?`${pctR}% al bolsillo · `:''}${metaNom}</div></div><div style="display:flex;align-items:center;gap:4px"><span class="num" style="font-size:15px;color:var(--gb)">${fmt(ep.monto)}</span>${canEdit ? `<button class="ldel" data-epedit="${i}" style="font-size:14px;opacity:.65" title="Editar">✎</button><button class="ldel" data-epdel="${i}" style="font-size:16px">×</button>` : ''}</div></div>`;}).join('')}</div>` : ''}
 ${canEdit ? `<details id="detEspecial" class="card" style="margin-bottom:8px;padding:0"><summary style="font-size:14px;font-weight:600;color:var(--ink);padding:9px 14px">+ Agregar ingreso adicional</summary>
   <div class="dpad" style="padding:0 12px 10px">
     <label class="lbl">Concepto<input class="sf" id="iNom" placeholder="Comisión enero, prima junio…"></label>
     <label class="lbl" style="margin-top:5px">Monto<input class="sf money" id="iMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label>
-    <div class="row2" style="margin-top:5px">
-      <label class="lbl">¿De quién?<select class="sf" id="iPersona" style="margin-top:4px"><option value="p1">${c.nombreP1}</option><option value="p2">${c.nombreP2}</option><option value="ambos">Ambos</option></select></label>
+    <div class="row2" style="margin-top:5px; ${c.modo === 'individual' ? 'grid-template-columns: 1fr;' : ''}">
+      <label class="lbl" style="display:${c.modo==='individual'?'none':''}">¿De quién?<select class="sf" id="iPersona" style="margin-top:4px"><option value="p1">${c.nombreP1}</option><option value="p2">${c.nombreP2}</option><option value="ambos">Ambos</option></select></label>
       <label class="lbl">% al bolsillo<input class="sf" id="iPctRetener" type="number" min="0" max="100" placeholder="${c.pctPremio||0}" style="margin-top:4px"></label>
     </div>
     <label class="lbl" style="margin-top:5px">¿A dónde va el resto?<select class="sf" id="iMeta" style="margin-top:4px"><option value="distribuir">Repartir entre todas (según el plan)</option>${metasVisiblesEnFondos().map(m=>`<option value="${m.id}">${m.nombre}</option>`).join('')}</select></label>
@@ -2025,8 +2025,8 @@ function drawFlow(animate){
       const pctR=ep.pctRetener||0;
       const toSave=ep.monto*(1-pctR/100);
       const toBolsillo=ep.monto-toSave;
-      const persNom=ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos';
-      h+=`<div style="display:flex;justify-content:space-between"><span>${ep.nombre} (${persNom}):</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>`;
+      const persNom=c.modo==='individual'?'':` (${ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos'})`;
+      h+=`<div style="display:flex;justify-content:space-between"><span>${ep.nombre}${persNom}:</span><b style="color:var(--gb)">${fmt(ep.monto)}</b></div>`;
       if(pctR>0){
         h+=`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div>`;
         h+=`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`;
