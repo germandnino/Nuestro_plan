@@ -45,7 +45,7 @@ input.sf:focus{border-color:var(--gold)}
 .btn:active{transform:scale(.985)}
 .btn:disabled{opacity:.4}
 .btn.ghost{background:transparent;border:1px solid rgba(246,241,230,.35);color:var(--cream);margin-top:8px}
-.card .btn.ghost, .modal-card .btn.ghost{border-color:var(--gs);color:var(--gs)}
+.card .btn.ghost, .modal-card .btn.ghost, details .btn.ghost{border-color:var(--gs);color:var(--gs)}
 .btn.gold{background:var(--gb);color:#231703}
 .btn.danger{background:#7a2222;margin-top:6px}
 .btn.sm{padding:9px;font-size:13px;margin-top:6px}
