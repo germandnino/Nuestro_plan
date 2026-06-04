@@ -44,7 +44,8 @@ input.sf:focus{border-color:var(--gold)}
 .btn{width:100%;margin-top:10px;background:var(--green);color:var(--cream);border:none;border-radius:10px;padding:13px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em;transition:transform .12s}
 .btn:active{transform:scale(.985)}
 .btn:disabled{opacity:.4}
-.btn.ghost{background:transparent;border:1px solid var(--gs);color:var(--gs);margin-top:8px}
+.btn.ghost{background:transparent;border:1px solid rgba(246,241,230,.35);color:var(--cream);margin-top:8px}
+.card .btn.ghost, .modal-card .btn.ghost{border-color:var(--gs);color:var(--gs)}
 .btn.gold{background:var(--gb);color:#231703}
 .btn.danger{background:#7a2222;margin-top:6px}
 .btn.sm{padding:9px;font-size:13px;margin-top:6px}
