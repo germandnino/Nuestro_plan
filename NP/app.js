@@ -241,6 +241,11 @@ function monthsUntil(ym){const[y,mo]=ym.split('-').map(Number);const n=new Date(
 function addMonths(n){const d=new Date();d.setMonth(d.getMonth()+Math.max(0,Math.round(n)));return MONTHS[d.getMonth()]+' '+d.getFullYear();}
 function perfilNombre(p){return p==='p1'?state.config.nombreP1:state.config.nombreP2;}
 function libreOf(p){return p==='p1'?state.config.libreP1:state.config.libreP2;}
+function shiftMonth(ym, delta) {
+  let [y, m] = ym.split('-').map(Number);
+  let d = new Date(y, m - 1 + delta, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
 
 /* ---------- teclado virtual: ocultar fade ---------- */
 document.addEventListener('focusin', (e) => {
@@ -1583,12 +1588,15 @@ function renderCerrar(){
 
   $('r2').innerHTML=`
 <header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
-<label class="lbl" style="margin-bottom:10px">Mes
-  <div class="sf" id="mMesTrigger" style="margin-top:4px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
-    <span id="mMesText">${fmtMes(selectedMonth) || selectedMonth}</span>
-    <span style="color:var(--gs); font-size:12px;">▼</span>
+<label class="lbl" style="margin-bottom:6px">Mes</label>
+<div style="display:flex; align-items:center; justify-content:space-between; height:42px; background:var(--cream); border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:14px;">
+  <button id="btnPrevMonth" style="background:none; border:none; width:44px; height:100%; font-size:18px; color:var(--green); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">‹</button>
+  <div id="mMesTrigger" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; height:100%; font-weight:700; color:var(--ink);">
+    <span id="mMesText" style="font-family:var(--sans); font-size:14.5px;">${fmtMes(selectedMonth) || selectedMonth}</span>
+    <span style="color:var(--gs); font-size:9px; vertical-align:middle; margin-top:2px;">▼</span>
   </div>
-</label>
+  <button id="btnNextMonth" style="background:none; border:none; width:44px; height:100%; font-size:18px; color:var(--green); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">›</button>
+</div>
 ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
@@ -1626,6 +1634,22 @@ ${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,3
         updateMesDisplay();
         drawFlow();
       }
+    };
+  }
+  const btnPrev = $('btnPrevMonth');
+  if (btnPrev) {
+    btnPrev.onclick = () => {
+      selectedMonth = shiftMonth(selectedMonth, -1);
+      updateMesDisplay();
+      drawFlow();
+    };
+  }
+  const btnNext = $('btnNextMonth');
+  if (btnNext) {
+    btnNext.onclick = () => {
+      selectedMonth = shiftMonth(selectedMonth, 1);
+      updateMesDisplay();
+      drawFlow();
     };
   }
   updateMesDisplay();
