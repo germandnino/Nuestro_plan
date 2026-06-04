@@ -1373,17 +1373,37 @@ function readMetaForm(){
 }
 function updateDeriv(){
   const el=$('fDeriv');if(!el)return;
+  const c=state.config;
+  const p=c.perfil;
   const obj=$('fObj')?parse($('fObj').value):0;const fecha=$('fFechaTrigger')?$('fFechaTrigger').dataset.val:'';
   const fijo=$('fFijo')?parse($('fFijo').value):0;
   const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
   const saldo=$('fSaldo')?parse($('fSaldo').value):0;
-  const est=Math.max(0,computeBase()+avgVar()*(1-state.config.pctPremio/100));
-  const pctMes=est*pct/100;
+
+  let pctMes = 0;
+  if (mForm.dueno) {
+    const avgV_total = avgVar();
+    const prem = avgV_total * c.pctPremio / 100;
+    const pf = premioSplitFactor(p, state.log.length ? {
+      p1: state.log.reduce((s,e)=>s+e.p1,0)/state.log.length,
+      p2: state.log.reduce((s,e)=>s+e.p2,0)/state.log.length
+    } : null);
+    const libre = p === 'p1' ? c.libreP1 : c.libreP2;
+    const estPocket = c.soloAhorroDirecto ? (prem * pf) : (libre + prem * pf);
+
+    const fijosIndivs = metasIndividuales(p).reduce((s,m) => s + (m.id === mForm.id ? fijo : (m.aporteFijo || 0)), 0);
+    const restPocket = Math.max(0, estPocket - fijosIndivs);
+    pctMes = restPocket * pct / 100;
+  } else {
+    const est=Math.max(0,computeBase()+avgVar()*(1-c.pctPremio/100));
+    pctMes=est*pct/100;
+  }
+
   const aporteMes=fijo+pctMes;
   const apTxt=()=>{let p=[];if(fijo>0)p.push(fmt(fijo)+' fijos');if(pct>0)p.push('~'+fmt(pctMes)+' ('+pct+'% del resto)');return p.join(' + ');};
 
   let txt='';
-  const strat = state.config.estrategia;
+  const strat = c.estrategia;
 
   if (mForm.dueno) {
     if(obj&&fecha){
