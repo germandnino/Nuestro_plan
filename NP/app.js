@@ -155,6 +155,71 @@ function customConfirm(message, isDestructive = false) {
 function customPrompt(message, defaultText = '') {
   return showCustomModal({ title: 'Ingresar dato', message, type: 'prompt', placeholder: defaultText });
 }
+function showCustomMonthPicker(currentVal) {
+  return new Promise((resolve) => {
+    let [year, month] = (currentVal || curMonth()).split('-').map(Number);
+    let overlay = $('custom-month-picker-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'custom-month-picker-overlay';
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
+    }
+
+    const renderPicker = () => {
+      const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      let gridHtml = '';
+      monthNames.forEach((name, idx) => {
+        const mVal = idx + 1;
+        const isSelected = (mVal === month && year === Number((currentVal || curMonth()).split('-')[0]));
+        const btnClass = isSelected ? 'month-btn selected' : 'month-btn';
+        gridHtml += `<button class="${btnClass}" data-m="${mVal}">${name}</button>`;
+      });
+
+      overlay.innerHTML = `
+        <div class="modal-card month-picker-card animate-in">
+          <div class="month-picker-header">
+            <button class="nav-year" id="prev-year">‹</button>
+            <span class="picker-year">${year}</span>
+            <button class="nav-year" id="next-year">›</button>
+          </div>
+          <div class="month-picker-grid">
+            ${gridHtml}
+          </div>
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="btn ghost" id="picker-cancel">Cancelar</button>
+          </div>
+        </div>
+      `;
+
+      $('prev-year').onclick = (e) => { e.stopPropagation(); year--; renderPicker(); };
+      $('next-year').onclick = (e) => { e.stopPropagation(); year++; renderPicker(); };
+
+      overlay.querySelectorAll('.month-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const selectedM = String(btn.dataset.m).padStart(2, '0');
+          cleanup();
+          resolve(`${year}-${selectedM}`);
+        };
+      });
+
+      $('picker-cancel').onclick = (e) => {
+        e.stopPropagation();
+        cleanup();
+        resolve(null);
+      };
+    };
+
+    const cleanup = () => {
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+    };
+
+    overlay.style.display = 'flex';
+    renderPicker();
+  });
+}
 function showSyncStatus(msg, isError = false) {
   const el = document.getElementById('syncStatus');
   if (!el) return;
@@ -1025,7 +1090,10 @@ function renderMetaForm(editing){
       <label class="lbl">Meta (opcional)</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
       <label class="lbl" style="margin-top:14px">¿Para cuándo? (opcional)</label>
-      <input class="sf" type="month" id="fFecha" value="${m.fecha||''}">
+      <div class="sf" id="fFechaTrigger" data-val="${m.fecha||''}" style="margin-top:4px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+        <span id="fFechaText">${m.fecha ? fmtMes(m.fecha) : 'Seleccionar mes'}</span>
+        <span style="color:var(--gs); font-size:12px;">▼</span>
+      </div>
       ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
       <div class="deriv" id="fDeriv"></div>
     </div>`;
@@ -1063,7 +1131,7 @@ function readMetaForm(){
   m.nombre=($('fNom')?$('fNom').value.trim():m.nombre);
   if($('fObj'))m.objetivo=parse($('fObj').value);
   if(m.tipo==='invertir')m.objetivo=0;
-  if($('fFecha'))m.fecha=$('fFecha').value||null;
+  if($('fFechaTrigger'))m.fecha=$('fFechaTrigger').dataset.val||null;
   if($('fFijo'))m.aporteFijo=parse($('fFijo').value);
   if($('fPct'))m.aportePct=Math.max(0,Math.min(100,parse($('fPct').value)));
   if($('fSaldo'))m.saldo=parse($('fSaldo').value);
@@ -1080,7 +1148,7 @@ function readMetaForm(){
 }
 function updateDeriv(){
   const el=$('fDeriv');if(!el)return;
-  const obj=$('fObj')?parse($('fObj').value):0;const fecha=$('fFecha')?$('fFecha').value:'';
+  const obj=$('fObj')?parse($('fObj').value):0;const fecha=$('fFechaTrigger')?$('fFechaTrigger').dataset.val:'';
   const fijo=$('fFijo')?parse($('fFijo').value):0;
   const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
   const saldo=$('fSaldo')?parse($('fSaldo').value):0;
@@ -1151,7 +1219,20 @@ function updateDeriv(){
 function attachMetaForm(editing){
   $('fBack').onclick=()=>{mForm=null;go(1);};
   $('rf').querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>{readMetaForm();mForm.tipo=b.dataset.tipo;if(mForm.tipo==='invertir'&&!mForm.reparto)mForm.reparto=[];renderMetaForm(editing);});
-  ['fObj','fFecha','fFijo','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
+  ['fObj','fFijo','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
+  const fTrigger = $('fFechaTrigger');
+  if(fTrigger) {
+    fTrigger.onclick = async () => {
+      const currentVal = fTrigger.dataset.val || '';
+      const newVal = await showCustomMonthPicker(currentVal);
+      if(newVal !== null) {
+        fTrigger.dataset.val = newVal;
+        const textEl = $('fFechaText');
+        if(textEl) textEl.textContent = fmtMes(newVal) || 'Seleccionar mes';
+        updateDeriv();
+      }
+    };
+  }
   // reparto interno
   const repAdd=$('repAdd');
   if(repAdd)repAdd.onclick=()=>{readMetaForm();mForm.reparto=mForm.reparto||[];mForm.reparto.push({n:'',pct:0});renderMetaForm(editing);};
@@ -1502,7 +1583,12 @@ function renderCerrar(){
 
   $('r2').innerHTML=`
 <header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
-<label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${selectedMonth}" style="margin-top:4px"></label>
+<label class="lbl" style="margin-bottom:10px">Mes
+  <div class="sf" id="mMesTrigger" style="margin-top:4px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+    <span id="mMesText">${fmtMes(selectedMonth) || selectedMonth}</span>
+    <span style="color:var(--gs); font-size:12px;">▼</span>
+  </div>
+</label>
 ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
@@ -1525,8 +1611,23 @@ ${canEdit ? `<details id="detEspecial" class="card" style="margin-bottom:8px;pad
 <button class="btn" id="mApply" style="margin-top:12px" ${dis}>Aportar</button>
 ${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;">⚠️ <b>Rol: Lector</b>. Solo los editores autorizados pueden realizar aportes al plan.</div>` : ''}
 <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
-  function updateMesDisplay(){const v=$('mMes').value;const d=$('mMesDisplay');if(d)d.textContent=fmtMes(v)||v;}
-  $('mMes').addEventListener('change',(e)=>{selectedMonth=e.target.value;updateMesDisplay();drawFlow();});
+  function updateMesDisplay(){
+    const t=$('mMesText');
+    if(t)t.textContent=fmtMes(selectedMonth)||selectedMonth;
+    const d=$('mMesDisplay');
+    if(d)d.textContent=fmtMes(selectedMonth)||selectedMonth;
+  }
+  const mTrigger = $('mMesTrigger');
+  if (mTrigger) {
+    mTrigger.onclick = async () => {
+      const newVal = await showCustomMonthPicker(selectedMonth);
+      if (newVal) {
+        selectedMonth = newVal;
+        updateMesDisplay();
+        drawFlow();
+      }
+    };
+  }
   updateMesDisplay();
   $('mApply').onclick=aplicar;
   $('iSave').onclick=addIngreso;
