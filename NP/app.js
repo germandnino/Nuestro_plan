@@ -651,25 +651,6 @@ function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
   if (monto <= 0 || indivs.length === 0) return { dist: res, rem: monto };
   
   let rem = monto;
-  const c = state.config;
-  
-  if (c.estrategia === 'cascada') {
-    const sorted = indivs.slice().sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
-    for (let i = 0; i < sorted.length; i++) {
-      const m = sorted[i];
-      if (m.objetivo > 0) {
-        const falta = Math.max(0, m.objetivo - (m.saldo + res[m.id]));
-        const add = Math.min(rem, falta);
-        res[m.id] += add;
-        rem -= add;
-      } else {
-        res[m.id] += rem;
-        rem = 0;
-      }
-      if (rem <= 0.5) break;
-    }
-    return { dist: res, rem };
-  }
   
   // 1. Aportes fijos
   if (!esEspecial) {
@@ -686,20 +667,7 @@ function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
     if (rem <= 0.5) return { dist: res, rem };
   }
   
-  // 2. Prioritaria primero si es secuencial
-  if (c.estrategia === 'secuencial') {
-    const sorted = indivs.slice().sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
-    const prio = sorted.find(m => m.objetivo > 0 && m.saldo < m.objetivo);
-    if (prio) {
-      const falta = Math.max(0, prio.objetivo - (prio.saldo + res[prio.id]));
-      const add = Math.min(rem, falta);
-      res[prio.id] += add;
-      rem -= add;
-    }
-    if (rem <= 0.5) return { dist: res, rem };
-  }
-  
-  // 3. Aportes porcentuales
+  // 2. Aportes porcentuales
   const baseRem = rem;
   indivs.filter(m => (m.aportePct||0) > 0).forEach(m => {
     let add = (baseRem * m.aportePct) / 100;
