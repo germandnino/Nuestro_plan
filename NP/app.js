@@ -7,16 +7,18 @@ const CFG_DEF={
   nombreP1:'Persona 1',
   nombreP2:'Persona 2',
   perfil:'p1',
-  nominaP1:3000000,
-  nominaP2:3000000,
-  gastos:2365000,
-  planPareja:1000000,
-  libreP1:400000,
-  libreP2:400000,
+  nominaP1:0,
+  nominaP2:0,
+  gastos:0,
+  planPareja:0,
+  libreP1:0,
+  libreP2:0,
   pctPremio:20,
   modoPremio:'igual',      // igual | proporcional | personalizado
   pctPremioP1:50,
   estrategia:'secuencial', // secuencial | simultaneo
+  soloAhorroDirecto:false,
+  ahorroDirecto:0,
   onboarded:false
 };
 function metasEjemplo(){
@@ -36,6 +38,7 @@ let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, detailKey=null, firstFlow=true;
 let mForm=null; // estado del formulario de meta en edición
 let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este cierre
+let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 
 // Sync Firebase
 let currentUser = null;       // firebase.User | null
@@ -188,6 +191,18 @@ function syncSubscribe(planId) {
     .onSnapshot(doc => {
       if (!doc.exists) return;
       planMeta = doc.data();
+      let changed = false;
+      if (planMeta.ownerName && planMeta.ownerName !== 'Usuario' && state.config.nombreP1 !== planMeta.ownerName) {
+        state.config.nombreP1 = planMeta.ownerName;
+        changed = true;
+      }
+      if (planMeta.partnerName && planMeta.partnerName !== 'Usuario' && state.config.nombreP2 !== planMeta.partnerName) {
+        state.config.nombreP2 = planMeta.partnerName;
+        changed = true;
+      }
+      if (changed) {
+        save();
+      }
       rerenderPlanKeepOpen();
       rerender();
     });
@@ -279,7 +294,7 @@ function sumaPct(){
   return metasCompartidas().filter(m=>c.estrategia==='simultaneo'||m.tipo!=='imprevistos').reduce((s,m)=>s+(m.aportePct||0),0);
 }
 function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
-function computeBase(){const c=state.config;return c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo();}
+function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
 function avgVar(){if(!state.log.length)return 2000000;return state.log.reduce((s,e)=>s+e.p1+e.p2,0)/state.log.length;}
 function computeTotal(){return metasCompartidas().reduce((s,m)=>s+m.saldo,0)+metaPersonal(state.config.perfil).saldo;}
 function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
@@ -370,6 +385,9 @@ function distribuirAhorro(monto, esEspecial = false){
 const RENDER=[renderInicio,renderMetas,renderCerrar,renderFlujo,renderPlan];
 function go(t){
   curTab=t;detailKey=null;
+  if(t===2 && !selectedMonth) {
+    selectedMonth = curMonth();
+  }
   $('mainnav').classList.remove('hide');
   document.querySelectorAll('.nt').forEach((b,i)=>b.classList.toggle('on',i===t));
   ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(id=>$(id).classList.remove('on'));
@@ -381,6 +399,19 @@ function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[
 $('mainnav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b)go(+b.dataset.t);});
 // Formato de miles en vivo en los campos de plata (clase .money)
 document.addEventListener('input',e=>{
+  const el=e.target;
+  if(!el||!el.classList||!el.classList.contains('money'))return;
+  const d=el.value.replace(/\D/g,'');
+  el.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+});
+document.addEventListener('focusin',e=>{
+  const el=e.target;
+  if(!el||!el.classList||!el.classList.contains('money'))return;
+  const val=parse(el.value);
+  el.value=val?String(val):'';
+  el.select();
+});
+document.addEventListener('focusout',e=>{
   const el=e.target;
   if(!el||!el.classList||!el.classList.contains('money'))return;
   const d=el.value.replace(/\D/g,'');
@@ -412,10 +443,7 @@ function renderInicio(){
     <div><div class="k" style="color:var(--gb)">Proyección</div><div class="num" style="font-size:15px;color:var(--cream);line-height:1.2">${proyTxt}</div></div></div></div>
 ${drawSavingsDonut()}
 ${drawFixedBudgetCard()}
-${drawSavingsHistoryCard()}
-<button class="btn" id="btnMes" style="margin-top:12px">Aportar al plan</button>
-<div class="hint" style="text-align:center;color:rgba(246,241,230,.5);margin-top:8px">Aquí solo se mira. Para editar, entra a Metas.</div>`;
-  $('btnMes').onclick=()=>go(2);
+${drawSavingsHistoryCard()}`;
 }
 function heroMeta(m){
   const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):0,falta=Math.max(0,obj-m.saldo);
@@ -524,6 +552,13 @@ function drawSavingsDonut() {
 
 function drawFixedBudgetCard() {
   const c = state.config;
+  if (c.soloAhorroDirecto) {
+    return `<div class="card dark" style="padding:18px 16px;">
+      <div class="k">Ahorro Fijo Mensual</div>
+      <div class="num big" style="font-size:24px; margin-top:2px;">${fmt(c.ahorroDirecto)}</div>
+      <div class="muted sm" style="margin-top:2px;">Monto base destinado a las metas compartidas</div>
+    </div>`;
+  }
   const totalIngresos = c.nominaP1 + c.nominaP2;
   if (totalIngresos <= 0) return '';
 
@@ -714,7 +749,7 @@ function renderMetas(){
   h+='<div class="stitle">Personal</div>'+card(metaPersonal(state.config.perfil));
   h+=`<div style="height:72px;flex-shrink:0;"></div>
   <div style="position:sticky;bottom:0;background:linear-gradient(to top, var(--gd) 85%, transparent);padding:20px 0 16px;z-index:20;margin-top:auto">
-    ${canEditShared() ? '<button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>' : '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.5);font-weight:600;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px;">Rol: Lector (Solo Lectura)</div>'}
+    ${canEditShared() ? '<button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>' : '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;">Rol: Lector (Solo Lectura)</div>'}
   </div>`;
   $('r1').innerHTML=h;
   const helpBtn = $('helpPrioBtn');
@@ -1273,15 +1308,15 @@ function computeReparto(g,a){
   const prem=comb*c.pctPremio/100;
   const ahorroVar=comb*(1-c.pctPremio/100);
   const ahorro=base+ahorroVar;
-  const gastosDia=gastosFijosTotal();
+  const gastosDia=c.soloAhorroDirecto ? 0 : gastosFijosTotal();
   const pf1=premioSplitFactor('p1',{p1:g,p2:a});
   const pf2=1-pf1;
-  const gustosPareja=c.planPareja;
-  const gustosP1=c.libreP1+prem*pf1;
-  const gustosP2=c.libreP2+prem*pf2;
+  const gustosPareja=c.soloAhorroDirecto ? 0 : c.planPareja;
+  const gustosP1=c.soloAhorroDirecto ? (prem*pf1) : (c.libreP1+prem*pf1);
+  const gustosP2=c.soloAhorroDirecto ? (prem*pf2) : (c.libreP2+prem*pf2);
   const gustos=gustosPareja+gustosP1+gustosP2;
   const dist=distribuirAhorro(ahorro);
-  return {base,comb,prem,ahorro,gastosDia,gustos,gustosPareja,gustosP1,gustosP2,dist,nom:c.nominaP1+c.nominaP2,entra:c.nominaP1+c.nominaP2+comb};
+  return {base,comb,prem,ahorro,gastosDia,gustos,gustosPareja,gustosP1,gustosP2,dist,nom:c.soloAhorroDirecto ? 0 : (c.nominaP1+c.nominaP2),entra:c.soloAhorroDirecto ? (base+comb) : (c.nominaP1+c.nominaP2+comb)};
 }
 function renderCerrar(){
   const c=state.config;
@@ -1324,7 +1359,7 @@ function renderCerrar(){
 
   $('r2').innerHTML=`
 <header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
-<label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${curMonth()}" style="margin-top:4px"></label>
+<label class="lbl" style="margin-bottom:10px">Mes<input class="sf" id="mMes" type="month" value="${selectedMonth}" style="margin-top:4px"></label>
 ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
@@ -1348,7 +1383,7 @@ ${canEdit ? `<details id="detEspecial" class="card" style="margin-bottom:8px;pad
 ${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;">⚠️ <b>Rol: Lector</b>. Solo los editores autorizados pueden realizar aportes al plan.</div>` : ''}
 <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
   function updateMesDisplay(){const v=$('mMes').value;const d=$('mMesDisplay');if(d)d.textContent=fmtMes(v)||v;}
-  $('mMes').addEventListener('change',updateMesDisplay);
+  $('mMes').addEventListener('change',(e)=>{selectedMonth=e.target.value;updateMesDisplay();drawFlow();});
   updateMesDisplay();
   $('mApply').onclick=aplicar;
   $('iSave').onclick=addIngreso;
@@ -1412,16 +1447,16 @@ function drawFlow(animate){
   const recibe=metasCompartidas().map(m=>({m,v:r.dist[m.id]||0})).filter(x=>x.v>0.5);
   const ah=Math.max(1,r.ahorro);
   
-  // Habilitar o deshabilitar botón Aportar si hay ahorro negativo
+  // Habilitar o deshabilitar botón Aportar si hay ahorro negativo o es Lector
   const btnApply = $('mApply');
   if (btnApply) {
-    btnApply.disabled = r.ahorro < 0;
+    btnApply.disabled = r.ahorro < 0 || !canEditShared();
   }
 
   let h='<div class="casc'+(animate?'':' nofade')+'">';
   if(r.ahorro < 0) {
     h += `<div style="background:rgba(122,34,34,0.08); border:1px solid #7a2222; padding:12px 14px; border-radius:12px; font-size:13px; color:#5a1919; line-height:1.45; margin-bottom:12px;">
-      ⚠️ <b>Ahorro mensual negativo (${fmt(r.ahorro)})</b>: Sus gastos y dinero libre superan los ingresos de este mes. Ajusten las cifras en <b>Flujo</b> o agreguen ingresos extras para poder aportar al plan.
+      ⚠️ <b>Ahorro mensual negativo (${fmt(r.ahorro)})</b>: Sus gastos y dinero libre superan los ingresos de este mes. Ajusten las cifras en <b>Presupuesto</b> o agreguen ingresos extras para poder aportar al plan.
     </div>`;
   }
   h+=`<div class="inc-row"><span class="inc-name">Entra este mes</span><span class="inc-val num">${fmt(totalEntra)}</span></div>`;
@@ -1516,6 +1551,7 @@ function drawFlow(animate){
   el.innerHTML=h;
 }
 function aplicar(){
+  if (!canEditShared()) { flash('No tienes permisos para aportar'); return; }
   const mes=$('mMes').value;if(!mes){flash('Elige el mes');return;}
   const ex=state.log.find(e=>e.mes===mes);
   if(ex&&ex.aplicado){if(!confirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.'))return;}
@@ -1629,54 +1665,113 @@ function renderFlujo(){
   const pL2=total?Math.round(c.libreP2/total*100):0;
   const pAh=Math.max(0,100-pGas-pPP-pL1-pL2);
   const dis = !canEditShared() ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
+  
+  let selectorHtml = `
+    <div class="seg dark-seg" style="margin-bottom:16px;">
+      <button id="flujoCalc" class="${!c.soloAhorroDirecto?'on':''}" ${dis}>Calcular con ingresos y gastos</button>
+      <button id="flujoDirect" class="${c.soloAhorroDirecto?'on':''}" ${dis}>Fijar solo el ahorro</button>
+    </div>
+  `;
+
+  let body = '';
+  if (c.soloAhorroDirecto) {
+    body = `
+      <div class="card dark">
+        <div class="k">Ahorro base mensual</div>
+        <div class="num big" id="flujoBase">${fmt(base)}</div>
+        <div class="muted sm" style="margin-top:4px">Monto fijo destinado al ahorro colectivo</div>
+      </div>
+      <div class="stitle">Configuración del Ahorro</div>
+      <div class="card">
+        <label class="lbl">Ahorro mensual conjunto</label>
+        <input class="sf money" id="pAhorroDirecto" inputmode="numeric" value="${fmt(c.ahorroDirecto)}" style="margin-top:6px" ${dis}>
+        <div class="hint">Este es el monto fijo que destinarán al ahorro colectivo cada mes.</div>
+      </div>
+    `;
+  } else {
+    body = `
+      <div class="card dark">
+        <div class="k">Ahorro base mensual</div>
+        <div class="num big" id="flujoBase">${fmt(base)}</div>
+        <div class="muted sm" style="margin-top:4px">Nóminas − gastos − gustos</div>
+        <div class="stack" style="margin-top:12px;background:rgba(246,241,230,.06)">
+          <span class="st-seg" style="width:${pGas}%;background:#8a7f70"></span>
+          <span class="st-seg st-seg-pp" style="width:${pPP}%"></span>
+          <span class="st-seg st-seg-p1" style="width:${pL1}%"></span>
+          <span class="st-seg st-seg-p2" style="width:${pL2}%"></span>
+          <span class="st-seg" style="flex:1;background:#3d8c64"></span>
+        </div>
+        <div style="font-size:12px;color:rgba(246,241,230,.6);display:flex;justify-content:space-between;margin-top:4px">
+          <span>Gastos ${pGas}%</span><span>Gustos ${pPP+pL1+pL2}%</span><span style="color:var(--gb);font-weight:700">Ahorro ${pAh}%</span>
+        </div>
+      </div>
+      <div class="stitle">Nóminas netas</div>
+      <div class="card">
+        <label class="lbl">Nómina neta de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+        <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px" ${dis}>
+        <label class="lbl" style="margin-top:12px">Nómina neta de ${c.nombreP2}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+        <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px" ${dis}>
+      </div>
+      <div class="stitle">Gastos del hogar</div>
+      <div class="card">
+        <label class="lbl">Total gastos fijos</label>
+        <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px" ${dis}>
+        <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
+      </div>
+      <div class="stitle">Gustos · para disfrutar</div>
+      <div class="card">
+        <label class="lbl">En pareja (citas, salidas…)</label>
+        <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px" ${dis}>
+        <div class="row2" style="margin-top:12px">
+          <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px" ${dis}></label>
+          <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px" ${dis}></label>
+        </div>
+        <div class="hint">Lo de "en pareja" se gasta juntos; el "libre" de cada uno va a su bolsillo sin rendir cuentas.</div>
+      </div>
+    `;
+  }
+
   $('r3').innerHTML=`
-<header><div class="ey">Presupuesto mensual</div><h1>Flujo</h1></header>
-<div class="card dark">
-  <div class="k">Ahorro base mensual</div>
-  <div class="num big" id="flujoBase">${fmt(base)}</div>
-  <div class="muted sm" style="margin-top:4px">Nóminas − gastos − gustos</div>
-  <div class="stack" style="margin-top:12px;background:rgba(246,241,230,.06)">
-    <span class="st-seg" style="width:${pGas}%;background:#8a7f70"></span>
-    <span class="st-seg st-seg-pp" style="width:${pPP}%"></span>
-    <span class="st-seg st-seg-p1" style="width:${pL1}%"></span>
-    <span class="st-seg st-seg-p2" style="width:${pL2}%"></span>
-    <span class="st-seg" style="flex:1;background:#3d8c64"></span>
-  </div>
-  <div style="font-size:12px;color:rgba(246,241,230,.6);display:flex;justify-content:space-between;margin-top:4px">
-    <span>Gastos ${pGas}%</span><span>Gustos ${pPP+pL1+pL2}%</span><span style="color:var(--gb);font-weight:700">Ahorro ${pAh}%</span>
-  </div>
-</div>
-<div class="stitle">Nóminas netas</div>
-<div class="card">
-  <label class="lbl">Nómina neta de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
-  <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px" ${dis}>
-  <label class="lbl" style="margin-top:12px">Nómina neta de ${c.nombreP2}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
-  <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px" ${dis}>
-</div>
-<div class="stitle">Gastos del hogar</div>
-<div class="card">
-  <label class="lbl">Total gastos fijos</label>
-  <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px" ${dis}>
-  <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
-</div>
-<div class="stitle">Gustos · para disfrutar</div>
-<div class="card">
-  <label class="lbl">En pareja (citas, salidas…)</label>
-  <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px" ${dis}>
-  <div class="row2" style="margin-top:12px">
-    <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px" ${dis}></label>
-    <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px" ${dis}></label>
-  </div>
-  <div class="hint">Lo de "en pareja" se gasta juntos; el "libre" de cada uno va a su bolsillo sin rendir cuentas.</div>
-</div>`;
+<header><div class="ey">Presupuesto mensual</div><h1>Presupuesto</h1></header>
+${selectorHtml}
+${body}`;
   attachFlujo();
 }
+
 function attachFlujo(){
   const c=state.config;
-  const money=(id,key)=>{const el=$(id);if(!el)return;
-    el.addEventListener('focus',()=>{el.value=String(c[key]||0);el.select();});
-    el.addEventListener('blur',()=>{c[key]=parse(el.value);save();rerender();});};
-  money('pN1','nominaP1');money('pN2','nominaP2');money('pGas','gastos');money('pPP','planPareja');money('pL1','libreP1');money('pL2','libreP2');
+  const dis = !canEditShared();
+  if (dis) return;
+  
+  const fCalc = $('flujoCalc');
+  if (fCalc) {
+    fCalc.onclick = () => {
+      c.soloAhorroDirecto = false;
+      save();
+      rerender();
+    };
+  }
+  const fDirect = $('flujoDirect');
+  if (fDirect) {
+    fDirect.onclick = () => {
+      c.soloAhorroDirecto = true;
+      save();
+      rerender();
+    };
+  }
+
+  if (c.soloAhorroDirecto) {
+    const el = $('pAhorroDirecto');
+    if (el) {
+      el.addEventListener('focus', () => { el.value = String(c.ahorroDirecto || 0); el.select(); });
+      el.addEventListener('blur', () => { c.ahorroDirecto = parse(el.value); save(); rerender(); });
+    }
+  } else {
+    const money=(id,key)=>{const el=$(id);if(!el)return;
+      el.addEventListener('focus',()=>{el.value=String(c[key]||0);el.select();});
+      el.addEventListener('blur',()=>{c[key]=parse(el.value);save();rerender();});};
+    money('pN1','nominaP1');money('pN2','nominaP2');money('pGas','gastos');money('pPP','planPareja');money('pL1','libreP1');money('pL2','libreP2');
+  }
 }
 
 /* =========================================================
@@ -1693,6 +1788,22 @@ function renderPlan(){
   const detInvitacionOpen = $('detInvitacion') ? $('detInvitacion').hasAttribute('open') : false;
 
   const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+  let perfilHtml = '';
+  if (currentUser) {
+    perfilHtml = `
+      <div style="background:rgba(246,241,230,.03);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px;font-size:13.5px;color:var(--ink);">
+        Perfil asignado por tu cuenta: <b style="color:var(--gb)">Soy ${perfilNombre(c.perfil)}</b>
+      </div>
+      <div class="hint" style="margin-top:6px">Como iniciaste sesión, tu perfil está vinculado a tu cuenta de Google/Correo y no se puede cambiar desde este dispositivo.</div>
+    `;
+  } else {
+    perfilHtml = `
+      <div class="seg" style="margin-top:8px">
+        <button id="pfG" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button>
+        <button id="pfA" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button>
+      </div>
+    `;
+  }
   let installHtml = '';
   if (!isCapacitor) {
     installHtml = `
@@ -1786,12 +1897,12 @@ function renderPlan(){
         <div style="background:rgba(28,58,44,0.03);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;">
           <div class="k" style="margin-bottom:4px;color:var(--gs);">Conectado al Plan de</div>
           <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${ownerEmail}</div>
-          <div style="margin-top:10px;display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;font-weight:700;color:var(--gs);">Tu Rol:</span>
-            ${isViewer
-              ? `<span class="pill" style="background:rgba(122,34,34,0.08);color:#7a2222;border:1px solid rgba(122,34,34,0.15);text-transform:none;letter-spacing:normal;padding:2px 7px;">Lector (Solo Ver)</span>`
-              : `<span class="pill" style="background:rgba(47,90,68,0.15);color:var(--green);border:1px solid rgba(47,90,68,0.25);text-transform:none;letter-spacing:normal;padding:2px 7px;">Editor</span>`
-            }
+          <div style="margin-top:10px;">
+            <label class="lbl" style="font-size:11px;margin-bottom:6px;">Tu rol en el plan:</label>
+            <div class="seg dark-seg" style="margin-top:0;opacity:0.85;pointer-events:none;">
+              <button class="${!isViewer ? 'on' : ''}">Editor</button>
+              <button class="${isViewer ? 'on' : ''}">Lector</button>
+            </div>
           </div>
           <div class="hint" style="margin-top:8px;font-size:11px;line-height:1.4;">
             ${isViewer
@@ -1886,7 +1997,7 @@ function renderPlan(){
  
 <details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary>Perfil de este teléfono</summary><div class="dpad">
   <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Tú ves y llenas tu bolsillo personal.</div>
-  <div class="seg" style="margin-top:8px"><button id="pfG" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button><button id="pfA" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button></div>
+  ${perfilHtml}
 </div></details>
  
 <details id="detInvitacion" ${detInvitacionOpen ? 'open' : ''}><summary>Sincronizar y Conectar Pareja</summary><div class="dpad">
@@ -1914,10 +2025,26 @@ function attachPlan(){
   $('estSeq').onclick=()=>{c.estrategia='secuencial';save();rerenderPlanKeepOpen();};
   $('estSim').onclick=()=>{c.estrategia='simultaneo';save();rerenderPlanKeepOpen();};
   $('estCas').onclick=()=>{c.estrategia='cascada';save();rerenderPlanKeepOpen();};
-  $('pfG').onclick=()=>{c.perfil='p1';save();rerenderPlanKeepOpen();};
-  $('pfA').onclick=()=>{c.perfil='p2';save();rerenderPlanKeepOpen();};
-  $('pNom1').addEventListener('blur',()=>{c.nombreP1=$('pNom1').value.trim()||'Persona 1';save();});
-  $('pNom2').addEventListener('blur',()=>{c.nombreP2=$('pNom2').value.trim()||'Persona 2';save();});
+  if (!currentUser) {
+    $('pfG').onclick=()=>{c.perfil='p1';save();rerenderPlanKeepOpen();};
+    $('pfA').onclick=()=>{c.perfil='p2';save();rerenderPlanKeepOpen();};
+  }
+  $('pNom1').addEventListener('blur',()=>{
+    const newName=$('pNom1').value.trim()||'Persona 1';
+    c.nombreP1=newName;
+    save();
+    if (currentUser && currentPlanId && isOwner) {
+      db.collection('meta').doc(currentPlanId).update({ ownerName: newName }).catch(e => {});
+    }
+  });
+  $('pNom2').addEventListener('blur',()=>{
+    const newName=$('pNom2').value.trim()||'Persona 2';
+    c.nombreP2=newName;
+    save();
+    if (currentUser && currentPlanId) {
+      db.collection('meta').doc(currentPlanId).update({ partnerName: newName }).catch(e => {});
+    }
+  });
   
   const bCopyCode = $('bCopyCode');
   if (bCopyCode) {
@@ -2174,7 +2301,19 @@ function rerenderPlanKeepOpen(){renderPlan();}
    ========================================================= */
 let obStep=0,obMetaTipo='sueno',obReparto=[{n:'Renta variable',pct:50},{n:'Renta fija',pct:30},{n:'Reserva',pct:20}];
 const OB_TOTAL=9;
-function startOnboarding(){obStep=0;$('onb').classList.add('on');renderOb();}
+function startOnboarding(){
+  if (currentUser) {
+    if (localStorage.getItem('isInvited') === 'true') {
+      obStep = 2;
+    } else {
+      obStep = 1;
+    }
+  } else {
+    obStep = 0;
+  }
+  $('onb').classList.add('on');
+  renderOb();
+}
 function obProgress(){$('obBar').style.width=Math.round((obStep)/(OB_TOTAL-1)*100)+'%';}
 function renderOb(){
   obProgress();
@@ -2182,6 +2321,9 @@ function renderOb(){
   $('obNext').style.display=obStep===0?'none':'block';
   $('obSkip').style.display=(obStep===0 || localStorage.getItem('isInvited') === 'true')?'none':'block';
   $('obNext').textContent=obStep===OB_TOTAL-1?'Empezar':'Continuar';
+  const minStep = (localStorage.getItem('isInvited') === 'true') ? 2 : 1;
+  const backBtn = $('obBack');
+  if (backBtn) backBtn.style.display = (obStep > minStep) ? 'block' : 'none';
   let h='';
   if(obStep===0){
     const isInvited = localStorage.getItem('isInvited') === 'true' || new URLSearchParams(window.location.search).has('plan');
@@ -2257,21 +2399,33 @@ function renderOb(){
       <div class="ob-field"><div class="seg dark-seg"><button id="obPf1" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1}</button><button id="obPf2" class="${c.perfil==='p2'?'on':''}">Soy ${c.nombreP2}</button></div></div></div>`;
   }else if(obStep===3){
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 3 de 7</div>
-      <div class="ob-h">¿Cuánto les llega<br>a la cuenta?</div>
-      <div class="ob-p">Pongan la <b>nómina neta</b>: lo que realmente transfieren a su cuenta después de descontar salud y pensión. Los gastos del hogar en una sola cifra.</div>
-      <div class="ob-field"><label class="lbl">Nómina neta de ${c.nombreP1}</label><input class="amt money" id="obN1" inputmode="numeric" value="${c.nominaP1?fmt(c.nominaP1):''}" placeholder="$0"></div>
-      <div class="ob-field"><label class="lbl">Nómina neta de ${c.nombreP2}</label><input class="amt money" id="obN2" inputmode="numeric" value="${c.nominaP2?fmt(c.nominaP2):''}" placeholder="$0"></div>
-      <div class="ob-field"><label class="lbl">Gastos del mes (arriendo, servicios, mercado…)</label><input class="amt money" id="obGas" inputmode="numeric" value="${c.gastos?fmt(c.gastos):''}" placeholder="$0"></div></div>`;
+      <div class="ob-h">¿Cómo quieren<br>armar el plan?</div>
+      <div class="ob-p">Pueden calcular el ahorro restando gastos de sus ingresos, o ingresar directamente un monto fijo mensual de ahorro.</div>
+      <div class="seg dark-seg" style="margin-top:14px;margin-bottom:14px;">
+        <button id="obCalcFlow" class="${!c.soloAhorroDirecto?'on':''}">Ingresos y Gastos</button>
+        <button id="obDirectFlow" class="${c.soloAhorroDirecto?'on':''}">Solo Ahorro</button>
+      </div>`;
+    if (c.soloAhorroDirecto) {
+      h+=`<div class="ob-field">
+        <label class="lbl">¿Cuánto quieren ahorrar al mes en total?</label>
+        <input class="amt money" id="obAhorroDirecto" inputmode="numeric" value="${c.ahorroDirecto?fmt(c.ahorroDirecto):''}" placeholder="$1.000.000">
+      </div>`;
+    } else {
+      h+=`<div class="ob-field"><label class="lbl">Nómina neta de ${c.nombreP1}</label><input class="amt money" id="obN1" inputmode="numeric" value="${c.nominaP1?fmt(c.nominaP1):''}" placeholder="$3.000.000"></div>
+      <div class="ob-field"><label class="lbl">Nómina neta de ${c.nombreP2}</label><input class="amt money" id="obN2" inputmode="numeric" value="${c.nominaP2?fmt(c.nominaP2):''}" placeholder="$3.000.000"></div>
+      <div class="ob-field"><label class="lbl">Gastos del mes (arriendo, servicios, mercado…)</label><input class="amt money" id="obGas" inputmode="numeric" value="${c.gastos?fmt(c.gastos):''}" placeholder="$2.365.000"></div>`;
+    }
+    h+=`</div>`;
   }else if(obStep===4){
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 4 de 7</div>
       <div class="ob-h">¿Cuánto apartan<br>para disfrutar?</div>
       <div class="ob-p">Además del ahorro, separen algo para vivir bien. Lo de pareja se gasta juntos; lo libre de cada uno va a su bolsillo sin rendir cuentas.</div>
-      <div class="ob-field"><label class="lbl">En pareja (citas, salidas…)</label><input class="amt money" id="obPP" inputmode="numeric" value="${c.planPareja?fmt(c.planPareja):''}" placeholder="$0"></div>
+      <div class="ob-field"><label class="lbl">En pareja (citas, salidas…)</label><input class="amt money" id="obPP" inputmode="numeric" value="${c.planPareja?fmt(c.planPareja):''}" placeholder="$1.000.000"></div>
       <div class="ob-field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label class="lbl">Libre de ${c.nombreP1}<input class="amt money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$0" style="margin-top:4px"></label>
-        <label class="lbl">Libre de ${c.nombreP2}<input class="amt money" id="obL2" inputmode="numeric" value="${c.libreP2?fmt(c.libreP2):''}" placeholder="$0" style="margin-top:4px"></label>
+        <label class="lbl">Libre de ${c.nombreP1}<input class="amt money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$400.000" style="margin-top:4px"></label>
+        <label class="lbl">Libre de ${c.nombreP2}<input class="amt money" id="obL2" inputmode="numeric" value="${c.libreP2?fmt(c.libreP2):''}" placeholder="$400.000" style="margin-top:4px"></label>
       </div>
-      <div class="hint" style="margin-top:10px">Pueden dejarlo en $0 y ajustarlo después en Mi plan.</div>
+      <div class="hint" style="margin-top:10px">Pueden dejarlo en $0 y ajustarlo después en Presupuesto.</div>
       </div>`;
   }else if(obStep===5){
     h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 5 de 7</div>
@@ -2323,7 +2477,7 @@ function renderOb(){
         <button class="btn sm ghost" id="obRepartoAdd" style="margin-top:6px">+ Agregar tipo</button>
         <div class="hint" style="margin-top:4px;color:${_rSum!==100&&obReparto.length?'#a23':'var(--gs)'}">Suma: ${_rSum}%${obReparto.length&&_rSum!==100?' · debería sumar 100%':''}</div>
       </div>
-      <div class="ob-field"><label class="lbl">¿Cuánto necesitan? <span style="font-weight:400;opacity:.7">(opcional)</span></label><input class="amt money" id="obMetaObj" inputmode="numeric" placeholder="$0"></div>
+      <div class="ob-field"><label class="lbl">¿Cuánto necesitan? <span style="font-weight:400;opacity:.7">(opcional)</span></label><input class="amt money" id="obMetaObj" inputmode="numeric" placeholder="$15.000.000"></div>
       <div class="hint" style="margin-top:14px">Si aún no saben la cifra exacta, déjenlo en $0 y la ajustan después.</div>
       </div>`;
   }else if(obStep===8){
@@ -2480,6 +2634,13 @@ function attachOb(){
     $('obPf1').onclick=()=>{c.perfil='p1';renderOb();};
     $('obPf2').onclick=()=>{c.perfil='p2';renderOb();};
   }
+  if(obStep===3){
+    $('obCalcFlow').onclick=()=>{c.soloAhorroDirecto=false;renderOb();};
+    $('obDirectFlow').onclick=()=>{
+      c.soloAhorroDirecto=true;
+      renderOb();
+    };
+  }
   if(obStep===5){
     const btnHint=$('obEstHint');
     const setEst=(e)=>{
@@ -2535,7 +2696,13 @@ function attachOb(){
 function obSaveStep(){
   const c=state.config;
   if(obStep===1){c.nombreP1=$('obNom1').value.trim()||'Persona 1';c.nombreP2=$('obNom2').value.trim()||'Persona 2';}
-  if(obStep===3){c.nominaP1=parse($('obN1').value)||c.nominaP1;c.nominaP2=parse($('obN2').value)||c.nominaP2;const gv=parse($('obGas').value);if(gv)c.gastos=gv;}
+  if(obStep===3){
+    if (c.soloAhorroDirecto) {
+      c.ahorroDirecto=parse($('obAhorroDirecto').value)||c.ahorroDirecto;
+    } else {
+      c.nominaP1=parse($('obN1').value)||c.nominaP1;c.nominaP2=parse($('obN2').value)||c.nominaP2;const gv=parse($('obGas').value);if(gv)c.gastos=gv;
+    }
+  }
   if(obStep===4){const pp=parse($('obPP').value);if(pp)c.planPareja=pp;const l1=parse($('obL1').value);if(l1)c.libreP1=l1;const l2=parse($('obL2').value);if(l2)c.libreP2=l2;}
   if(obStep===6){const pct=parseInt($('obPct').value)||c.pctPremio;c.pctPremio=Math.max(0,Math.min(100,pct));}
   if(obStep===7){
@@ -2590,9 +2757,32 @@ $('obNext').onclick=()=>{
     return;
   }
   if(obStep>=OB_TOTAL-1){finishOnboarding();return;}
-  obStep++;renderOb();
+  if(obStep===3 && state.config.soloAhorroDirecto){
+    obStep=5;
+  } else {
+    obStep++;
+  }
+  renderOb();
 };
-$('obSkip').onclick=()=>finishOnboarding();
+$('obBack').onclick=()=>{
+  obSaveStep();
+  if(obStep===5 && state.config.soloAhorroDirecto){
+    obStep=3;
+  } else {
+    obStep--;
+  }
+  renderOb();
+};
+$('obSkip').onclick=()=>{
+  state.config.nominaP1=3000000;
+  state.config.nominaP2=3000000;
+  state.config.gastos=2365000;
+  state.config.planPareja=1000000;
+  state.config.libreP1=400000;
+  state.config.libreP2=400000;
+  state.config.ahorroDirecto=1000000;
+  finishOnboarding();
+};
 function finishOnboarding(){
   state.config.onboarded=true;
   $('onb').classList.remove('on');
@@ -2664,11 +2854,19 @@ auth.onAuthStateChanged(async user => {
         const data = metaDoc.data();
         isOwner = data.ownerUid === user.uid;
         if (isOwner) {
+          state.config.perfil = 'p1';
+          if (user.displayName && (state.config.nombreP1 === 'Persona 1' || !state.config.nombreP1)) {
+            state.config.nombreP1 = user.displayName;
+          }
           await db.collection('meta').doc(currentPlanId).update({
             ownerEmail: user.email || 'Usuario de Google',
             ownerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario')
           }).catch(e => {});
         } else {
+          state.config.perfil = 'p2';
+          if (user.displayName && (state.config.nombreP2 === 'Persona 2' || !state.config.nombreP2)) {
+            state.config.nombreP2 = user.displayName;
+          }
           localStorage.setItem('isInvited', 'true');
           await db.collection('meta').doc(currentPlanId).update({
             partnerUid: user.uid,
@@ -2681,6 +2879,10 @@ auth.onAuthStateChanged(async user => {
         }
       } else {
         isOwner = true;
+        state.config.perfil = 'p1';
+        if (user.displayName && (state.config.nombreP1 === 'Persona 1' || !state.config.nombreP1)) {
+          state.config.nombreP1 = user.displayName;
+        }
         await db.collection('meta').doc(currentPlanId).set({
           ownerUid: user.uid,
           ownerEmail: user.email || 'Usuario de Google',
