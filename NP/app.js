@@ -725,7 +725,9 @@ document.addEventListener('focusout',e=>{
    INICIO (solo lectura)
    ========================================================= */
 function renderInicio(){
-  const c=state.config,total=computeTotal();
+  const c=state.config;
+  const totalCompartidas = metasCompartidas().reduce((s,m)=>s+m.saldo,0);
+  const totalIndividuales = metasIndividuales(c.perfil).reduce((s,m)=>s+m.saldo,0);
   const prio=getMetaPrioritaria();
   const est=computeBase()+avgVar()*(1-c.pctPremio/100);
   let faseTxt,proyTxt;
@@ -747,10 +749,22 @@ function renderInicio(){
       indivs.map(m => heroMeta(m)).join('');
   }
 
+  const labelText = c.modo === 'individual' ? 'Acumulado en mis metas' : 'Acumulado en metas compartidas';
+  let individualSavingsHtml = '';
+  if (c.modo !== 'individual' && totalIndividuales > 0) {
+    individualSavingsHtml = `
+      <div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center;">
+        <span class="muted sm" style="font-size:12px;">Ahorros individuales</span>
+        <span class="num" style="font-size:16px; color:var(--cream);">${fmt(totalIndividuales)}</span>
+      </div>
+    `;
+  }
+
   $('r0').innerHTML=`
 ${headerHtml}
-<div class="card dark"><div class="k">¿Cómo vamos?</div><div class="num big">${fmt(total)}</div>
-  <div class="muted sm" style="margin-top:4px">${c.modo==='individual'?'Acumulado en mis metas':'Acumulado en todas las metas'}</div>
+<div class="card dark"><div class="k">¿Cómo vamos?</div><div class="num big">${fmt(totalCompartidas)}</div>
+  <div class="muted sm" style="margin-top:4px">${labelText}</div>
+  ${individualSavingsHtml}
   <div class="row2" style="margin-top:14px;border-top:1px solid rgba(246,241,230,.18);padding-top:12px">
     <div><div class="k" style="color:var(--gb)">Etapa</div><div class="num" style="font-size:16px;color:var(--cream)">${faseTxt}</div></div>
     <div><div class="k" style="color:var(--gb)">Proyección</div><div class="num" style="font-size:15px;color:var(--cream);line-height:1.2">${proyTxt}</div></div></div></div>
