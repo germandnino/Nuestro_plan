@@ -310,5 +310,73 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
   color: var(--paper);
 }
 
+/* Mode Selection Cards (Premium) */
+.mode-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+.mode-card {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.mode-card .icon {
+  font-size: 24px;
+}
+.mode-card .title {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--green);
+}
+.mode-card.on {
+  border-color: var(--gold);
+  background: var(--paper);
+  box-shadow: 0 4px 12px rgba(192, 138, 45, 0.12);
+}
+.dark-seg .mode-card {
+  background: rgba(246, 241, 230, 0.05);
+  border-color: rgba(246, 241, 230, 0.15);
+}
+.dark-seg .mode-card .title {
+  color: var(--cream);
+}
+.dark-seg .mode-card.on {
+  background: rgba(246, 241, 230, 0.12);
+  border-color: var(--gb);
+}
+
+/* Transfer controls styling */
+.transfer-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.transfer-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.transfer-row input {
+  flex: 1;
+}
+.transfer-row .btn {
+  flex-shrink: 0;
+  width: auto;
+  margin: 0;
+}
+
+
 
 
