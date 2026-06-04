@@ -181,7 +181,7 @@ function showCustomMonthPicker(currentVal, allowClear = false) {
       if (allowClear) {
         actionsHtml = `
           <div class="modal-actions" style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <button class="btn ghost danger" id="picker-clear" style="margin: 0; padding: 10px 8px; color: #a23;">Borrar</button>
+            <button class="btn ghost" id="picker-clear" style="margin: 0; padding: 10px 8px; border-color: #a23; color: #a23;">Borrar</button>
             <button class="btn ghost" id="picker-cancel" style="margin: 0; padding: 10px 8px;">Cancelar</button>
           </div>
         `;
