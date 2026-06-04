@@ -1829,6 +1829,7 @@ function renderPlan(){
 
   let syncHtml = '';
   let logoutHtml = '';
+  let respaldoHtml = '';
   if (currentUser) {
     const isGoogle = currentUser.providerData && currentUser.providerData.some(p => p.providerId === 'google.com');
     const photoUrl = currentUser.photoURL;
@@ -1942,6 +1943,18 @@ function renderPlan(){
         <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55;margin:0;">Cerrar sesión</button>
       </div>
     `;
+    respaldoHtml = `
+      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
+        <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;">
+          ☁️ <b>Sincronización activa:</b> Tus datos se guardan de forma automática en tu cuenta en la nube. No necesitas respaldos manuales.
+        </div>
+        <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
+        <div class="hint" style="margin-top:6px;font-size:11px;color:rgba(235,94,85,.75)">
+          ⚠️ Esta acción restablecerá tu app local y eliminará permanentemente la información compartida de este plan en la nube.
+        </div>
+        <button class="btn ghost" id="bOnb" style="margin-top:12px" ${dis}>Ver el tutorial otra vez</button>
+      </div></details>
+    `;
   } else {
     syncHtml = `
       <div class="hint" style="margin-top:0;margin-bottom:12px;">Estado: <b style="color:var(--gs);">Modo Local (sin cuenta)</b></div>
@@ -1976,6 +1989,17 @@ function renderPlan(){
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
         <button class="btn ghost" id="btnSettingsInviteCode" style="width:100%;">Tengo un código de invitación</button>
       </div>
+    `;
+    respaldoHtml = `
+      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
+        <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;">
+          📲 <b>Modo Local activo:</b> Tus datos solo se guardan en este teléfono. Genera un respaldo manual para transferir tus datos o no perderlos si cambias de dispositivo.
+        </div>
+        <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp" ${dis}>Restaurar</button>
+        <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
+        <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
+        <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
+      </div></details>
     `;
   }
  
@@ -2016,12 +2040,7 @@ function renderPlan(){
  
 ${installHtml}
  
-<details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
-  <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp" ${dis}>Restaurar</button>
-  <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
-  <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
-  <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
-</div></details>
+${respaldoHtml}
 ${logoutHtml}`;
   attachPlan();
 }
@@ -2248,12 +2267,18 @@ function attachPlan(){
     };
   }
 
-  $('bExp').onclick=()=>{$('bTxt').value=JSON.stringify(state);flash('Respaldo generado');};
-  $('bImp').onclick=()=>{try{const o=JSON.parse($('bTxt').value);if(!o.metas)throw 0;
-    const perfil=c.perfil,miPersonal=JSON.parse(JSON.stringify(metaPersonal(perfil)));
-    state=o;normalize();state.config.perfil=perfil;
-    const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===perfil);if(idx>=0)state.metas[idx]=miPersonal;
-    save();go(0);flash('Respaldo restaurado ✓');}catch(e){flash('Respaldo inválido');}};
+  const bExp = $('bExp');
+  if (bExp) {
+    bExp.onclick=()=>{$('bTxt').value=JSON.stringify(state);flash('Respaldo generado');};
+  }
+  const bImp = $('bImp');
+  if (bImp) {
+    bImp.onclick=()=>{try{const o=JSON.parse($('bTxt').value);if(!o.metas)throw 0;
+      const perfil=c.perfil,miPersonal=JSON.parse(JSON.stringify(metaPersonal(perfil)));
+      state=o;normalize();state.config.perfil=perfil;
+      const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===perfil);if(idx>=0)state.metas[idx]=miPersonal;
+      save();go(0);flash('Respaldo restaurado ✓');}catch(e){flash('Respaldo inválido');}};
+  }
   $('bReset').onclick=()=>{if(!confirm('¿Borrar todos los datos?'))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
