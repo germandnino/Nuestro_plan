@@ -4,6 +4,7 @@ html{height:100%}
 body{font-family:var(--sans);background:var(--gd);color:var(--ink);display:flex;flex-direction:column;height:100dvh;overflow:hidden}
 .sections{flex:1;overflow:hidden;position:relative}
 .sections::after{content:'';position:absolute;bottom:0;left:0;right:0;height:72px;background:linear-gradient(to top,var(--gd) 0%,transparent 100%);pointer-events:none;z-index:50;transition:opacity .2s}
+.sections:has(#s1.on)::after{display:none}
 .sec{position:absolute;inset:0;overflow-y:auto;display:none;padding-bottom:96px}
 .sec.on{display:block}
 .wrap{max-width:480px;margin:0 auto;padding:0 16px}
