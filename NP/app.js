@@ -1870,7 +1870,7 @@ function renderPlan(){
             <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${planMeta.partnerEmail}</div>
             <div style="margin-top:10px;">
               <label class="lbl" style="font-size:11px;margin-bottom:6px;">Permisos de tu pareja:</label>
-              <div class="seg dark-seg" style="margin-top:0;">
+              <div class="seg" style="margin-top:0;">
                 <button id="btnRoleEditor" class="${planMeta.partnerRole !== 'viewer' ? 'on' : ''}">Editor</button>
                 <button id="btnRoleViewer" class="${planMeta.partnerRole === 'viewer' ? 'on' : ''}">Lector</button>
               </div>
@@ -1899,7 +1899,7 @@ function renderPlan(){
           <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${ownerEmail}</div>
           <div style="margin-top:10px;">
             <label class="lbl" style="font-size:11px;margin-bottom:6px;">Tu rol en el plan:</label>
-            <div class="seg dark-seg" style="margin-top:0;opacity:0.85;pointer-events:none;">
+            <div class="seg" style="margin-top:0;opacity:0.85;pointer-events:none;">
               <button class="${!isViewer ? 'on' : ''}">Editor</button>
               <button class="${isViewer ? 'on' : ''}">Lector</button>
             </div>
