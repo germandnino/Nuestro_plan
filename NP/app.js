@@ -999,7 +999,7 @@ function gastosDe(id){return state.gastos.filter(g=>g.meta===id);}
 function renderDetail(){
   const m=metaById(detailKey);if(!m){go(1);return;}
   const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):0,falta=Math.max(0,obj-m.saldo);
-  const canEdit = canEditShared();
+  const canEdit = canEditShared() || (m.tipo === 'personal' && m.dueno === state.config.perfil);
   let body='';
   if(obj){
     body+=`<div class="bar light"><i style="width:${pct.toFixed(1)}%"></i></div>
