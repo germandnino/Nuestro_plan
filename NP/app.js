@@ -1916,16 +1916,14 @@ function renderCerrar(){
   }
 
   $('r2').innerHTML=`
-<header><div class="ey">Aportar al plan</div><h1 id="mMesDisplay" style="font-size:22px"></h1></header>
-<label class="lbl" style="margin-bottom:6px">Mes</label>
-<div style="display:flex; align-items:center; justify-content:space-between; height:42px; background:var(--cream); border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:14px;">
-  <button id="btnPrevMonth" style="background:none; border:none; width:44px; height:100%; font-size:18px; color:var(--green); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">‹</button>
-  <div id="mMesTrigger" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; height:100%; font-weight:700; color:var(--ink);">
-    <span id="mMesText" style="font-family:var(--sans); font-size:14.5px;">${fmtMes(selectedMonth) || selectedMonth}</span>
-    <span style="color:var(--gs); font-size:9px; vertical-align:middle; margin-top:2px;">▼</span>
+<header>
+  <div class="ey">Aportar al plan</div>
+  <div style="display:flex; align-items:center; gap:12px; margin-top:2px;">
+    <button id="btnPrevMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">‹</button>
+    <h1 id="mMesDisplay" style="font-size:26px; margin:0; cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--cream);"></h1>
+    <button id="btnNextMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">›</button>
   </div>
-  <button id="btnNextMonth" style="background:none; border:none; width:44px; height:100%; font-size:18px; color:var(--green); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">›</button>
-</div>
+</header>
 ${especialesPendientes.length ? `<div style="margin-bottom:12px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:0 12px"><div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs);padding-top:10px;margin-bottom:6px">Ingresos adicionales agregados</div>${especialesPendientes.map((ep,i)=>{
   const metaNom=ep.meta==='distribuir'?'Según el plan':(metaById(ep.meta)?metaById(ep.meta).nombre:'Desconocida');
   const pctR=ep.pctRetener||0;
@@ -1952,12 +1950,14 @@ ${canEdit ? `<details id="detEspecial" class="card" style="margin-bottom:8px;pad
 ${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;">⚠️ <b>Rol: Lector</b>. Solo los editores autorizados pueden realizar aportes al plan.</div>` : ''}
 <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Meses cerrados</div>${logH}</div>`;
   function updateMesDisplay(){
-    const t=$('mMesText');
-    if(t)t.textContent=fmtMes(selectedMonth)||selectedMonth;
+    const textVal = fmtMes(selectedMonth)||selectedMonth;
+    const capitalized = textVal.charAt(0).toUpperCase() + textVal.slice(1);
     const d=$('mMesDisplay');
-    if(d)d.textContent=fmtMes(selectedMonth)||selectedMonth;
+    if(d) {
+      d.innerHTML = `<span>${capitalized}</span><span style="color:rgba(246,241,230,0.5); font-size:10px; margin-top:4px; font-weight:normal;">▼</span>`;
+    }
   }
-  const mTrigger = $('mMesTrigger');
+  const mTrigger = $('mMesDisplay');
   if (mTrigger) {
     mTrigger.onclick = async () => {
       const newVal = await showCustomMonthPicker(selectedMonth);
