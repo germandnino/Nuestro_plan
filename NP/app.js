@@ -156,7 +156,7 @@ function customConfirm(message, isDestructive = false) {
 function customPrompt(message, defaultText = '') {
   return showCustomModal({ title: 'Ingresar dato', message, type: 'prompt', placeholder: defaultText });
 }
-function showCustomMonthPicker(currentVal) {
+function showCustomMonthPicker(currentVal, allowClear = false) {
   return new Promise((resolve) => {
     let [year, month] = (currentVal || curMonth()).split('-').map(Number);
     let overlay = $('custom-month-picker-overlay');
@@ -177,6 +177,22 @@ function showCustomMonthPicker(currentVal) {
         gridHtml += `<button class="${btnClass}" data-m="${mVal}">${name}</button>`;
       });
 
+      let actionsHtml = '';
+      if (allowClear) {
+        actionsHtml = `
+          <div class="modal-actions" style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button class="btn ghost danger" id="picker-clear" style="margin: 0; padding: 10px 8px; color: #a23;">Borrar</button>
+            <button class="btn ghost" id="picker-cancel" style="margin: 0; padding: 10px 8px;">Cancelar</button>
+          </div>
+        `;
+      } else {
+        actionsHtml = `
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button class="btn ghost" id="picker-cancel">Cancelar</button>
+          </div>
+        `;
+      }
+
       overlay.innerHTML = `
         <div class="modal-card month-picker-card animate-in">
           <div class="month-picker-header">
@@ -187,9 +203,7 @@ function showCustomMonthPicker(currentVal) {
           <div class="month-picker-grid">
             ${gridHtml}
           </div>
-          <div class="modal-actions" style="margin-top: 16px;">
-            <button class="btn ghost" id="picker-cancel">Cancelar</button>
-          </div>
+          ${actionsHtml}
         </div>
       `;
 
@@ -204,6 +218,17 @@ function showCustomMonthPicker(currentVal) {
           resolve(`${year}-${selectedM}`);
         };
       });
+
+      if (allowClear) {
+        const clearBtn = $('picker-clear');
+        if (clearBtn) {
+          clearBtn.onclick = (e) => {
+            e.stopPropagation();
+            cleanup();
+            resolve('');
+          };
+        }
+      }
 
       $('picker-cancel').onclick = (e) => {
         e.stopPropagation();
@@ -1458,7 +1483,7 @@ function attachMetaForm(editing){
   if(fTrigger) {
     fTrigger.onclick = async () => {
       const currentVal = fTrigger.dataset.val || '';
-      const newVal = await showCustomMonthPicker(currentVal);
+      const newVal = await showCustomMonthPicker(currentVal, true);
       if(newVal !== null) {
         fTrigger.dataset.val = newVal;
         const textEl = $('fFechaText');
