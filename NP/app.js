@@ -2109,7 +2109,7 @@ function drawFlow(animate){
 }
 async function aplicar(){
   if (!canEditShared()) { flash('No tienes permisos para aportar'); return; }
-  const mes=$('mMes').value;if(!mes){flash('Elige el mes');return;}
+  const mes=selectedMonth;if(!mes){flash('Elige el mes');return;}
   const ex=state.log.find(e=>e.mes===mes);
   if(ex&&ex.aplicado){if(!await customConfirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.', false))return;}
   const r=computeReparto(0,0),c=state.config;
@@ -2220,7 +2220,7 @@ async function aplicar(){
   flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓');
 }
 function addIngreso(){
-  const nom=$('iNom').value.trim(),mes=$('mMes')?$('mMes').value:curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
+  const nom=$('iNom').value.trim(),mes=selectedMonth||curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
   if(!nom||!monto){flash('Completa concepto y monto');return;}
   const persona=$('iPersona')?$('iPersona').value:'ambos';
   const pctRaw=$('iPctRetener')?$('iPctRetener').value.trim():'';
@@ -2238,7 +2238,7 @@ function addIngreso(){
 }
 function aplicarIngresoNowFromForm(){
   if (!canEditShared()) { flash('No tienes permisos'); return; }
-  const nom=$('iNom').value.trim(),mes=$('mMes')?$('mMes').value:curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
+  const nom=$('iNom').value.trim(),mes=selectedMonth||curMonth(),monto=parse($('iMonto').value),mid=$('iMeta').value;
   if(!nom||!monto){flash('Completa concepto y monto');return;}
   const persona=$('iPersona')?$('iPersona').value:'ambos';
   const pctRaw=$('iPctRetener')?$('iPctRetener').value.trim():'';
