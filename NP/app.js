@@ -1980,6 +1980,7 @@ function renderPlan(){
         <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;">
           ☁️ <b>Sincronización activa:</b> Tus datos se guardan de forma automática en tu cuenta en la nube. No necesitas respaldos manuales.
         </div>
+        <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(192,138,45,.4);color:var(--gold);margin-bottom:12px;" ${dis}>Reiniciar saldos a $0</button>
         <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
         <div class="hint" style="margin-top:6px;font-size:11px;color:rgba(235,94,85,.75)">
           ⚠️ Esta acción restablecerá tu app local y eliminará permanentemente la información compartida de este plan en la nube.
@@ -2029,6 +2030,7 @@ function renderPlan(){
         </div>
         <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp" ${dis}>Restaurar</button>
         <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
+        <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(192,138,45,.4);color:var(--gold);margin-bottom:12px;" ${dis}>Reiniciar saldos a $0</button>
         <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
         <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
       </div></details>
@@ -2310,6 +2312,27 @@ function attachPlan(){
       state=o;normalize();state.config.perfil=perfil;
       const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===perfil);if(idx>=0)state.metas[idx]=miPersonal;
       save();go(0);flash('Respaldo restaurado ✓');}catch(e){flash('Respaldo inválido');}};
+  }
+  const bResetSaldos = $('bResetSaldos');
+  if (bResetSaldos) {
+    bResetSaldos.onclick = () => {
+      if (!confirm('¿Reiniciar todos los saldos y el historial a $0? Se mantendrán tus metas creadas, nombres, nóminas y gastos fijos configurados.')) return;
+      
+      // Reiniciar saldos de todas las metas (incluyendo las personales)
+      state.metas.forEach(m => {
+        m.saldo = 0;
+        if (m.aportes) m.aportes = []; // limpiar historial de aportes si los hay en personales
+      });
+      
+      // Limpiar historiales y movimientos
+      state.log = [];
+      state.ingresos = [];
+      state.gastos = [];
+      
+      save();
+      rerender();
+      flash('Saldos e historial reiniciados ✓');
+    };
   }
   $('bReset').onclick=()=>{if(!confirm('¿Borrar todos los datos?'))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
