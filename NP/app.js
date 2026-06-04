@@ -440,6 +440,7 @@ function syncSubscribe(planId) {
       state.log = remote.log || [];
       state.ingresos = remote.ingresos || [];
       state.gastos = remote.gastos || [];
+      normalize();
       rerender();
     });
 
@@ -3746,24 +3747,17 @@ auth.onAuthStateChanged(async user => {
     try {
       let planIdToUse = getPlanId();
 
-      // Si no hay datos locales reales (onboarding sin hacer, sin historial y sin metas con saldo),
-      // buscamos si este usuario ya tiene un plan existente en Firestore para cargarlo.
-      const hasLocalData = state.config.onboarded || 
-                           state.metas.some(m => m.tipo !== 'personal' && m.saldo > 0) || 
-                           (state.log && state.log.length > 0);
-
-      if (!hasLocalData) {
-        const ownerQuery = await db.collection('meta').where('ownerUid', '==', user.uid).limit(1).get();
-        if (!ownerQuery.empty) {
-          planIdToUse = ownerQuery.docs[0].id;
+      // Buscamos siempre si este usuario ya tiene un plan existente en Firestore para cargarlo.
+      const ownerQuery = await db.collection('meta').where('ownerUid', '==', user.uid).limit(1).get();
+      if (!ownerQuery.empty) {
+        planIdToUse = ownerQuery.docs[0].id;
+        localStorage.setItem('planId', planIdToUse);
+      } else {
+        const partnerQuery = await db.collection('meta').where('partnerUid', '==', user.uid).limit(1).get();
+        if (!partnerQuery.empty) {
+          planIdToUse = partnerQuery.docs[0].id;
           localStorage.setItem('planId', planIdToUse);
-        } else {
-          const partnerQuery = await db.collection('meta').where('partnerUid', '==', user.uid).limit(1).get();
-          if (!partnerQuery.empty) {
-            planIdToUse = partnerQuery.docs[0].id;
-            localStorage.setItem('planId', planIdToUse);
-            localStorage.setItem('isInvited', 'true');
-          }
+          localStorage.setItem('isInvited', 'true');
         }
       }
 
@@ -3778,21 +3772,27 @@ auth.onAuthStateChanged(async user => {
           if (user.displayName && (state.config.nombreP1 === 'Persona 1' || !state.config.nombreP1)) {
             state.config.nombreP1 = user.displayName;
           }
-          await db.collection('meta').doc(currentPlanId).update({
-            ownerEmail: user.email || 'Usuario de Google',
-            ownerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario')
-          }).catch(e => {});
+          const updates = {
+            ownerEmail: user.email || 'Usuario de Google'
+          };
+          if (!data.ownerName || data.ownerName === 'Usuario' || data.ownerName === 'Persona 1') {
+            updates.ownerName = user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario');
+          }
+          await db.collection('meta').doc(currentPlanId).update(updates).catch(e => {});
         } else {
           state.config.perfil = 'p2';
           if (user.displayName && (state.config.nombreP2 === 'Persona 2' || !state.config.nombreP2)) {
             state.config.nombreP2 = user.displayName;
           }
           localStorage.setItem('isInvited', 'true');
-          await db.collection('meta').doc(currentPlanId).update({
+          const updates = {
             partnerUid: user.uid,
-            partnerEmail: user.email || 'Usuario de Google',
-            partnerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario')
-          }).catch(e => {});
+            partnerEmail: user.email || 'Usuario de Google'
+          };
+          if (!data.partnerName || data.partnerName === 'Usuario' || data.partnerName === 'Persona 2') {
+            updates.partnerName = user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario');
+          }
+          await db.collection('meta').doc(currentPlanId).update(updates).catch(e => {});
           if (!state.config.onboarded) {
             obStep = 2;
           }
@@ -3803,10 +3803,13 @@ auth.onAuthStateChanged(async user => {
         if (user.displayName && (state.config.nombreP1 === 'Persona 1' || !state.config.nombreP1)) {
           state.config.nombreP1 = user.displayName;
         }
+        const initialOwnerName = (state.config.nombreP1 && state.config.nombreP1 !== 'Persona 1' && state.config.nombreP1 !== 'Usuario')
+          ? state.config.nombreP1
+          : (user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario'));
         await db.collection('meta').doc(currentPlanId).set({
           ownerUid: user.uid,
           ownerEmail: user.email || 'Usuario de Google',
-          ownerName: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario'),
+          ownerName: initialOwnerName,
           partnerRole: 'editor',
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
