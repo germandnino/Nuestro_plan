@@ -1385,7 +1385,22 @@ function updateDeriv(){
   let txt='';
   const strat = state.config.estrategia;
 
-  if (strat === 'cascada') {
+  if (mForm.dueno) {
+    if(obj&&fecha){
+      const meses=Math.max(1,monthsUntil(fecha));const need=Math.ceil((obj-saldo)/meses);
+      txt=`Para llegar a <b>${fmt(obj)}</b> en ${fmtMes(fecha)} necesitas <b>${fmt(need)}/mes</b>.`;
+      if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} (~${fmt(aporteMes)}/mes) llegarías en ${addMonths(m2)}.`;}
+    }else if(obj&&aporteMes>0){
+      const meses=Math.ceil((obj-saldo)/aporteMes);
+      txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
+    }else if(aporteMes>0&&!obj){
+      txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+    }else if(obj){
+      txt=`Meta de <b>${fmt(obj)}</b> sin aporte mensual definido. Se financiará mediante aportes manuales desde tu bolsillo.`;
+    }else{
+      txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
+    }
+  } else if (strat === 'cascada') {
     if (obj) {
       const falta = Math.max(0, obj - saldo);
       txt = `Estrategia actual: <b>En cascada</b>. Esta meta se llenará al 100% con todo el ahorro disponible (según prioridad) hasta completar los <b>${fmt(obj)}</b> (faltan ${fmt(falta)}).`;
