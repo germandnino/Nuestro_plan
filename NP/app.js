@@ -295,7 +295,7 @@ function sumaPct(){
 }
 function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
 function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
-function avgVar(){if(!state.log.length)return 2000000;return state.log.reduce((s,e)=>s+e.p1+e.p2,0)/state.log.length;}
+function avgVar(){if(!state.log.length)return 0;return state.log.reduce((s,e)=>s+e.p1+e.p2,0)/state.log.length;}
 function computeTotal(){return metasCompartidas().reduce((s,m)=>s+m.saldo,0)+metaPersonal(state.config.perfil).saldo;}
 function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
 function emergenciaPrincipal(){return emergencias()[0]||null;}
@@ -674,6 +674,26 @@ function drawSavingsHistoryCard() {
 /* =========================================================
    METAS (lista unificada + crear/editar)
    ========================================================= */
+/* ---------- estimador de tiempo de metas ---------- */
+function calcularTiempoRestante(m) {
+  if (!m.objetivo || m.saldo >= m.objetivo) return null;
+  const falta = m.objetivo - m.saldo;
+  
+  // 1. Obtener aporte mensual según distribución de ahorro estimado
+  const est = Math.max(0, computeBase() + avgVar() * (1 - state.config.pctPremio / 100));
+  const dist = distribuirAhorro(est);
+  let aporteMes = dist[m.id] || 0;
+  
+  // 2. Si no hay aporte mensual por flujo distribuido, pero la meta tiene un aporte fijo, usamos ese
+  if (aporteMes <= 0 && m.aporteFijo > 0) {
+    aporteMes = m.aporteFijo;
+  }
+  
+  if (aporteMes <= 0) return null;
+  const meses = Math.ceil(falta / aporteMes);
+  return meses;
+}
+
 function metaSub(m){
   if(m.tipo==='personal')return 'Tu premio + libre · privado de tu teléfono';
   let s=[];
@@ -710,6 +730,15 @@ function metaSub(m){
     const rest=Math.max(0,100-sp);
     s.push(`recibe el sobrante (${rest}% del resto)`);
   }
+
+  // Opción 1: Proyección inline al final del subtítulo
+  if (m.objetivo && !isCompleted) {
+    const mRestantes = calcularTiempoRestante(m);
+    if (mRestantes !== null) {
+      s.push(`<span style="color:var(--gb);font-weight:600">~${mRestantes} mes${mRestantes !== 1 ? 'es' : ''}</span>`);
+    }
+  }
+
   return s.join(' · ')||'sin meta';
 }
 function renderMetas(){
@@ -717,6 +746,7 @@ function renderMetas(){
     const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):null;
     const isPersonal = m.tipo === 'personal';
     const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;padding:8px 0;font-size:20px;color:var(--gs);touch-action:none;user-select:none;margin-right:4px">☰</span>`;
+
     return `<div class="card tap" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
       ${dragHandle}
       <div style="flex:1">
@@ -727,6 +757,7 @@ function renderMetas(){
       </div><span class="chev">›</span></div>`;
   };
   let h='<header><div class="ey">Nuestras</div><h1>Metas</h1></header>';
+
   const sp=sumaPct();
   if(sp>0){
     const over=sp>100;
@@ -752,6 +783,7 @@ function renderMetas(){
     ${canEditShared() ? '<button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>' : '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;">Rol: Lector (Solo Lectura)</div>'}
   </div>`;
   $('r1').innerHTML=h;
+
   const helpBtn = $('helpPrioBtn');
   if(helpBtn){
     helpBtn.onclick=(e)=>{
