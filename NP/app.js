@@ -1801,20 +1801,30 @@ function renderHistoryDetail(mes, fromTab) {
         }).join('') : ''}
       </div>
       
-      <div class="stack">
-        <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
-        <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
-        <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
-        <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
-        <span class="st-seg st-seg-a" style="flex:1"></span>
-      </div>
-      
-      <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
-      <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
-      <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
-      ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
-      <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
-      ${histExtraBolsilloP2>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP2)}</b></div>`:''}
+      ${c.modo === 'individual' ? `
+        <div class="stack">
+          <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+          <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+          <span class="st-seg st-seg-a" style="flex:1"></span>
+        </div>
+        <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Mis gastos fijos</span><b>${fmt(r.gastosDia)}</b></div>
+        <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Dinero libre (bolsillo personal)</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
+        ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
+      ` : `
+        <div class="stack">
+          <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+          <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
+          <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+          <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
+          <span class="st-seg st-seg-a" style="flex:1"></span>
+        </div>
+        <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
+        <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
+        <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
+        ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
+        <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
+        ${histExtraBolsilloP2>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP2)}</b></div>`:''}
+      `}
       <div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Ahorro e inversión</span><b>${fmt(ahorro)}</b></div>
       
       ${(()=>{
@@ -2078,18 +2088,28 @@ function drawFlow(animate){
     });
   }
   h+=`</div>`;
-  h+=`<div class="stack">
-      <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-a" style="flex:1"></span></div>`;
-  h+=`<div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>`;
-  h+=`<div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>`;
-  h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1} (bolsillo personal)</span><b>${fmt(r.gustosP1+extraBolsilloP1)}</b></div>`;
-  if(extraBolsilloP1>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP1)}</b></div>`;
-  h+=`<div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2} (bolsillo personal)</span><b>${fmt(r.gustosP2+extraBolsilloP2)}</b></div>`;
-  if(extraBolsilloP2>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP2)}</b></div>`;
+  if (c.modo === 'individual') {
+    h+=`<div class="stack">
+        <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-a" style="flex:1"></span></div>`;
+    h+=`<div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Mis gastos fijos</span><b>${fmt(r.gastosDia)}</b></div>`;
+    h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Dinero libre (bolsillo personal)</span><b>${fmt(r.gustosP1+extraBolsilloP1)}</b></div>`;
+    if(extraBolsilloP1>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP1)}</b></div>`;
+  } else {
+    h+=`<div class="stack">
+        <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
+        <span class="st-seg st-seg-a" style="flex:1"></span></div>`;
+    h+=`<div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>`;
+    h+=`<div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>`;
+    h+=`<div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1} (bolsillo personal)</span><b>${fmt(r.gustosP1+extraBolsilloP1)}</b></div>`;
+    if(extraBolsilloP1>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP1)}</b></div>`;
+    h+=`<div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2} (bolsillo personal)</span><b>${fmt(r.gustosP2+extraBolsilloP2)}</b></div>`;
+    if(extraBolsilloP2>0)h+=`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gb)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(extraBolsilloP2)}</b></div>`;
+  }
   h+=`<div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Para ahorrar e invertir</span><b>${fmt(ahorro)}</b></div>`;
   if(especialesPendientes.length>0){
     // Vista unificada: base + ingresos adicionales fusionados por meta
