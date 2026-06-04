@@ -1828,6 +1828,7 @@ function renderPlan(){
   const dis = !canEditShared() ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
 
   let syncHtml = '';
+  let logoutHtml = '';
   if (currentUser) {
     const isGoogle = currentUser.providerData && currentUser.providerData.some(p => p.providerId === 'google.com');
     const photoUrl = currentUser.photoURL;
@@ -1934,6 +1935,10 @@ function renderPlan(){
       ` : ''}
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
         <button class="btn ghost" id="btnSettingsInviteCode" style="width:100%;margin:0;">Tengo un código de invitación</button>
+      </div>
+    `;
+    logoutHtml = `
+      <div style="margin-top:20px;margin-bottom:20px;">
         <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55;margin:0;">Cerrar sesión</button>
       </div>
     `;
@@ -2016,7 +2021,8 @@ ${installHtml}
   <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
   <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
   <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
-</div></details>`;
+</div></details>
+${logoutHtml}`;
   attachPlan();
 }
 function attachPlan(){
