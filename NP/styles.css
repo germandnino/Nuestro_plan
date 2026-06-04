@@ -332,6 +332,31 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 }
 .mode-card .icon {
   font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.mode-card .icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.2s ease, transform 0.2s ease;
+}
+.mode-card.on .icon svg {
+  stroke: var(--gold);
+  transform: scale(1.1);
+}
+.dark-seg .mode-card .icon svg {
+  stroke: rgba(246, 241, 230, 0.45);
+}
+.dark-seg .mode-card.on .icon svg {
+  stroke: var(--gb);
+  transform: scale(1.1);
 }
 .mode-card .title {
   font-family: var(--sans);
