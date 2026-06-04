@@ -178,12 +178,19 @@ function perfilNombre(p){return p==='p1'?state.config.nombreP1:state.config.nomb
 function libreOf(p){return p==='p1'?state.config.libreP1:state.config.libreP2;}
 
 /* ---------- teclado virtual: ocultar fade ---------- */
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75;
-    document.body.classList.toggle('keyboard-open', keyboardOpen);
-  });
-}
+document.addEventListener('focusin', (e) => {
+  if (e.target.matches('input, textarea, select')) {
+    document.body.classList.add('keyboard-open');
+  }
+});
+document.addEventListener('focusout', () => {
+  setTimeout(() => {
+    const active = document.activeElement;
+    if (!active || !active.matches('input, textarea, select')) {
+      document.body.classList.remove('keyboard-open');
+    }
+  }, 150);
+});
 
 /* ---------- persistencia ---------- */
 function normalize(){
