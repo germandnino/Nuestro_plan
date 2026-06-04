@@ -2364,12 +2364,13 @@ function aplicarIngresoInmediato(ep){
    ========================================================= */
 function renderFlujo(){
   const c=state.config;
+  const isIndiv = c.modo === 'individual';
   const base=computeBase();
-  const total=c.nominaP1+c.nominaP2;
+  const total=isIndiv ? c.nominaP1 : (c.nominaP1+c.nominaP2);
   const pGas=total?Math.round(c.gastos/total*100):0;
-  const pPP=total?Math.round(c.planPareja/total*100):0;
+  const pPP=isIndiv ? 0 : (total?Math.round(c.planPareja/total*100):0);
   const pL1=total?Math.round(c.libreP1/total*100):0;
-  const pL2=total?Math.round(c.libreP2/total*100):0;
+  const pL2=isIndiv ? 0 : (total?Math.round(c.libreP2/total*100):0);
   const pAh=Math.max(0,100-pGas-pPP-pL1-pL2);
   const dis = !canEditShared() ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
   
@@ -2386,55 +2387,99 @@ function renderFlujo(){
       <div class="card dark">
         <div class="k">Ahorro base mensual</div>
         <div class="num big" id="flujoBase">${fmt(base)}</div>
-        <div class="muted sm" style="margin-top:4px">Monto fijo destinado al ahorro colectivo</div>
+        <div class="muted sm" style="margin-top:4px">${isIndiv ? 'Monto fijo destinado a mis metas' : 'Monto fijo destinado al ahorro colectivo'}</div>
       </div>
       <div class="stitle">Configuración del Ahorro</div>
       <div class="card">
-        <label class="lbl">Ahorro mensual conjunto</label>
+        <label class="lbl">${isIndiv ? 'Ahorro mensual' : 'Ahorro mensual conjunto'}</label>
         <input class="sf money" id="pAhorroDirecto" inputmode="numeric" value="${fmt(c.ahorroDirecto)}" style="margin-top:6px" ${dis}>
-        <div class="hint">Este es el monto fijo que destinarán al ahorro colectivo cada mes.</div>
+        <div class="hint">${isIndiv ? 'Este es el monto fijo que destinarás a tus metas cada mes.' : 'Este es el monto fijo que destinarán al ahorro colectivo cada mes.'}</div>
       </div>
     `;
   } else {
+    let stackHtml = '';
+    let detailsHtml = '';
+    let budgetInputsHtml = '';
+
+    if (isIndiv) {
+      stackHtml = `
+        <span class="st-seg" style="width:${pGas}%;background:#8a7f70"></span>
+        <span class="st-seg st-seg-p1" style="width:${pL1}%"></span>
+        <span class="st-seg" style="flex:1;background:#3d8c64"></span>
+      `;
+      detailsHtml = `
+        <span>Gastos ${pGas}%</span><span>Gustos ${pL1}%</span><span style="color:var(--gb);font-weight:700">Ahorro ${pAh}%</span>
+      `;
+      budgetInputsHtml = `
+        <div class="stitle">Ingreso mensual</div>
+        <div class="card">
+          <label class="lbl">Ingreso neto de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+          <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px" ${dis}>
+        </div>
+        <div class="stitle">Gastos personales</div>
+        <div class="card">
+          <label class="lbl">Total gastos fijos</label>
+          <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px" ${dis}>
+          <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
+        </div>
+        <div class="stitle">Gustos · para disfrutar</div>
+        <div class="card">
+          <label class="lbl">Dinero libre mensual</label>
+          <input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:6px" ${dis}>
+          <div class="hint">Dinero libre de tu presupuesto para tu bolsillo personal para gastar sin rendir cuentas.</div>
+        </div>
+      `;
+    } else {
+      stackHtml = `
+        <span class="st-seg" style="width:${pGas}%;background:#8a7f70"></span>
+        <span class="st-seg st-seg-pp" style="width:${pPP}%"></span>
+        <span class="st-seg st-seg-p1" style="width:${pL1}%"></span>
+        <span class="st-seg st-seg-p2" style="width:${pL2}%"></span>
+        <span class="st-seg" style="flex:1;background:#3d8c64"></span>
+      `;
+      detailsHtml = `
+        <span>Gastos ${pGas}%</span><span>Gustos ${pPP+pL1+pL2}%</span><span style="color:var(--gb);font-weight:700">Ahorro ${pAh}%</span>
+      `;
+      budgetInputsHtml = `
+        <div class="stitle">Nóminas netas</div>
+        <div class="card">
+          <label class="lbl">Nómina neta de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+          <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px" ${dis}>
+          <label class="lbl" style="margin-top:12px">Nómina neta de ${c.nombreP2}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
+          <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px" ${dis}>
+        </div>
+        <div class="stitle">Gastos del hogar</div>
+        <div class="card">
+          <label class="lbl">Total gastos fijos</label>
+          <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px" ${dis}>
+          <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
+        </div>
+        <div class="stitle">Gustos · para disfrutar</div>
+        <div class="card">
+          <label class="lbl">En pareja (citas, salidas…)</label>
+          <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px" ${dis}>
+          <div class="row2" style="margin-top:12px">
+            <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px" ${dis}></label>
+            <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px" ${dis}></label>
+          </div>
+          <div class="hint">Lo de "en pareja" se gasta juntos; el "libre" de cada uno va a su bolsillo sin rendir cuentas.</div>
+        </div>
+      `;
+    }
+
     body = `
       <div class="card dark">
         <div class="k">Ahorro base mensual</div>
         <div class="num big" id="flujoBase">${fmt(base)}</div>
-        <div class="muted sm" style="margin-top:4px">Nóminas − gastos − gustos</div>
+        <div class="muted sm" style="margin-top:4px">${isIndiv ? 'Ingreso − gastos − gustos' : 'Nóminas − gastos − gustos'}</div>
         <div class="stack" style="margin-top:12px;background:rgba(246,241,230,.06)">
-          <span class="st-seg" style="width:${pGas}%;background:#8a7f70"></span>
-          <span class="st-seg st-seg-pp" style="width:${pPP}%"></span>
-          <span class="st-seg st-seg-p1" style="width:${pL1}%"></span>
-          <span class="st-seg st-seg-p2" style="width:${pL2}%"></span>
-          <span class="st-seg" style="flex:1;background:#3d8c64"></span>
+          ${stackHtml}
         </div>
         <div style="font-size:12px;color:rgba(246,241,230,.6);display:flex;justify-content:space-between;margin-top:4px">
-          <span>Gastos ${pGas}%</span><span>Gustos ${pPP+pL1+pL2}%</span><span style="color:var(--gb);font-weight:700">Ahorro ${pAh}%</span>
+          ${detailsHtml}
         </div>
       </div>
-      <div class="stitle">Nóminas netas</div>
-      <div class="card">
-        <label class="lbl">Nómina neta de ${c.nombreP1}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
-        <input class="sf money" id="pN1" inputmode="numeric" value="${fmt(c.nominaP1)}" style="margin-top:6px" ${dis}>
-        <label class="lbl" style="margin-top:12px">Nómina neta de ${c.nombreP2}<br><span style="font-weight:400;font-size:11px;color:var(--gs)">Ya sin salud y pensión</span></label>
-        <input class="sf money" id="pN2" inputmode="numeric" value="${fmt(c.nominaP2)}" style="margin-top:6px" ${dis}>
-      </div>
-      <div class="stitle">Gastos del hogar</div>
-      <div class="card">
-        <label class="lbl">Total gastos fijos</label>
-        <input class="sf money" id="pGas" inputmode="numeric" value="${fmt(c.gastos)}" style="margin-top:6px" ${dis}>
-        <div class="hint">Arriendo, servicios, mercado, transporte… Todo en una sola cifra.</div>
-      </div>
-      <div class="stitle">Gustos · para disfrutar</div>
-      <div class="card">
-        <label class="lbl">En pareja (citas, salidas…)</label>
-        <input class="sf money" id="pPP" inputmode="numeric" value="${fmt(c.planPareja)}" style="margin-top:6px" ${dis}>
-        <div class="row2" style="margin-top:12px">
-          <label class="lbl">Libre de ${c.nombreP1}<input class="sf money" id="pL1" inputmode="numeric" value="${fmt(c.libreP1)}" style="margin-top:4px" ${dis}></label>
-          <label class="lbl">Libre de ${c.nombreP2}<input class="sf money" id="pL2" inputmode="numeric" value="${fmt(c.libreP2)}" style="margin-top:4px" ${dis}></label>
-        </div>
-        <div class="hint">Lo de "en pareja" se gasta juntos; el "libre" de cada uno va a su bolsillo sin rendir cuentas.</div>
-      </div>
+      ${budgetInputsHtml}
     `;
   }
 
