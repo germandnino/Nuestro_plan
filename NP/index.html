@@ -17,19 +17,40 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script>
-  const firebaseConfig = {
-    apiKey: "YOUR_WEB_API_KEY",
-    authDomain: "nuestro-plan-a1c10.firebaseapp.com",
-    projectId: "nuestro-plan-a1c10",
-    storageBucket: "nuestro-plan-a1c10.firebasestorage.app",
-    messagingSenderId: "486527605037",
-    appId: "1:486527605037:web:97dc49937bc8acd7785ba4",
-    measurementId: "G-ZGP1YC3MNT"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
+  let auth, db;
+  if (typeof firebaseConfig === 'undefined') {
+    console.error("Error: firebase-config.js is missing or not configured. Please create NP/firebase-config.js from NP/firebase-config.example.js.");
+    document.addEventListener("DOMContentLoaded", () => {
+      const banner = document.getElementById("banner");
+      if (banner) {
+        banner.style.display = "block";
+        banner.style.background = "#e06c75";
+        banner.innerText = "Error: Falta 'firebase-config.js'. Configúralo desde 'firebase-config.example.js'.";
+      }
+    });
+    // Dummy objects to prevent crash in app.js
+    auth = {
+      onAuthStateChanged: (cb) => { cb(null); return () => {}; },
+      currentUser: null,
+      signInWithEmailAndPassword: () => Promise.reject(new Error("Firebase no configurado")),
+      signOut: () => Promise.resolve()
+    };
+    db = {
+      collection: () => ({
+        doc: () => ({
+          onSnapshot: (cb) => { cb({ exists: false, data: () => null }); return () => {}; },
+          set: () => Promise.reject(new Error("Firebase no configurado")),
+          update: () => Promise.reject(new Error("Firebase no configurado"))
+        })
+      })
+    };
+  } else {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db = firebase.firestore();
+  }
 </script>
 </head>
 <body>

@@ -43,3 +43,8 @@ node_modules/
 *.apk
 *.aar
 *.aab
+
+# Firebase & Google API Configuration
+NP/firebase-config.js
+android/app/google-services.json
+
