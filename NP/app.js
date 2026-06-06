@@ -491,7 +491,7 @@ function syncSubscribe(planId) {
       state.ingresos = remote.ingresos || [];
       state.gastos = remote.gastos || [];
       normalize();
-      save();
+      saveLocalOnly();
       scheduleRerender();
     });
 
@@ -530,7 +530,7 @@ function syncSubscribe(planId) {
           }
         }
       });
-      save();
+      saveLocalOnly();
       scheduleRerender();
     });
 }
