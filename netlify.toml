@@ -1,3 +1,6 @@
 [build]
   command = "node scripts/generate-firebase-config.js"
   publish = "NP"
+
+[build.environment]
+  SECRETS_SCAN_OMIT_PATHS = "NP/firebase-config.js"
