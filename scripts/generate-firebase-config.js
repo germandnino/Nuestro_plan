@@ -1,6 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 
+// Carga .env local si existe (en Netlify usa las env vars del dashboard)
+const envPath = path.join(__dirname, '../.env');
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8')
+    .split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'))
+    .forEach(line => {
+      const [key, ...rest] = line.split('=');
+      if (key && !(key.trim() in process.env)) {
+        process.env[key.trim()] = rest.join('=').trim();
+      }
+    });
+}
+
 const {
   FIREBASE_API_KEY,
   FIREBASE_AUTH_DOMAIN,
