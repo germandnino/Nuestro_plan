@@ -3885,7 +3885,7 @@ function attachPlan(){
       } else {
         const provider = new firebase.auth.GoogleAuthProvider();
         try {
-          await auth.signInWithRedirect(provider);
+          await auth.signInWithPopup(provider);
         } catch(err) {
           await customAlert('Error de conexión: ' + err.message);
         }
@@ -3918,7 +3918,7 @@ function attachPlan(){
       } else {
         const provider = new firebase.auth.GoogleAuthProvider();
         try {
-          await currentUser.linkWithRedirect(provider);
+          await currentUser.linkWithPopup(provider);
         } catch(err) {
           await customAlert('Error al conectar: ' + err.message);
         }
@@ -4452,7 +4452,7 @@ function attachOb(){
         } else {
           const provider = new firebase.auth.GoogleAuthProvider();
           try {
-            await auth.signInWithRedirect(provider);
+            await auth.signInWithPopup(provider);
           } catch(err) {
             await customAlert('Error de conexión: ' + err.message);
           }
