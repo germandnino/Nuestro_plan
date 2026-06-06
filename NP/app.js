@@ -271,12 +271,18 @@ function showCustomMonthPicker(currentVal, allowClear = false) {
     renderPicker();
   });
 }
+let _syncTimer = null;
 function showSyncStatus(msg, isError = false) {
   const el = document.getElementById('syncStatus');
   if (!el) return;
-  el.textContent = msg;
-  el.style.background = isError ? '#7a2222' : 'var(--green)';
-  el.style.display = msg ? 'block' : 'none';
+  if (_syncTimer) clearTimeout(_syncTimer);
+  if (!msg) { el.style.display = 'none'; return; }
+  _syncTimer = setTimeout(() => {
+    el.textContent = msg;
+    el.style.background = isError ? '#7a2222' : 'var(--green)';
+    el.style.display = 'block';
+    _syncTimer = setTimeout(() => { el.style.display = 'none'; }, 2000);
+  }, 800);
 }
 function canEditShared() {
   if (!currentUser) return true;
@@ -555,7 +561,6 @@ async function save(){
     syncSaveShared(currentPlanId, state)
       .then(() => {
         showSyncStatus('Sincronizado ✓');
-        setTimeout(() => showSyncStatus(''), 2000);
       })
       .catch(e => {
         console.warn('Firestore shared save failed, local only:', e.message);
@@ -570,7 +575,6 @@ async function save(){
         .then(() => {
           if (!isOwner) {
             showSyncStatus('Bolsillo sincronizado ✓');
-            setTimeout(() => showSyncStatus(''), 2000);
           }
         })
         .catch(e => {
