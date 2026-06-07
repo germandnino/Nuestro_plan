@@ -1,4 +1,4 @@
-:root{--ink:#15241c;--green:#1c3a2c;--gd:#0f261c;--gs:#2f5a44;--gold:#c08a2d;--gb:#d9a84a;--cream:#f6f1e6;--paper:#fbf8f0;--line:rgba(28,58,44,.16);--serif:"Fraunces",Georgia,serif;--sans:"Hanken Grotesk",system-ui,sans-serif;}
+﻿:root{--ink:#15241c;--green:#1c3a2c;--gd:#0f261c;--gs:#2f5a44;--gold:#c08a2d;--gb:#d9a84a;--cream:#f6f1e6;--paper:#fbf8f0;--line:rgba(28,58,44,.16);--serif:"Fraunces",Georgia,serif;--sans:"Hanken Grotesk",system-ui,sans-serif;}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{height:100%}
 body{font-family:var(--sans);background:var(--gd);color:var(--ink);display:flex;flex-direction:column;height:100dvh;overflow:hidden}
@@ -17,7 +17,7 @@ body{font-family:var(--sans);background:var(--gd);color:var(--ink);display:flex;
 header{padding:22px 0 10px;color:var(--cream)}
 header .ey{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;font-weight:700;color:var(--gb)}
 header h1{font-family:var(--serif);font-weight:360;font-size:26px;line-height:1;margin-top:5px;letter-spacing:-.01em}
-.bk{display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:var(--gb);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;padding:18px 0 4px}
+.bk{display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:var(--gb);font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer;padding:14px 16px 4px;min-height:44px;margin-left:-16px}
 .card{background:var(--paper);border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid var(--line)}
 .dark{background:var(--green);border:none;color:var(--cream)}
 .dark .lm{color:var(--cream)}
@@ -79,7 +79,7 @@ details{background:var(--paper);border:1px solid var(--line);border-radius:14px;
 summary{padding:13px 16px;font-weight:700;font-size:14px;color:var(--gs);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
 summary::-webkit-details-marker{display:none}
 summary::after{content:"+";font-size:18px;color:var(--gold)}
-details[open] summary::after{content:"–"}
+details[open] summary::after{content:"â€“"}
 .dpad{padding:0 16px 16px}
 .hint{font-size:12px;color:var(--gs);margin-top:8px;line-height:1.4}
 .empty{color:var(--gs);font-size:13px;text-align:center;padding:18px 0}

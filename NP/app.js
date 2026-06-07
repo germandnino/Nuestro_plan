@@ -5020,3 +5020,26 @@ if (__inCapacitor) {
       .catch(err => console.error('Error al registrar el Service Worker:', err));
   });
 }
+
+// Botón atrás hardware Android (Capacitor)
+if (__inCapacitor) {
+  const { App: CapApp } = window.Capacitor.Plugins;
+  CapApp.addListener('backButton', () => {
+    const onb = $('onb');
+    if (onb && onb.classList.contains('on')) {
+      if (obStep > 1) { obSaveStep(); obStep--; renderOb(); }
+      return;
+    }
+    if ($('sf') && $('sf').classList.contains('on')) {
+      mForm = null; go(1); return;
+    }
+    if ($('sd') && $('sd').classList.contains('on')) {
+      go(1); return;
+    }
+    if ($('sh') && $('sh').classList.contains('on')) {
+      go(2); return;
+    }
+    if (curTab !== 0) { go(0); return; }
+    CapApp.minimizeApp();
+  });
+}
