@@ -3315,26 +3315,37 @@ function renderMiMes(){
       `;
     }
 
+    const incomeOpenClass = miMesIncomeOpen() ? 'open' : '';
     contentHtml = `
       <div class="planning-box" style="display:flex; flex-direction:column; gap:14px;">
-        <div class="hint" style="margin-bottom:8px;">${budgetHint}</div>
-        
-        ${budgetFormHtml}
 
-        <div id="planningStackContainer">
-          ${drawFixedBudgetCard()}
-        </div>
-
-        <div id="planningWarningsContainer">
-          ${getDistribucionAdvertencia().map(w => `<div style="background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.3); padding:10px 12px; border-radius:8px; font-size:12.5px; color:rgba(246,241,230,.9); line-height:1.4; margin-bottom:8px;">${w}</div>`).join('')}
+        <div class="income-collapse ${incomeOpenClass}" id="incomeCollapse">
+          <button type="button" class="ic-head" id="incomeToggle">
+            <div style="flex:1; min-width:0;">
+              <div class="ic-title">Ingresos y gastos fijos</div>
+              <div class="income-summary" id="incomeSummary">${drawIncomeSummaryLine()}</div>
+            </div>
+            <span class="ic-chev">${getSVG('chevronDown', '', 'width:14px;height:14px;')}</span>
+          </button>
+          <div class="ic-body">
+            <div class="hint" style="margin-bottom:10px;">${budgetHint}</div>
+            ${budgetFormHtml}
+          </div>
         </div>
 
         <div id="planningDistPreviewContainer">
           ${drawDistribucionPreview()}
         </div>
 
-        <button class="btn gold" id="btnApplyPreSave" style="margin-top:10px;" ${dis}>Distribuir Ahorro en mis Metas</button>
-        ${!canEdit ? `<div class="deriv" style="margin-top:12px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;display:flex;align-items:center;gap:6px;">${getSVG('alert', '', 'stroke:#7a2222;')} <div><b>Rol: Lector</b>. Solo los editores pueden planificar e iniciar el mes.</div></div>` : ''}
+        <div id="planningStackContainer">
+          ${drawFixedBudgetCard()}
+        </div>
+
+        <div id="planningWarningsContainer">
+          ${drawWarningsChip()}
+        </div>
+
+        ${!canEdit ? `<div class="deriv" style="margin-top:4px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;display:flex;align-items:center;gap:6px;">${getSVG('alert', '', 'stroke:#7a2222;')} <div><b>Rol: Lector</b>. Solo los editores pueden planificar e iniciar el mes.</div></div>` : ''}
       </div>
     `;
   }
@@ -3350,7 +3361,11 @@ function renderMiMes(){
     </header>
     ${contentHtml}
     <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Historial de Meses</div>${logH}</div>
+    ${!isApplied ? '<div class="mimes-cta-spacer"></div>' : ''}
   `;
+  if (!isApplied) {
+    $('r2').insertAdjacentHTML('beforeend', drawStickyCTA(canEdit));
+  }
 
   function updateMesDisplay(){
     const textVal = fmtMes(selectedMonth)||selectedMonth;
