@@ -4761,6 +4761,27 @@ function renderOb(){
           </div>
         </div>`;
     }
+    let obParejaHtml = '';
+    if (c.modo === 'pareja') {
+      if (currentUser && currentPlanId) {
+        obParejaHtml = `
+          <div class="card" style="padding:12px 14px; background:rgba(126,207,160,.06); border:1px solid rgba(126,207,160,.3); border-radius:12px; margin-top:4px;">
+            <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Conecta a tu pareja</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px; line-height:1.4;">Tu pareja instala la app en su teléfono y se une con este código para sincronizar en tiempo real.</div>
+            <div style="margin-top:10px; padding:10px 12px; background:rgba(246,241,230,.06); border:1px dashed rgba(246,241,230,.3); border-radius:10px; text-align:center; font-family:var(--serif); font-size:18px; letter-spacing:1px; color:var(--cream); word-break:break-all;" id="obPlanCode">${currentPlanId}</div>
+            <div style="display:flex; gap:8px; margin-top:10px;">
+              <button class="btn ghost" id="obCopyCode" style="flex:1; margin:0;">Copiar código</button>
+              <button class="btn ghost" id="obCopyLink" style="flex:1; margin:0;">Compartir enlace</button>
+            </div>
+          </div>`;
+      } else {
+        obParejaHtml = `
+          <div class="card" style="padding:12px 14px; background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.12); border-radius:12px; margin-top:4px;">
+            <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Conecta a tu pareja</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px; line-height:1.4;">Para generar tu código de invitación y sincronizar con tu pareja, conéctate con Google o correo desde Ajustes. En modo local los datos quedan solo en este teléfono.</div>
+          </div>`;
+      }
+    }
     h=`<div class="ob-step on" style="display:flex; flex-direction:column; gap:10px;">
       <div class="ob-eyebrow">¡Todo listo!</div>
       <div class="ob-h">Tu plan financiero creado</div>
@@ -4800,6 +4821,7 @@ function renderOb(){
         </div>
       </div>
       ${obInstallHtml}
+      ${obParejaHtml}
     </div>`;
   }
   inner.innerHTML=h;
@@ -5100,6 +5122,23 @@ function attachOb(){
       try { await deferredPrompt.userChoice; } catch (e) {}
       deferredPrompt = null;
       obInstallBtn.style.display = 'none';
+    };
+  }
+  const obCopyCode = $('obCopyCode');
+  if (obCopyCode) {
+    obCopyCode.onclick = async () => {
+      if (!currentPlanId) return;
+      try { await navigator.clipboard.writeText(currentPlanId); flash('Código copiado ✓'); }
+      catch (e) { await customAlert('Copia este código a mano: ' + currentPlanId); }
+    };
+  }
+  const obCopyLink = $('obCopyLink');
+  if (obCopyLink) {
+    obCopyLink.onclick = async () => {
+      if (!currentPlanId) return;
+      const link = window.location.origin + window.location.pathname + '?plan=' + currentPlanId;
+      try { await navigator.clipboard.writeText(link); flash('Enlace de invitación copiado ✓'); }
+      catch (e) { await customAlert('Comparte este código: ' + currentPlanId); }
     };
   }
 }
