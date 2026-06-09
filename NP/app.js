@@ -2774,10 +2774,28 @@ function updatePlanningSummary() {
     distPreviewContainer.innerHTML = drawDistribucionPreview();
   }
 
-  const base = computeBase();
+  // Refrescar línea resumen de ingresos (visible cuando el form está colapsado)
+  const summaryEl = $('incomeSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML = drawIncomeSummaryLine();
+  }
+
+  // Refrescar label + estado del CTA sticky
+  const r = computeReparto(0, 0);
+  const ahorro = r.ahorro || 0;
   const btn = $('btnApplyPreSave');
   if (btn) {
-    btn.disabled = base < 0;
+    const canEdit = canEditShared();
+    if (!canEdit) {
+      btn.disabled = true;
+      btn.textContent = 'Distribuir Ahorro en mis Metas';
+    } else if (ahorro <= 0) {
+      btn.disabled = true;
+      btn.textContent = 'Sin ahorro para distribuir';
+    } else {
+      btn.disabled = false;
+      btn.textContent = `Distribuir ${fmt(ahorro)} en mis Metas`;
+    }
   }
 }
 
