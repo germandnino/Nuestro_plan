@@ -822,8 +822,18 @@ $('mainnav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');i
 let actionSheetOpen = false;
 function closeActionMenu(){
   const ov = $('action-sheet-overlay');
-  if(ov){ ov.style.display='none'; ov.innerHTML=''; }
   actionSheetOpen = false;
+  if(!ov) return;
+  if(!ov.classList.contains('open')){ ov.style.display='none'; ov.innerHTML=''; return; }
+  ov.classList.remove('open');
+  const card = ov.querySelector('.sheet-card');
+  const done = ()=>{ if(actionSheetOpen) return; ov.style.display='none'; ov.innerHTML=''; };
+  if(card){
+    let finished=false;
+    const onEnd=(e)=>{ if(e && e.propertyName && e.propertyName!=='transform') return; if(finished) return; finished=true; card.removeEventListener('transitionend', onEnd); done(); };
+    card.addEventListener('transitionend', onEnd);
+    setTimeout(onEnd, 520);
+  } else { done(); }
 }
 function showActionMenu(){
   let ov = $('action-sheet-overlay');
@@ -846,17 +856,20 @@ function showActionMenu(){
       <span class="sheet-txt"><b>${it.label}</b><small>${it.sub}</small></span>
       ${chev}
     </button>`).join('');
-  ov.innerHTML = `<div class="sheet-card animate-up">
+  ov.innerHTML = `<div class="sheet-card">
     <div class="sheet-handle"></div>
     <div class="sheet-title">¿Qué quieres hacer?</div>
     ${rows}
   </div>`;
   ov.style.display = 'flex';
+  ov.classList.remove('open');
   actionSheetOpen = true;
   ov.onclick = (e)=>{ if(e.target===ov) closeActionMenu(); };
   ov.querySelectorAll('[data-act]').forEach(btn=>{
     btn.onclick = ()=>{ const i = +btn.dataset.act; closeActionMenu(); items[i].act(); };
   });
+  void ov.offsetWidth; // force reflow so the enter transition runs from initial state
+  requestAnimationFrame(()=>{ ov.classList.add('open'); });
 }
 // Formato de miles en vivo en los campos de plata (clase .money)
 document.addEventListener('input',e=>{
