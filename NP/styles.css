@@ -79,7 +79,7 @@ details{background:var(--paper);border:1px solid var(--line);border-radius:14px;
 summary{padding:13px 16px;font-weight:700;font-size:14px;color:var(--gs);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
 summary::-webkit-details-marker{display:none}
 summary::after{content:"+";font-size:18px;color:var(--gold)}
-details[open] summary::after{content:"â€“"}
+details[open] summary::after{content:"−"}
 .dpad{padding:0 16px 16px}
 .hint{font-size:12px;color:var(--gs);margin-top:8px;line-height:1.4}
 .empty{color:var(--gs);font-size:13px;text-align:center;padding:18px 0}
