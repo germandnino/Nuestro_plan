@@ -1742,18 +1742,9 @@ function renderMetas(){
     `;
   }
 
-  const headerAddBtn = (canEdit && curMetasSubTab !== 0)
-    ? `<button id="metaHeaderAdd" aria-label="${curMetasSubTab === 2 ? 'Nueva deuda' : 'Nueva meta'}" style="flex-shrink:0;width:44px;height:44px;border-radius:50%;background:var(--gb);border:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(192,138,45,.45);cursor:pointer;margin-bottom:4px;transition:transform .12s,box-shadow .12s;">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#231703" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>`
-    : '';
-
-  let h = `<header style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;">
-    <div>
-      <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
-      <h1>Metas y Deudas</h1>
-    </div>
-    ${headerAddBtn}
+  let h = `<header>
+    <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
+    <h1>Metas y Deudas</h1>
   </header>`;
 
   $('r1').innerHTML = `
@@ -1795,8 +1786,6 @@ function renderMetas(){
     };
   });
 
-  const headerAdd = $('metaHeaderAdd');
-  if (headerAdd) headerAdd.onclick = () => openMetaForm(null, curMetasSubTab === 2 ? 'deuda' : 'sueno');
   initReorder();
 }
 
