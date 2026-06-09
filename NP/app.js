@@ -4706,6 +4706,7 @@ function renderOb(){
       <div class="ob-eyebrow">Paso 3 de 4</div>
       <div class="ob-h">¿Tienes una primera meta o deuda?</div>
       <div class="ob-p">Agrégala ahora para ver cómo se distribuye tu plan. Si no la tienes, puedes crearla después.</div>
+      ${c.modo === 'pareja' ? `<div class="hint" style="margin-top:2px; line-height:1.4; color:rgba(246,241,230,.7); background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.1); border-radius:10px; padding:10px 12px;">Más adelante podrás crear <b>metas conjuntas</b> (parte del plan compartido) o <b>metas individuales</b> (de tu bolsillo personal). El tipo se elige al crear cada meta.</div>` : ''}
       
       <div class="ob-field">
         <label class="lbl">¿Cómo se llama?</label>
