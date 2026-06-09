@@ -4734,6 +4734,33 @@ function renderOb(){
       </div>
     </div>`;
   } else if(obStep===4){
+    const isCapacitorOb = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+    const isStandalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    let obInstallHtml = '';
+    if (!isCapacitorOb && !isStandalone) {
+      obInstallHtml = `
+        <div class="card" style="padding:12px 14px; background:rgba(217,168,74,.08); border:1px solid rgba(217,168,74,.3); border-radius:12px; margin-top:4px;">
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(217,168,74,0.15);flex-shrink:0;">${getSVG('phone', '', 'color:var(--gb);')}</div>
+            <div style="flex:1;">
+              <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Instala la app en tu teléfono</div>
+              <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Tenla a un toque, más rápida y disponible sin conexión.</div>
+            </div>
+          </div>
+          <button class="btn gold" id="obInstallPWA" style="display:${deferredPrompt?'block':'none'}; width:100%; margin-top:12px;">Instalar aplicación</button>
+          <div id="obIosHint" style="display:${isIOS()?'block':'none'}; margin-top:10px; background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.12); border-radius:10px; padding:10px 12px; color:rgba(246,241,230,.85);">
+            <div style="font-weight:700; margin-bottom:6px; font-size:12px; color:var(--gb);">En iPhone / iPad (Safari):</div>
+            <ol style="padding-left:16px; font-size:11.5px; line-height:1.45; display:flex; flex-direction:column; gap:4px; margin:0;">
+              <li>Toca <b>Compartir</b> en la barra de Safari.</li>
+              <li>Elige <b>Agregar al inicio</b>.</li>
+              <li>Confirma con <b>Agregar</b>.</li>
+            </ol>
+          </div>
+          <div style="margin-top:8px; font-size:11px; color:rgba(246,241,230,.5); line-height:1.4; display:${(!isIOS() && !deferredPrompt)?'block':'none'};">
+            Si no ves el botón, abre el menú del navegador (tres puntos) y elige <b>Instalar aplicación</b> o <b>Agregar a pantalla de inicio</b>.
+          </div>
+        </div>`;
+    }
     h=`<div class="ob-step on" style="display:flex; flex-direction:column; gap:10px;">
       <div class="ob-eyebrow">¡Todo listo!</div>
       <div class="ob-h">Tu plan financiero creado</div>
@@ -4772,6 +4799,7 @@ function renderOb(){
           </div>
         </div>
       </div>
+      ${obInstallHtml}
     </div>`;
   }
   inner.innerHTML=h;
@@ -5063,6 +5091,16 @@ function attachOb(){
         });
       }
     });
+  }
+  const obInstallBtn = $('obInstallPWA');
+  if (obInstallBtn) {
+    obInstallBtn.onclick = async () => {
+      if (!deferredPrompt) { flash('Usa el menú del navegador para instalar'); return; }
+      deferredPrompt.prompt();
+      try { await deferredPrompt.userChoice; } catch (e) {}
+      deferredPrompt = null;
+      obInstallBtn.style.display = 'none';
+    };
   }
 }
 function obSaveStep(){
