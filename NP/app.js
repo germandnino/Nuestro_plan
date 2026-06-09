@@ -1339,7 +1339,7 @@ function drawFixedBudgetCard() {
         <b style="color:var(--cream);">${fmt(c.gastos)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Dinero libre</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Tu dinero personal</div>
         <b style="color:var(--cream);">${fmt(c.libreP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
       </div>
     `;
@@ -1359,15 +1359,15 @@ function drawFixedBudgetCard() {
         <b style="color:var(--cream);">${fmt(c.gastos)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Citas y gustos pareja</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Para los dos</div>
         <b style="color:var(--cream);">${fmt(c.planPareja)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pPP)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Libre de ${c.nombreP1}</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP1}</div>
         <b style="color:var(--cream);">${fmt(c.libreP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Libre de ${c.nombreP2}</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP2}</div>
         <b style="color:var(--cream);">${fmt(c.libreP2)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL2)}%)</span></b>
       </div>
     `;
@@ -2554,9 +2554,9 @@ function renderHistoryDetail(mes, fromTab) {
           </div>
           <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
           <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
-          <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Libre de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
+          <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Personal de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
           ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gs)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
-          <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Libre de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
+          <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Personal de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
           ${histExtraBolsilloP2>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gs)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP2)}</b></div>`:''}
         `}
         <div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Ahorro e inversión</span><b>${fmt(ahorro)}</b></div>
@@ -2702,7 +2702,7 @@ function drawLockedBudgetLegend(entry) {
         <b>${fmt(r.gastosDia)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Dinero libre</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Tu dinero personal</div>
         <b>${fmt(r.gustosP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
@@ -2720,15 +2720,15 @@ function drawLockedBudgetLegend(entry) {
         <b>${fmt(r.gastosDia)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Citas y gustos pareja</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Para los dos</div>
         <b>${fmt(r.gustosPareja)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pPP)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Libre de ${c.nombreP1}</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP1}</div>
         <b>${fmt(r.gustosP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Libre de ${c.nombreP2}</div>
+        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP2}</div>
         <b>${fmt(r.gustosP2)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL2)}%)</span></b>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
@@ -3360,18 +3360,21 @@ function renderMiMes(){
             </div>
             ${c.modo === 'pareja' ? `
             <div>
-              <label class="lbl">Plan citas/pareja</label>
+              <label class="lbl">Para los dos</label>
+              <div class="lbl-sub">Citas, salidas y planes juntos</div>
               <input class="sf money budget-input" id="planPareja_input" inputmode="numeric" value="${c.planPareja ? fmt(c.planPareja) : ''}">
             </div>
             ` : ''}
             
             <div style="grid-column: span ${c.modo === 'individual' ? 2 : 1};">
-              <label class="lbl">Libre ${c.nombreP1}</label>
+              <label class="lbl">${c.modo === 'individual' ? 'Tu dinero personal' : `Personal de ${c.nombreP1}`}</label>
+              <div class="lbl-sub">${c.modo === 'individual' ? 'Para tus gustos del día a día' : 'A su gusto, sin rendir cuentas'}</div>
               <input class="sf money budget-input" id="libreP1_input" inputmode="numeric" value="${c.libreP1 ? fmt(c.libreP1) : ''}">
             </div>
             ${c.modo === 'pareja' ? `
             <div>
-              <label class="lbl">Libre ${c.nombreP2}</label>
+              <label class="lbl">Personal de ${c.nombreP2}</label>
+              <div class="lbl-sub">A su gusto, sin rendir cuentas</div>
               <input class="sf money budget-input" id="libreP2_input" inputmode="numeric" value="${c.libreP2 ? fmt(c.libreP2) : ''}">
             </div>
             ` : ''}
@@ -4666,7 +4669,8 @@ function renderOb(){
             </div>
           </div>
           <div class="ob-field" style="margin:0">
-            <label class="lbl">Tu dinero libre mensual</label>
+            <label class="lbl">Tu dinero personal</label>
+            <div class="lbl-sub">Para tus gustos del día a día</div>
             <input class="sf money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$500.000">
           </div>
         ` : `
@@ -4686,17 +4690,20 @@ function renderOb(){
               <input class="sf money" id="obGas" inputmode="numeric" value="${c.gastos?fmt(c.gastos):''}" placeholder="$2.500.000">
             </div>
             <div class="ob-field" style="margin:0">
-              <label class="lbl">Gustos pareja</label>
+              <label class="lbl">Para los dos</label>
+              <div class="lbl-sub">Citas, salidas y planes juntos</div>
               <input class="sf money" id="obPP" inputmode="numeric" value="${c.planPareja?fmt(c.planPareja):''}" placeholder="$1.000.000">
             </div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
             <div class="ob-field" style="margin:0">
-              <label class="lbl">Libre ${c.nombreP1 || 'Persona 1'}</label>
+              <label class="lbl">Personal de ${c.nombreP1 || 'Persona 1'}</label>
+              <div class="lbl-sub">A su gusto, sin rendir cuentas</div>
               <input class="sf money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$400.000">
             </div>
             <div class="ob-field" style="margin:0">
-              <label class="lbl">Libre ${c.nombreP2 || 'Persona 2'}</label>
+              <label class="lbl">Personal de ${c.nombreP2 || 'Persona 2'}</label>
+              <div class="lbl-sub">A su gusto, sin rendir cuentas</div>
               <input class="sf money" id="obL2" inputmode="numeric" value="${c.libreP2?fmt(c.libreP2):''}" placeholder="$400.000">
             </div>
           </div>
