@@ -4,7 +4,7 @@
 
 ## 1. Arquitectura y Stack Tecnológico
 
-*   **Stack:** Vanilla HTML, CSS (CSS Vanilla moderno con variables CSS y tema oscuro) y JavaScript contenidos en un único archivo (`index.html`). Se ejecuta como una PWA en navegadores web y está empaquetado como aplicación nativa para Android utilizando **Capacitor**.
+*   **Stack:** Vanilla HTML, CSS (CSS Vanilla moderno con variables CSS y tema oscuro) y JavaScript, organizados en tres archivos: `index.html` (shell/estructura), `app.js` (toda la lógica, estado y motor financiero) y `styles.css` (estilos). Se ejecuta como una PWA en navegadores web y está empaquetado como aplicación nativa para Android utilizando **Capacitor**.
 *   **Base de Datos y Sincronización:** Integra **Firebase (Auth y Firestore)** para permitir la autenticación de usuarios y la sincronización en tiempo real de los datos del plan compartido.
 *   **Diseño (UI/UX):** Enfoque móvil (Mobile-first) con un diseño oscuro premium. Utiliza tipografías de Google Fonts: `Fraunces` para títulos y números destacados, y `Hanken Grotesk` para textos generales. Cuenta con microanimaciones SVG, gráficos interactivos integrados y transiciones suaves.
 *   **Almacenamiento y Persistencia:** Utiliza `localStorage` para almacenar la información de forma persistente localmente (offline-first). Al estar conectado, se sincroniza bidireccionalmente en tiempo real con Firestore. Posee una capa de abstracción para entornos específicos que soporta `window.storage` si está disponible. Cuenta con un banner de alerta para avisar al usuario si el acceso al almacenamiento local está restringido.

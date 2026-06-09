@@ -37,7 +37,7 @@ El proyecto está diseñado con un enfoque premium, móvil y offline-first, perm
 
 ## 🛠️ Stack Tecnológico
 
-*   **Frontend:** Vanilla HTML5, CSS3 moderno (con variables CSS y modo oscuro premium) y JavaScript puro (ES6+).
+*   **Frontend:** Vanilla HTML5, CSS3 moderno (con variables CSS y modo oscuro premium) y JavaScript puro (ES6+). El código está organizado en tres archivos: `index.html` (shell/estructura), `app.js` (toda la lógica, estado y motor financiero) y `styles.css` (estilos).
 *   **Sin Dependencias:** 100% libre de frameworks o librerías de frontend pesadas (React, Vue, etc.), garantizando una carga instantánea y rendimiento óptimo.
 *   **PWA (Progressive Web App):** Incluye `service-worker.js` y `manifest.json` para ejecución offline e instalación directa desde navegador.
 *   **Nativo (Capacitor/Android):** Empaquetado nativo mediante **Capacitor** para ejecutarse como aplicación Android con inicio de sesión nativo de Google.
@@ -51,7 +51,9 @@ El proyecto está diseñado con un enfoque premium, móvil y offline-first, perm
 ```text
 Nuestro-Plan/
 ├── NP/                       # Código fuente de la Web-App/PWA
-│   ├── index.html            # Aplicación principal (HTML, CSS y JS unificados)
+│   ├── index.html            # Shell HTML de la aplicación (estructura)
+│   ├── app.js                # Toda la lógica: estado, render, motor financiero, sync
+│   ├── styles.css            # Estilos (tema oscuro premium, mobile-first)
 │   ├── service-worker.js     # Soporte para modo offline (PWA)
 │   ├── manifest.json         # Configuración de la PWA para instalación
 │   ├── icon-*.png            # Iconos de la app
