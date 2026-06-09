@@ -442,3 +442,23 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .glosario[open]>summary::after{content:"–"}
 .glosario>summary:active{background:rgba(246,241,230,.05)}
 .glosario .learn-container{padding:0 14px 14px}
+
+/* ── Mi Mes · planificación ───────────────────────────── */
+.income-collapse{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.income-collapse > .ic-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;cursor:pointer;background:none;border:none;width:100%;text-align:left;font-family:var(--sans)}
+.income-collapse > .ic-head .ic-title{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gs)}
+.income-collapse > .ic-head .ic-chev{color:var(--gold);font-size:16px;transition:transform .2s;flex-shrink:0}
+.income-collapse.open > .ic-head .ic-chev{transform:rotate(180deg)}
+.income-summary{font-size:12.5px;color:var(--ink);font-weight:600;margin-top:3px;line-height:1.35}
+.income-summary .is-sep{color:var(--gs);font-weight:400;margin:0 4px}
+.income-collapse > .ic-body{display:none;padding:0 14px 14px}
+.income-collapse.open > .ic-body{display:block}
+.income-collapse.open .income-summary{display:none}
+
+.warn-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(192,138,45,0.1);border:1px solid rgba(192,138,45,0.4);color:var(--gb);font-size:12.5px;font-weight:700;padding:8px 12px;border-radius:100px;cursor:pointer;font-family:var(--sans)}
+.warn-panel{display:none;margin-top:8px}
+.warn-panel.open{display:block}
+
+.mimes-cta{position:fixed;left:0;right:0;z-index:60;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--gd) 60%,transparent);pointer-events:none}
+.mimes-cta .btn{max-width:480px;margin:0 auto;display:block;pointer-events:auto}
+.mimes-cta-spacer{height:84px}
