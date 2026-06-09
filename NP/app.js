@@ -3416,6 +3416,29 @@ function renderMiMes(){
       inp.addEventListener('input', updatePlanningSummary);
     });
     if ($('btnApplyPreSave')) $('btnApplyPreSave').onclick = aplicar;
+
+    // Toggle colapsable de ingresos (persiste estado)
+    const incomeToggle = $('incomeToggle');
+    if (incomeToggle) {
+      incomeToggle.onclick = () => {
+        const box = $('incomeCollapse');
+        const nowOpen = !box.classList.contains('open');
+        box.classList.toggle('open', nowOpen);
+        setMiMesIncomeOpen(nowOpen);
+      };
+    }
+
+    // Toggle chip de advertencias
+    const warnChip = $('btnWarnChip');
+    if (warnChip) {
+      warnChip.onclick = () => {
+        const panel = $('warnPanel');
+        if (panel) panel.classList.toggle('open');
+      };
+    }
+
+    // Offset del CTA sticky por encima de la barra de navegación
+    positionMimesCta();
   }
 
   $('r2').querySelectorAll('.tap-hist').forEach(el => el.onclick = (e) => {
@@ -3442,6 +3465,13 @@ function renderMiMes(){
       flash('El mes no ha sido iniciado. Distribuye el ahorro primero antes de registrar ingresos extras.');
     }
   }
+}
+
+function positionMimesCta() {
+  const cta = $('mimesCta');
+  const nav = $('mainnav');
+  if (!cta || !nav) return;
+  cta.style.bottom = nav.offsetHeight + 'px';
 }
 
 async function aplicar(){
