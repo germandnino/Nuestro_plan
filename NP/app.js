@@ -2765,8 +2765,14 @@ function updatePlanningSummary() {
   
   const warnContainer = $('planningWarningsContainer');
   if (warnContainer) {
-    const warnings = getDistribucionAdvertencia();
-    warnContainer.innerHTML = warnings.map(w => `<div style="background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.3); padding:10px 12px; border-radius:8px; font-size:12.5px; color:rgba(246,241,230,.9); line-height:1.4; margin-bottom:8px;">${w}</div>`).join('');
+    warnContainer.innerHTML = drawWarningsChip();
+    const warnChip = $('btnWarnChip');
+    if (warnChip) {
+      warnChip.onclick = () => {
+        const panel = $('warnPanel');
+        if (panel) panel.classList.toggle('open');
+      };
+    }
   }
 
   const distPreviewContainer = $('planningDistPreviewContainer');
