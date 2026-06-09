@@ -1197,6 +1197,63 @@ function drawDistribucionPreview() {
   </div>`;
 }
 
+const MIMES_INCOME_KEY = 'np_miMes_incomeOpen';
+
+function miMesIncomeOpen() {
+  const c = state.config;
+  const stored = localStorage.getItem(MIMES_INCOME_KEY);
+  if (stored === '1') return true;
+  if (stored === '0') return false;
+  // Sin preferencia guardada: expandido si aún no hay ingresos seteados.
+  const sinDatos = !c.nominaP1 && !c.nominaP2 && !c.ahorroDirecto;
+  return sinDatos;
+}
+
+function setMiMesIncomeOpen(open) {
+  localStorage.setItem(MIMES_INCOME_KEY, open ? '1' : '0');
+}
+
+function drawIncomeSummaryLine() {
+  const c = state.config;
+  const sep = '<span class="is-sep">·</span>';
+  if (c.soloAhorroDirecto) {
+    return `Ahorro fijo ${fmt(c.ahorroDirecto || 0)}`;
+  }
+  const totalIng = c.modo === 'individual' ? (c.nominaP1 || 0) : ((c.nominaP1 || 0) + (c.nominaP2 || 0));
+  const base = computeBase();
+  return `Ingresos ${fmt(totalIng)}${sep}Gastos ${fmt(c.gastos || 0)}${sep}Ahorro base ${fmt(base)}`;
+}
+
+function drawWarningsChip() {
+  const warnings = getDistribucionAdvertencia();
+  if (warnings.length === 0) return '';
+  const panel = warnings.map(w => `<div style="background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.3); padding:10px 12px; border-radius:8px; font-size:12.5px; color:rgba(246,241,230,.9); line-height:1.4; margin-bottom:8px;">${w}</div>`).join('');
+  const label = warnings.length === 1 ? '1 aviso' : `${warnings.length} avisos`;
+  return `
+    <button type="button" class="warn-chip" id="btnWarnChip">⚠ ${label}</button>
+    <div class="warn-panel" id="warnPanel">${panel}</div>
+  `;
+}
+
+function drawStickyCTA(canEdit) {
+  const r = computeReparto(0, 0);
+  const ahorro = r.ahorro || 0;
+  let label, disabled;
+  if (!canEdit) {
+    label = 'Distribuir Ahorro en mis Metas';
+    disabled = 'disabled style="opacity:0.65;pointer-events:none;"';
+  } else if (ahorro <= 0) {
+    label = 'Sin ahorro para distribuir';
+    disabled = 'disabled';
+  } else {
+    label = `Distribuir ${fmt(ahorro)} en mis Metas`;
+    disabled = '';
+  }
+  return `<div class="mimes-cta" id="mimesCta">
+    <button class="btn gold" id="btnApplyPreSave" ${disabled}>${label}</button>
+  </div>`;
+}
+
 function drawFixedBudgetCard() {
   const c = state.config;
   const isIndiv = c.modo === 'individual';
