@@ -97,16 +97,14 @@ El motor principal reside en la función `distribuirAhorro(monto)`. Los pesos y 
 
 ## 4. Onboarding (Primeros Pasos)
 
-Para facilitar la adopción inicial del sistema, la aplicación inicia un asistente interactivo detallado de **9 pasos (Pantallas 0 a 8)** si no se detectan datos guardados:
-*   **Paso 0:** Introducción a la filosofía de presupuesto compartido de la app.
-*   **Paso 1:** Definición de nombres para Persona 1 y Persona 2.
-*   **Paso 2:** Selección de a quién corresponde el dispositivo móvil actual.
-*   **Paso 3:** Ingreso de nóminas netas fijas y presupuesto aproximado de gastos compartidos.
-*   **Paso 4:** Establecimiento de la partida para citas en pareja y fondos libres individuales.
-*   **Paso 5:** Elección de la estrategia de ahorro (Secuencial, Simultáneo o En Cascada).
-*   **Paso 6:** Configuración del porcentaje de premios por ingresos extra y su método de división.
-*   **Paso 7:** Creación y configuración inicial de su primera meta (Sueño o Inversión).
-*   **Paso 8 (Visualización):** Generación automática de una simulación interactiva con la cascada de distribución para que la pareja comprenda visualmente cómo operará el motor en un mes regular con ingresos extra.
+Para facilitar la adopción inicial del sistema, la aplicación inicia un asistente interactivo de **5 pasos (Pantallas 0 a 4, `OB_TOTAL=5`)** si no se detectan datos guardados:
+*   **Paso 0:** Introducción a la filosofía de presupuesto compartido de la app y elección de modo (pareja / individual).
+*   **Paso 1:** Definición de nombres para Persona 1 y Persona 2 (y perfil del dispositivo).
+*   **Paso 2:** Ingreso del presupuesto base: nóminas netas, gastos del hogar y fondos libres individuales.
+*   **Paso 3:** Creación y configuración inicial de la primera meta (Sueño, Inversión o Deuda). El guardado es idempotente (`obMetaCreatedId`): navegar Atrás/Continuar no duplica la meta.
+*   **Paso 4 (Visualización):** Simulación interactiva con la cascada de distribución para que la pareja comprenda cómo opera el motor en un mes regular.
+
+> La estrategia de ahorro, el % de premios y demás ajustes finos ya no se piden en el onboarding (se aplican valores por defecto en `finishOnboarding`: estrategia `simultaneo`, premio 20%) y se configuran después en **Ajustes**.
 
 ---
 

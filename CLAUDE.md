@@ -67,7 +67,7 @@ Reglas: meta llena (`saldo >= objetivo`) libera sus aportes; déficit (egresos >
 
 Inicio (dashboard: dona SVG, barra apilada, histórico) · Metas · Aportar al Plan (cierre de mes) · Flujo (presupuesto base) · Ajustes (estrategia, perfil, sync pareja, roles, respaldo JSON).
 
-Onboarding: asistente de 9 pasos (0-8) si no hay datos guardados.
+Onboarding: asistente de **5 pasos (0-4)** si no hay datos guardados (`OB_TOTAL=5`): 0 intro · 1 nombres/modo · 2 presupuesto (nóminas, gastos, libres) · 3 primera meta · 4 simulación. `obSaveStep()` persiste cada paso; la meta del paso 3 es idempotente vía `obMetaCreatedId`.
 
 ## Reglas de trabajo en este repo
 

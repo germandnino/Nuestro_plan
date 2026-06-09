@@ -38,6 +38,7 @@ let mForm=null; // estado del formulario de meta en edición
 let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este cierre
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
+let obMetaCreatedId = null; // id de la meta creada en onboarding, para reemplazarla (no duplicar) al navegar atrás/adelante
 
 // Sync Firebase
 let currentUser = null;       // firebase.User | null
@@ -3010,7 +3011,8 @@ async function desaplicarMes(mes) {
       const toSave = ep.monto * (1 - pctR / 100);
       if (toSave > 0.5) {
         if (ep.meta === 'distribuir') {
-          const dist = distribuirAhorro(toSave, true);
+          // Usa el reparto guardado al aplicar; el fallback (re-ejecutar) solo cubre entries antiguos sin snapshot.
+          const dist = ep.dist || distribuirAhorro(toSave, true);
           state.metas.forEach(m => {
             if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
               if (m.tipo === 'deuda') {
@@ -3031,7 +3033,7 @@ async function desaplicarMes(mes) {
           }
         }
       }
-      
+
       const pocketP1 = metaPersonal('p1');
       const pocketP2 = metaPersonal('p2');
       const toPocket = ep.monto - toSave;
@@ -3086,8 +3088,10 @@ async function desaplicarMes(mes) {
   }
   
   if (entry.especiales) {
-    const names = entry.especiales.map(ep => ep.nombre);
-    state.ingresos = state.ingresos.filter(ing => ing.mes !== mes || !names.includes(ing.nombre));
+    // Borra por id (preciso); cae a nombre solo en entries antiguos sin ingresoId.
+    const ids = entry.especiales.map(ep => ep.ingresoId).filter(Boolean);
+    const names = entry.especiales.filter(ep => !ep.ingresoId).map(ep => ep.nombre);
+    state.ingresos = state.ingresos.filter(ing => ing.mes !== mes || (!ids.includes(ing.id) && !names.includes(ing.nombre)));
   }
   
   state.log = state.log.filter(e => e.mes !== mes);
@@ -3227,9 +3231,11 @@ function aplicarIngresoInmediatoActivo(ep) {
   const pctR = ep.pctRetener || 0;
   const toSave = ep.monto * (1 - pctR / 100);
   
+  let distInmediato = null; // snapshot de la distribución, para revertir exacto sin re-ejecutar
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
       const dist = distribuirAhorro(toSave, true);
+      distInmediato = Object.assign({}, dist);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
           if (m.tipo === 'deuda') {
@@ -3250,7 +3256,7 @@ function aplicarIngresoInmediatoActivo(ep) {
       }
     }
   }
-  
+
   const pocketP1 = metaPersonal('p1');
   const pocketP2 = metaPersonal('p2');
   const toPocket = ep.monto - toSave;
@@ -3271,6 +3277,7 @@ function aplicarIngresoInmediatoActivo(ep) {
     meta: ep.meta,
     persona: ep.persona || 'ambos',
     pctRetener: pctR,
+    dist: distInmediato,
     metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'),
     aplicadoInmediato: true,
     fecha: today()
@@ -3310,7 +3317,8 @@ function revertirIngresoAdicionalActivo(id) {
   
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
-      const dist = distribuirAhorro(toSave, true);
+      // Usa el reparto guardado al aplicar; fallback solo para entries antiguos sin snapshot.
+      const dist = ep.dist || distribuirAhorro(toSave, true);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
           if (m.tipo === 'deuda') {
@@ -3331,7 +3339,7 @@ function revertirIngresoAdicionalActivo(id) {
       }
     }
   }
-  
+
   const pocketP1 = metaPersonal('p1');
   const pocketP2 = metaPersonal('p2');
   const toPocket = ep.monto - toSave;
@@ -3343,7 +3351,7 @@ function revertirIngresoAdicionalActivo(id) {
       if (pocketP2) pocketP2.saldo = Math.max(0, pocketP2.saldo - toPocket * 0.5);
     }
   }
-  
+
   entry.especiales = entry.especiales.filter(x => x.id !== id);
   state.ingresos = state.ingresos.filter(ing => ing.id !== id);
   
@@ -3718,13 +3726,18 @@ async function aplicar(){
   const p1Inmediato = yaInmediatos.filter(e => e.persona === 'p1').reduce((s, e) => s + e.monto, 0) + yaInmediatos.filter(e => e.persona === 'ambos').reduce((s, e) => s + e.monto * 0.5, 0);
   const p2Inmediato = yaInmediatos.filter(e => e.persona === 'p2').reduce((s, e) => s + e.monto, 0) + yaInmediatos.filter(e => e.persona === 'ambos').reduce((s, e) => s + e.monto * 0.5, 0);
 
-  especialesPendientes.forEach(ep=>{
+  // Aplica cada especial y captura el id del ingreso y el snapshot de la distribución,
+  // para poder revertir EXACTAMENTE lo aplicado (sin re-ejecutar distribuirAhorro al deshacer).
+  const espApplyMeta = especialesPendientes.map(ep=>{
     const pctR=ep.pctRetener||0;
     const toSave=ep.monto*(1-pctR/100);
-    state.ingresos.unshift({id:uid(),mes:ep.mes,nombre:ep.nombre,monto:ep.monto,meta:ep.meta,persona:ep.persona||'ambos',pctRetener:pctR});
+    const ingId=uid();
+    state.ingresos.unshift({id:ingId,mes:ep.mes,nombre:ep.nombre,monto:ep.monto,meta:ep.meta,persona:ep.persona||'ambos',pctRetener:pctR});
+    let distSnap=null;
     if(toSave>0.5){
       if(ep.meta==='distribuir'){
         const dist=distribuirAhorro(toSave, true);
+        distSnap=Object.assign({},dist);
         state.metas.forEach(m=>{
           if(m.tipo!=='personal'&&!m.dueno&&(dist[m.id]||0)>0.5) {
             if(m.tipo==='deuda'){
@@ -3745,13 +3758,16 @@ async function aplicar(){
         }
       }
     }
+    return {ingId, distSnap};
   });
-  const espSnapshot = especialesPendientes.map(ep => ({
+  const espSnapshot = especialesPendientes.map((ep, i) => ({
     nombre: ep.nombre,
     monto: ep.monto,
     meta: ep.meta,
     persona: ep.persona||'ambos',
     pctRetener: ep.pctRetener||0,
+    ingresoId: espApplyMeta[i].ingId,
+    dist: espApplyMeta[i].distSnap,
     metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')
   }));
   
@@ -5335,14 +5351,22 @@ function obSaveStep(){
     }
   }
   if(obStep===3){
+    // Idempotente: quitar la meta creada antes en este onboarding para no duplicarla
+    // al navegar Atrás/Continuar o re-guardar el mismo paso.
+    if(obMetaCreatedId){
+      state.metas=state.metas.filter(m=>m.id!==obMetaCreatedId);
+      obMetaCreatedId=null;
+    }
     const nom=$('obMetaNom')?$('obMetaNom').value.trim():'';
     if(nom){
       const obj=parse($('obMetaObj')?$('obMetaObj').value:'');
       const prio=metasCompartidas().length;
+      const nuevaId=uid();
+      obMetaCreatedId=nuevaId;
       if(obMetaTipo==='deuda') {
         const min=parse($('obMetaMin')?$('obMetaMin').value:'');
         state.metas.push({
-          id:uid(),
+          id:nuevaId,
           nombre:nom,
           tipo:'deuda',
           saldo:obj||0,
@@ -5356,7 +5380,7 @@ function obSaveStep(){
         });
       } else {
         state.metas.push({
-          id:uid(),
+          id:nuevaId,
           nombre:nom,
           tipo:obMetaTipo,
           saldo:0,
@@ -5405,6 +5429,7 @@ function finishOnboarding(){
   state.config.estrategia='simultaneo';
   state.config.pctPremio=20;
   state.config.modoPremio='igual';
+  obMetaCreatedId=null;
   $('onb').classList.remove('on');
   save();go(0);
 }
