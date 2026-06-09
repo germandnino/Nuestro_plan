@@ -818,7 +818,46 @@ function go(t){
 function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;}
 let _rerenderTimer;
 function scheduleRerender(){clearTimeout(_rerenderTimer);_rerenderTimer=setTimeout(rerender,60);}
-$('mainnav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b)go(+b.dataset.t);});
+$('mainnav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;const t=+b.dataset.t;if(t===2){showActionMenu();}else{go(t);}});
+let actionSheetOpen = false;
+function closeActionMenu(){
+  const ov = $('action-sheet-overlay');
+  if(ov){ ov.style.display='none'; ov.innerHTML=''; }
+  actionSheetOpen = false;
+}
+function showActionMenu(){
+  let ov = $('action-sheet-overlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'action-sheet-overlay';
+    ov.className = 'sheet-overlay';
+    document.body.appendChild(ov);
+  }
+  const items = [
+    { svg:'calendar', label:'Distribuir ahorros del mes', sub:'Reparte tu ahorro entre tus metas', act:()=>go(2) },
+    { svg:'target',   label:'Crear nueva meta',           sub:'Define un objetivo o una deuda',    act:()=>openMetaForm() },
+    { svg:'plus',     label:'Registrar ingreso extra',    sub:'Suma dinero adicional del mes',     act:()=>{ openExtraFormOnLoad = true; go(2); } },
+    { svg:'trending', label:'Ver historial',              sub:'Meses anteriores ya cerrados',      act:()=>openHistoryList() },
+  ];
+  const chev = '<svg class="sheet-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+  const rows = items.map((it,i)=>`
+    <button class="sheet-row" data-act="${i}">
+      <span class="sheet-ic">${getSVG(it.svg,'','width:20px;height:20px;')}</span>
+      <span class="sheet-txt"><b>${it.label}</b><small>${it.sub}</small></span>
+      ${chev}
+    </button>`).join('');
+  ov.innerHTML = `<div class="sheet-card animate-up">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">¿Qué quieres hacer?</div>
+    ${rows}
+  </div>`;
+  ov.style.display = 'flex';
+  actionSheetOpen = true;
+  ov.onclick = (e)=>{ if(e.target===ov) closeActionMenu(); };
+  ov.querySelectorAll('[data-act]').forEach(btn=>{
+    btn.onclick = ()=>{ const i = +btn.dataset.act; closeActionMenu(); items[i].act(); };
+  });
+}
 // Formato de miles en vivo en los campos de plata (clase .money)
 document.addEventListener('input',e=>{
   const el=e.target;
@@ -5332,6 +5371,7 @@ if (__inCapacitor) {
 if (__inCapacitor) {
   const { App: CapApp } = window.Capacitor.Plugins;
   CapApp.addListener('backButton', () => {
+    if (actionSheetOpen) { closeActionMenu(); return; }
     const onb = $('onb');
     if (onb && onb.classList.contains('on')) {
       if (obStep > 1) { obSaveStep(); obStep--; renderOb(); }
