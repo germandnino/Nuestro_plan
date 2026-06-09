@@ -153,7 +153,7 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .ob-foot{flex-shrink:0;padding:14px 24px calc(18px + env(safe-area-inset-bottom));max-width:440px;margin:0 auto;width:100%}
 .ob-skip{display:block;width:100%;text-align:center;background:none;border:none;color:rgba(246,241,230,.5);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;padding:10px;margin-top:2px}
 .ob-mark{width:46px;height:46px;border-radius:13px;background:var(--gb);color:#231703;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:24px;font-weight:600;margin-bottom:6px}
-.card.tap.dragging{background:var(--cream);border-color:var(--gold);opacity:0.8;box-shadow:0 8px 20px rgba(0,0,0,0.15)}
+.card.tap.dragging{background:var(--cream);border-color:var(--gold);opacity:0.92;box-shadow:0 12px 28px rgba(0,0,0,0.22);position:relative;z-index:10;will-change:transform}
 /* fab center nav */
 .nt-fab{padding-top:0;margin-top:-14px}
 .nt-fab .fab-ring{width:52px;height:52px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;margin-bottom:4px;box-shadow:0 4px 16px rgba(192,138,45,.4);border:3px solid var(--gd);box-sizing:border-box}
@@ -433,3 +433,12 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
   border-color: var(--gold);
   color: var(--gb);
 }
+
+/* === Aprender: coach de inversión === */
+.glosario{margin-top:18px;border:1px solid var(--line);border-radius:12px;background:rgba(246,241,230,.03);overflow:hidden}
+.glosario>summary{list-style:none;cursor:pointer;padding:14px 14px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:rgba(246,241,230,.75);display:flex;align-items:center;justify-content:space-between}
+.glosario>summary::-webkit-details-marker{display:none}
+.glosario>summary::after{content:"+";font-size:18px;color:var(--gb);font-weight:400}
+.glosario[open]>summary::after{content:"–"}
+.glosario>summary:active{background:rgba(246,241,230,.05)}
+.glosario .learn-container{padding:0 14px 14px}

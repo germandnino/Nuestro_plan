@@ -601,6 +601,16 @@ function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inv
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
 function gastosFijosTotal(){return state.config.gastos||0;}
 function aportesFijosTotal(){return metasCompartidas().filter(m=>m.tipo!=='imprevistos').reduce((s,m)=>s+(m.aporteFijo||0),0);}
+/* Colchón de emergencia sugerido: 3 meses de gastos fijos; si el usuario solo declara
+   ahorro mensual (sin gastos fijos), ~6 meses de ese ahorro como punto de partida editable.
+   Devuelve 0 cuando no hay datos para inferirlo. */
+function colchonSugerido(){
+  const g=gastosFijosTotal();
+  if(g>0)return Math.round(g*3);
+  const c=state.config;
+  if(c.soloAhorroDirecto && (c.ahorroDirecto||0)>0)return Math.round((c.ahorroDirecto||0)*6);
+  return 0;
+}
 function sumaPct(){
   const c=state.config;
   if(c.estrategia==='cascada')return 0;
@@ -656,6 +666,44 @@ function premioSplitFactor(p,e){
   return p==='p1'?c.pctPremioP1/100:(100-c.pctPremioP1)/100;
 }
 
+/* Registro del último sobrante repartido por colocarSobrante (para avisar al usuario). */
+let _ultimoSobrante = [];
+/* Coloca el ahorro no asignado con una cascada inteligente, en vez de mandarlo
+   ciegamente a inversión:
+     (1) completa el colchón del fondo de emergencia (solo si tiene objetivo definido y le falta),
+     (2) el resto a la inversión abierta,
+     (3) si no hay inversión, el fondo de emergencia actúa de sumidero,
+     (4) en último caso, la meta prioritaria.
+   Muta `res` y registra en _ultimoSobrante a dónde fue cada parte. */
+function colocarSobrante(rem, res){
+  const placements=[];
+  const push=(m,monto)=>{
+    if(monto<=0.5)return;
+    const ex=placements.find(p=>p.id===m.id);
+    if(ex)ex.monto+=monto;else placements.push({id:m.id,nombre:m.nombre,monto});
+  };
+  const e=emergenciaPrincipal();
+  // (1) colchón del fondo de emergencia (solo si definió objetivo y aún le falta)
+  if(e && e.objetivo>0){
+    const add=Math.min(rem,getMetaFalta(e,res));
+    if(add>0.5){res[e.id]+=add;rem-=add;push(e,add);}
+  }
+  // (2) inversión abierta
+  if(rem>0.5){
+    const inv=inversionAbierta();
+    if(inv){res[inv.id]+=rem;push(inv,rem);rem=0;}
+  }
+  // (3) sumidero: fondo de emergencia (aunque no tenga colchón definido)
+  if(rem>0.5 && e){res[e.id]+=rem;push(e,rem);rem=0;}
+  // (4) último recurso: meta prioritaria
+  if(rem>0.5){
+    const prio=getMetaPrioritaria();
+    if(prio){res[prio.id]+=rem;push(prio,rem);rem=0;}
+  }
+  _ultimoSobrante=placements;
+  return placements;
+}
+
 /* Reparto del ahorro entre metas compartidas.
    Orden: (1) deudas y aportes fijos en $ (prioridad máxima),
           (2) prioritaria primero si es secuencial (recibe el remanente tras fijos),
@@ -663,6 +711,7 @@ function premioSplitFactor(p,e){
           (4) lo que sobre -> inversión abierta. */
 function distribuirAhorro(monto, esEspecial = false){
   const c=state.config,res={};
+  _ultimoSobrante=[];
   state.metas.forEach(m=>res[m.id]=0);
   if(monto<=0)return res;
   let rem=monto;
@@ -680,11 +729,7 @@ function distribuirAhorro(monto, esEspecial = false){
       }
       if(rem<=0.5)break;
     }
-    if(rem>0.5){
-      const inv=inversionAbierta();
-      if(inv)res[inv.id]+=rem;
-      else{const e=emergenciaPrincipal();if(e)res[e.id]+=rem;}
-    }
+    if(rem>0.5){colocarSobrante(rem,res);}
     return res;
   }
 
@@ -717,10 +762,8 @@ function distribuirAhorro(monto, esEspecial = false){
   });
   if(rem<=0.5)return res;
 
-  // (4) sobrante -> inversión abierta
-  const inv=inversionAbierta();
-  if(inv)res[inv.id]+=rem;
-  else{const e=emergenciaPrincipal();if(e)res[e.id]+=rem;}
+  // (4) sobrante -> cascada inteligente (colchón emergencia, luego inversión)
+  colocarSobrante(rem,res);
   return res;
 }
 
@@ -817,7 +860,7 @@ function renderInicio(){
   const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
   const patHtml = `
     <div class="card dark" style="border-left: 4px solid ${patColor};">
-      <div class="k">Patrimonio Neto (Líquido)</div>
+      <div class="k">${c.modo === 'individual' ? 'Mis ahorros e inversiones' : 'Nuestros ahorros e inversiones'}${totalDeudas > 0 ? ' <span style="text-transform:none; font-weight:400; opacity:.7;">(menos deudas)</span>' : ''}</div>
       <div class="num big" style="color:var(--cream);">${sign}${fmt(patrimonioNeto)}</div>
       <div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:4px;"></span>Ahorros: <b>${fmt(totalAhorros)}</b></span>
@@ -1455,7 +1498,10 @@ function renderMetas(){
       const over=sp>100;
       const inv=inversionAbierta();
       const em=emergenciaPrincipal();
-      const targetName = inv ? inv.nombre : (em ? em.nombre : 'el fondo de emergencias');
+      const colchonPend = em && em.objetivo>0 && em.saldo<em.objetivo;
+      const targetName = inv
+        ? (colchonPend ? `tu fondo de emergencia (hasta el colchón) y luego ${inv.nombre}` : inv.nombre)
+        : (em ? em.nombre : 'el fondo de emergencias');
       adviceHtml=`<div class="card" style="background:${over?'rgba(122,34,34,.12)':'rgba(192,138,45,.1)'};border-color:${over?'#7a2222':'rgba(192,138,45,.35)'};margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center"><span class="k" style="margin:0;color:${over?'#ff6b6b':'var(--gb)'}">Reparto del ahorro restante (%)</span><span class="num" style="font-size:18px;color:${over?'#ff6b6b':'var(--gb)'}">${sp}%</span></div>
         <div class="hint" style="margin-top:6px;color:rgba(246,241,230,.7)">${over?'Te pasaste de 100%: las últimas metas recibirán menos de lo que indica su %.':(sp<100?`El ${100-sp}% restante va a ${targetName}.`:'Repartes el 100%; las metas abiertas solo reciben lo que no alcance otra meta.')}</div></div>`;
@@ -1532,10 +1578,8 @@ function renderMetas(){
       ${listHtml}
       ${indivHtml}
       ${personalHtml}
-      <div style="height:72px;flex-shrink:0;"></div>
-      <div style="position:sticky;bottom:0;background:linear-gradient(to top, var(--gd) 85%, transparent);padding:20px 0 16px;z-index:20;margin-top:auto">
-        ${canEdit ? '<button class="btn" id="addMeta" style="margin:0">+ Nueva meta</button>' : '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;">Rol: Lector (Solo Lectura)</div>'}
-      </div>
+      ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector (Solo Lectura)</div>' : ''}
+      <div style="height:24px;flex-shrink:0;"></div>
     `;
   } else if (curMetasSubTab === 2) {
     const card=(m)=>{
@@ -1597,16 +1641,24 @@ function renderMetas(){
       ${listHtml}
       ${indivHtml}
       ${debtsShared.length === 0 && (isIndiv || indivHtml === '') ? `<div class="card"><div class="empty" style="display:flex;align-items:center;justify-content:center;gap:8px;">¡Sin deudas activas! Excelente salud financiera. ${getSVG('party')}</div></div>` : ''}
-      <div style="height:72px;flex-shrink:0;"></div>
-      <div style="position:sticky;bottom:0;background:linear-gradient(to top, var(--gd) 85%, transparent);padding:20px 0 16px;z-index:20;margin-top:auto">
-        ${canEdit ? '<button class="btn" id="addDebt" style="margin:0;background:#7a2222;">+ Nueva deuda</button>' : '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;">Rol: Lector (Solo Lectura)</div>'}
-      </div>
+      ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector (Solo Lectura)</div>' : ''}
+      <div style="height:24px;flex-shrink:0;"></div>
     `;
   }
 
-  let h = isIndiv
-    ? '<header><div class="ey">Mis</div><h1>Metas y Deudas</h1></header>'
-    : '<header><div class="ey">Nuestras</div><h1>Metas y Deudas</h1></header>';
+  const headerAddBtn = (canEdit && curMetasSubTab !== 0)
+    ? `<button id="metaHeaderAdd" aria-label="${curMetasSubTab === 2 ? 'Nueva deuda' : 'Nueva meta'}" style="flex-shrink:0;width:44px;height:44px;border-radius:50%;background:var(--gb);border:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(192,138,45,.45);cursor:pointer;margin-bottom:4px;transition:transform .12s,box-shadow .12s;">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#231703" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>`
+    : '';
+
+  let h = `<header style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;">
+    <div>
+      <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
+      <h1>Metas y Deudas</h1>
+    </div>
+    ${headerAddBtn}
+  </header>`;
 
   $('r1').innerHTML = `
     ${h}
@@ -1647,8 +1699,8 @@ function renderMetas(){
     };
   });
 
-  if ($('addMeta')) $('addMeta').onclick=()=>openMetaForm(null, 'sueno');
-  if ($('addDebt')) $('addDebt').onclick=()=>openMetaForm(null, 'deuda');
+  const headerAdd = $('metaHeaderAdd');
+  if (headerAdd) headerAdd.onclick = () => openMetaForm(null, curMetasSubTab === 2 ? 'deuda' : 'sueno');
   initReorder();
 }
 
@@ -1656,7 +1708,7 @@ function initReorder(){
   if (!canEditShared()) return;
   const container=$('sharedMetasContainer');
   if(!container)return;
-  let draggedEl=null,startY=0,hasDragged=false;
+  let draggedEl=null,startY=0,grabOffsetY=0,hasDragged=false;
 
   const onPointerMove=e=>{
     if(!draggedEl)return;
@@ -1666,15 +1718,36 @@ function initReorder(){
       draggedEl.classList.add('dragged');
     }
     const siblings=[...container.querySelectorAll('.card.tap:not(.dragging)')];
-    const nextSibling=siblings.find(sibling=>{
+    const target=siblings.find(sibling=>{
       const box=sibling.getBoundingClientRect();
       return e.clientY<box.top+box.height/2;
-    });
-    if(nextSibling){
-      container.insertBefore(draggedEl,nextSibling);
-    }else{
-      container.appendChild(draggedEl);
+    })||null;
+
+    const orderChanged = target ? draggedEl.nextElementSibling!==target
+                                : container.lastElementChild!==draggedEl;
+    if(orderChanged){
+      // FLIP: snapshot sibling positions, reorder, animate delta to 0
+      const firstTop=new Map();
+      siblings.forEach(s=>firstTop.set(s,s.getBoundingClientRect().top));
+      if(target)container.insertBefore(draggedEl,target);
+      else container.appendChild(draggedEl);
+      siblings.forEach(s=>{
+        const dy=firstTop.get(s)-s.getBoundingClientRect().top;
+        if(!dy)return;
+        s.style.transition='none';
+        s.style.transform=`translateY(${dy}px)`;
+        requestAnimationFrame(()=>{
+          s.style.transition='transform .18s ease';
+          s.style.transform='';
+        });
+      });
     }
+
+    // dragged card glued to pointer regardless of reflow
+    draggedEl.style.transition='none';
+    draggedEl.style.transform='none';
+    const natTop=draggedEl.getBoundingClientRect().top;
+    draggedEl.style.transform=`translateY(${e.clientY-grabOffsetY-natTop}px)`;
   };
 
   const onPointerUp=e=>{
@@ -1684,6 +1757,7 @@ function initReorder(){
     document.removeEventListener('pointercancel',onPointerUp);
 
     draggedEl.classList.remove('dragging');
+    container.querySelectorAll('.card.tap').forEach(s=>{s.style.transform='';s.style.transition='';});
     if(hasDragged){
       const cards=[...container.querySelectorAll('.card.tap')];
       cards.forEach((card,idx)=>{
@@ -1706,6 +1780,7 @@ function initReorder(){
     if(!card)return;
     draggedEl=card;
     startY=e.clientY;
+    grabOffsetY=e.clientY-card.getBoundingClientRect().top;
     hasDragged=false;
     card.classList.add('dragging');
     
@@ -1767,8 +1842,11 @@ function renderMetaForm(editing){
     const prio = getMetaPrioritaria();
     const isPrio = prio && prio.id === m.id;
     const showAporte = state.config.estrategia === 'simultaneo' || !isPrio;
+    const sug = colchonSugerido();
+    const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
-      <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
+      <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
+      ${sug>0 ? `<div class="hint" style="margin-top:6px">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de tus gastos fijos':'~6 meses de tu ahorro mensual'}). Ajústalo a tu realidad. El ahorro sobrante completa este colchón antes de ir a inversión.</div>` : ''}
       ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
       <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
   }else if(m.tipo==='deuda'){
@@ -2019,6 +2097,21 @@ function obtenerRecomendacionInversion(m) {
   } else {
     return `<strong>Largo Plazo (${mr} meses restantes):</strong> Al ser una meta a más de año y medio, el tiempo juega a tu favor para superar la inflación. Recomendamos portafolios indexados a acciones/ETFs de bajo costo. Puedes usar <strong>Tyba</strong> (para fondos de inversión de bajo costo) o <strong>trii</strong> para invertir directamente en ETFs globales como el CSPX (S&P 500).`;
   }
+}
+
+// Resumen compacto del horizonte de una meta para las filas del coach (texto largo: obtenerRecomendacionInversion).
+// Mismos cortes que el motor de recomendación para mantener coherencia.
+function clasificarHorizonte(m){
+  if (m.tipo === 'deuda')
+    return {nivel:'deuda', etiqueta:'Deuda', instrumento:'Pagar primero', color:'#c0532d'};
+  if (m.tipo === 'imprevistos' || m.tipo === 'personal')
+    return {nivel:'corto', etiqueta:'Liquidez', instrumento:'Cuenta alto rendimiento', color:'#14cb3c'};
+  if (!m.fecha)
+    return {nivel:'flexible', etiqueta:'Flexible', instrumento:'Cuenta líquida o fondo', color:'#1a8cc3'};
+  const mr = monthsUntil(m.fecha);
+  if (mr < 6)   return {nivel:'corto', etiqueta:'Corto', instrumento:'Cuenta alto rendimiento', color:'#14cb3c'};
+  if (mr <= 18) return {nivel:'medio', etiqueta:'Medio', instrumento:'CDT (tasa fija)',          color:'var(--gold)'};
+  return               {nivel:'largo', etiqueta:'Largo', instrumento:'ETFs / fondos',            color:'#4a90e2'};
 }
 
 function obtenerRecomendacionInversionCard(m) {
@@ -2428,7 +2521,8 @@ function computeReparto(g,a){
   const gustosP2=c.soloAhorroDirecto ? (prem*pf2) : (c.libreP2+prem*pf2);
   const gustos=gustosPareja+gustosP1+gustosP2;
   const dist=distribuirAhorro(ahorro);
-  return {base,comb,prem,ahorro,gastosDia,gustos,gustosPareja,gustosP1,gustosP2,dist,nom:c.soloAhorroDirecto ? 0 : (c.nominaP1+c.nominaP2),entra:c.soloAhorroDirecto ? (base+comb) : (c.nominaP1+c.nominaP2+comb)};
+  const sobrante=_ultimoSobrante.slice();
+  return {base,comb,prem,ahorro,gastosDia,gustos,gustosPareja,gustosP1,gustosP2,dist,sobrante,nom:c.soloAhorroDirecto ? 0 : (c.nominaP1+c.nominaP2),entra:c.soloAhorroDirecto ? (base+comb) : (c.nominaP1+c.nominaP2+comb)};
 }
 function getDistribucionAdvertencia() {
   const c = state.config;
@@ -2442,7 +2536,7 @@ function getDistribucionAdvertencia() {
       const sugerencia = deudas.length > 0 
         ? "Sugerencia: aumenta la asignación para amortizar tus deudas más rápido." 
         : "Sugerencia: asigna el 100% para que no quede dinero libre sin rumbo.";
-      warnings.push(`<strong>Metas Comunes:</strong> Solo tienes distribuido el <strong>${pctSum}%</strong> del ahorro común. El ${100 - pctSum}% restante irá al fondo de emergencias o inversiones abiertas por defecto. ${sugerencia}`);
+      warnings.push(`<strong>Metas Comunes:</strong> Solo tienes distribuido el <strong>${pctSum}%</strong> del ahorro común. El ${100 - pctSum}% restante se reparte solo: primero completa el colchón de tu fondo de emergencia (si le falta) y el resto va a tu inversión abierta. ${sugerencia}`);
     } else if (pctSum > 100) {
       warnings.push(`<strong>Metas Comunes:</strong> Tus metas comunes asignadas suman el <strong>${pctSum}%</strong> (supera el 100%). Ajusta la distribución.`);
     }
@@ -3427,7 +3521,15 @@ async function aplicar(){
   state.log.sort((x,y)=>y.mes.localeCompare(x.mes));
   save();
   renderMiMes();
-  flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓');
+  let sobranteTxt='';
+  if(r.sobrante && r.sobrante.length){
+    const total=r.sobrante.reduce((s,p)=>s+p.monto,0);
+    if(total>0.5){
+      const dest=r.sobrante.map(p=>p.nombre).join(' y ');
+      sobranteTxt=` · remanente ${fmt(total)} → ${dest}`;
+    }
+  }
+  flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓'+sobranteTxt);
 }
 
 /* =========================================================
@@ -3435,11 +3537,77 @@ async function aplicar(){
    ========================================================= */
 function renderAprender(){
   const c = state.config;
-  
+
+  // --- Capa 1: El principio (escalera plazo -> instrumento) ---
+  const ladderHtml = `
+    <div class="stitle" style="margin-top:4px;">El principio</div>
+    <div class="hint" style="color:rgba(246,241,230,.7); margin-bottom:10px;">No es qué producto es "mejor", es cuál encaja con <strong style="color:var(--gb)">cuándo</strong> vas a necesitar la plata. El plazo manda:</div>
+    <div class="ladder">
+      <div class="card" style="border-left:4px solid #14cb3c;margin-bottom:8px;padding:13px 14px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+          <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">Corto</span>
+          <span class="muted" style="font-size:11.5px">menos de 6 meses</span>
+        </div>
+        <div style="font-size:12.5px;font-weight:700;color:#0f8f2c">Cuenta de alto rendimiento</div>
+        <div class="muted" style="font-size:11.5px;margin-top:1px">~13% E.A. · riesgo bajo · liquidez 24/7</div>
+      </div>
+      <div class="card" style="border-left:4px solid var(--gold);margin-bottom:8px;padding:13px 14px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+          <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">Medio</span>
+          <span class="muted" style="font-size:11.5px">6 a 18 meses</span>
+        </div>
+        <div style="font-size:12.5px;font-weight:700;color:var(--gold)">CDT (tasa fija)</div>
+        <div class="muted" style="font-size:11.5px;margin-top:1px">10–12% E.A. · riesgo bajo · bloqueado al plazo</div>
+      </div>
+      <div class="card" style="border-left:4px solid #4a90e2;margin-bottom:0;padding:13px 14px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+          <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">Largo</span>
+          <span class="muted" style="font-size:11.5px">más de 18 meses</span>
+        </div>
+        <div style="font-size:12.5px;font-weight:700;color:#2f6fb0">ETFs / fondos</div>
+        <div class="muted" style="font-size:11.5px;margin-top:1px">8–10%+ histórico · riesgo medio-alto · le ganas a la inflación</div>
+      </div>
+    </div>
+  `;
+
+  // --- Capa 2: Tus metas, tu plan (personalizado) ---
+  const metasCoach = state.metas.filter(m => m.tipo !== 'personal');
+  let coachHtml;
+  if (metasCoach.length){
+    const rows = metasCoach.map(m => {
+      const h = clasificarHorizonte(m);
+      const obj = m.objetivo ? ` · meta ${fmt(m.objetivo)}` : '';
+      return `
+        <div class="card tap" data-meta="${esc(m.id)}" style="border-left:4px solid ${h.color}">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">${esc(m.nombre)}</span>
+              <span class="pill" style="background:transparent;border:1px solid ${h.color};color:${h.color}">${h.etiqueta}</span>
+            </div>
+            <div class="muted" style="font-size:12.5px;font-weight:700;color:${h.color}">${h.instrumento}</div>
+            <div class="muted" style="font-size:12px;margin-top:2px">${fmt(m.saldo||0)}${obj}</div>
+          </div>
+          <span class="chev">›</span>
+        </div>`;
+    }).join('');
+    coachHtml = `
+      <div class="stitle">Tus metas, tu plan</div>
+      <div class="hint" style="color:rgba(246,241,230,.7); margin-bottom:10px;">Según el plazo de cada meta, esto es lo que te conviene. Toca una para ver la recomendación completa.</div>
+      ${rows}
+    `;
+  } else {
+    coachHtml = `
+      <div class="stitle">Tus metas, tu plan</div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:13.5px; color:var(--gs); line-height:1.5; margin-bottom:12px;">Aún no tienes metas. Crea una y aquí te diremos exactamente dónde poner la plata según su plazo.</div>
+        <button class="btn gold" id="aprCrearMeta" style="margin-top:0;">Crear mi primera meta</button>
+      </div>
+    `;
+  }
+
   const catalogHtml = `
     <div class="learn-container" style="display:flex; flex-direction:column; gap:16px;">
-      <div class="stitle">Opciones de Inversión y Ahorro en Colombia</div>
-      <div class="hint" style="margin-bottom:8px;">Conoce los instrumentos financieros reales regulados en Colombia. Selecciona la mejor opción según el plazo de tu meta.</div>
+      <div class="hint" style="color:rgba(246,241,230,.7); margin:0 0 4px;">Instrumentos financieros reales regulados en Colombia. Referencia para elegir según el plazo de tu meta.</div>
 
       <!-- Instrument 1: Nu Cajitas -->
       <div class="card" style="border-left:4px solid #8f5dbb; background:rgba(143,93,187,0.03); padding:14px; border-radius:10px;">
@@ -3518,8 +3686,21 @@ function renderAprender(){
       <div class="ey">Educación financiera</div>
       <h1>Aprender a invertir</h1>
     </header>
-    ${catalogHtml}
+    ${ladderHtml}
+    ${coachHtml}
+    <details class="glosario">
+      <summary>¿Dónde invertir? Opciones en Colombia</summary>
+      ${catalogHtml}
+    </details>
   `;
+
+  // Filas de meta -> detalle (recomendación completa ya existente)
+  $('r3').querySelectorAll('[data-meta]').forEach(row => {
+    row.onclick = () => openDetail(row.dataset.meta);
+  });
+  // Estado vacío -> crear meta
+  const btnCrear = $('aprCrearMeta');
+  if (btnCrear) btnCrear.onclick = () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); };
 }
 
 /* =========================================================
