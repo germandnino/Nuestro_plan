@@ -724,18 +724,26 @@ function colocarSobrante(rem, res){
     const add=Math.min(rem,getMetaFalta(e,res));
     if(add>0.5){res[e.id]+=add;rem-=add;push(e,add);}
   }
-  // (2) inversión abierta
+  // (2) inversión abierta: sumidero natural del excedente (sin tope, es meta abierta)
   if(rem>0.5){
     const inv=inversionAbierta();
     if(inv){res[inv.id]+=rem;push(inv,rem);rem=0;}
   }
-  // (3) sumidero: fondo de emergencia (aunque no tenga colchón definido)
-  if(rem>0.5 && e){res[e.id]+=rem;push(e,rem);rem=0;}
-  // (4) último recurso: meta prioritaria
+  // (3) sin inversión: repartir el resto en cascada por prioridad entre las demás metas con cupo,
+  //     cortando en su objetivo. Evita sobrellenar una sola meta dejando otras vacías.
   if(rem>0.5){
-    const prio=getMetaPrioritaria();
-    if(prio){res[prio.id]+=rem;push(prio,rem);rem=0;}
+    const resto=metasCompartidas().filter(m=>!m.colocado).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+    for(let i=0;i<resto.length;i++){
+      if(rem<=0.5)break;
+      const m=resto[i];
+      const falta=getMetaFalta(m,res);
+      if(falta===Infinity){res[m.id]+=rem;push(m,rem);rem=0;break;}
+      const add=Math.min(rem,falta);
+      if(add>0.5){res[m.id]+=add;rem-=add;push(m,add);}
+    }
   }
+  // (4) último recurso: todas las metas llenas y sin sumidero abierto → queda en emergencia.
+  if(rem>0.5 && e){res[e.id]+=rem;push(e,rem);rem=0;}
   _ultimoSobrante=placements;
   return placements;
 }
@@ -752,7 +760,9 @@ function distribuirAhorro(monto, esEspecial = false){
   if(monto<=0)return res;
   let rem=monto;
   // Excluir metas marcadas "ya colocado": no admiten reparto nuevo (p.ej. CDT ya constituido).
-  const comp=metasCompartidas().filter(m=>!m.colocado);
+  // Orden por prioridad = el mismo que ve el usuario en pantalla; así, con %>100, las últimas
+  // metas (menor prioridad) son las que reciben menos, de forma predecible, no según orden de array.
+  const comp=metasCompartidas().filter(m=>!m.colocado).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
 
   if(c.estrategia==='cascada'){
     const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
@@ -2270,6 +2280,15 @@ function attachMetaForm(editing){
   $('fSave').onclick=()=>{
     readMetaForm();
     if(!mForm.nombre){flash('Ponle un nombre a la meta');return;}
+    // Evita nombres repetidos (case-insensitive, sin importar espacios) para no confundir el reparto.
+    const nombreNorm=mForm.nombre.trim().toLowerCase().replace(/\s+/g,' ');
+    const dup=state.metas.some(x=>x.id!==mForm.id&&x.tipo!=='personal'&&(x.nombre||'').trim().toLowerCase().replace(/\s+/g,' ')===nombreNorm);
+    if(dup){flash('Ya tienes una meta con ese nombre. Usa uno distinto para no confundirte.');return;}
+    // En simultáneo una meta sin fijo ni % no participa del reparto y queda en $0. Forzar uno u otro.
+    // La inversión abierta es sumidero del sobrante, así que se exime.
+    if(state.config.estrategia==='simultaneo'&&!mForm.dueno&&mForm.tipo!=='invertir'&&!mForm.colocado&&!((mForm.aporteFijo||0)>0)&&!((mForm.aportePct||0)>0)){
+      flash('En modo simultáneo define un aporte fijo o un % para esta meta; sin uno de los dos quedaría en $0.');return;
+    }
     const idx=state.metas.findIndex(x=>x.id===mForm.id);
     if(idx>=0)state.metas[idx]=mForm;else state.metas.push(mForm);
     mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
@@ -2763,7 +2782,8 @@ function renderHistoryDetail(mes, fromTab) {
             const toSave=ep.monto*(1-(ep.pctRetener||0)/100);
             if(toSave>0.5){
               if(ep.meta==='distribuir'){
-                const distEsp=distribuirAhorro(toSave,true);
+                // Usa el snapshot real aplicado (ep.dist); recalcular aquí mentiría porque los saldos ya cambiaron.
+                const distEsp=ep.dist||distribuirAhorro(toSave,true);
                 metasCompartidas().forEach(m=>{if(!unifiedDist[m.id])unifiedDist[m.id]={m,base:0,extra:0};unifiedDist[m.id].extra+=distEsp[m.id]||0;});
               }else{const md=metaById(ep.meta);if(md){if(!unifiedDist[ep.meta])unifiedDist[ep.meta]={m:md,base:0,extra:0};unifiedDist[ep.meta].extra+=toSave;}}
             }
@@ -2830,8 +2850,41 @@ function getDistribucionAdvertencia() {
     } else if (pctSum > 100) {
       warnings.push(`<strong>Metas Comunes:</strong> Tus metas comunes asignadas suman el <strong>${pctSum}%</strong> (supera el 100%). Ajusta la distribución.`);
     }
+    // Red de seguridad: metas que reciben $0 por no tener fijo ni %. En secuencial se exime la
+    // prioritaria (recibe el remanente automáticamente); la inversión abierta es sumidero del sobrante.
+    const prioSec = c.estrategia === 'secuencial' ? getMetaPrioritaria() : null;
+    const prioSecId = prioSec ? prioSec.id : null;
+    const sinAporte = sharedGoals.filter(m =>
+      m.tipo !== 'invertir' && !m.colocado && m.id !== prioSecId &&
+      !((m.aporteFijo || 0) > 0) && !((m.aportePct || 0) > 0)
+    );
+    if (sinAporte.length > 0) {
+      const nombres = sinAporte.map(m => `"${esc(m.nombre)}"`).join(', ');
+      const plural = sinAporte.length > 1;
+      warnings.push(`<strong>Metas sin aporte:</strong> ${nombres} ${plural ? 'no tienen' : 'no tiene'} aporte fijo ni %, así que ${plural ? 'recibirán' : 'recibirá'} $0 este mes${c.estrategia === 'secuencial' ? ' (salvo lo que sobre tras la meta prioritaria)' : ''}. Asígnale${plural ? 's' : ''} un fijo o un % en Metas → Ahorros.`);
+    }
+    // Sin meta de inversión abierta, una meta sin objetivo termina actuando como sumidero del excedente.
+    if (!inversionAbierta()) {
+      const sumidero = sharedGoals
+        .filter(m => m.tipo !== 'deuda' && !m.colocado && (m.objetivo || 0) <= 0)
+        .sort((a, b) => (a.prioridad || 0) - (b.prioridad || 0))[0];
+      if (sumidero) {
+        warnings.push(`<strong>Sin meta de inversión:</strong> el excedente del mes (lo que sobre tras llenar tus metas con objetivo) se acumulará en "${esc(sumidero.nombre)}", que no tiene objetivo y actúa como sumidero. Si prefieres un destino dedicado para el sobrante, crea una meta de inversión.`);
+      }
+    }
+  } else {
+    // Cascada: una meta no-inversión sin objetivo devuelve falta=Infinity y absorbe TODO el
+    // ahorro, dejando sin nada a las metas de menor prioridad. Avisar para que definan objetivo.
+    const sinObjetivo = sharedGoals.filter(m =>
+      m.tipo !== 'invertir' && m.tipo !== 'deuda' && !m.colocado && (m.objetivo || 0) <= 0
+    );
+    if (sinObjetivo.length > 0) {
+      const nombres = sinObjetivo.map(m => `"${esc(m.nombre)}"`).join(', ');
+      const plural = sinObjetivo.length > 1;
+      warnings.push(`<strong>Cascada sin meta definida:</strong> ${nombres} ${plural ? 'no tienen' : 'no tiene'} un objetivo de ahorro. En cascada, una meta sin objetivo absorbe <strong>todo</strong> el ahorro disponible (base y extras) y las metas de menor prioridad nunca reciben nada. Defínele un objetivo para que la cascada baje correctamente.`);
+    }
   }
-  
+
   // Individual warnings
   const perfil = c.perfil;
   const indivGoals = metasIndividuales(perfil);
@@ -2954,7 +3007,8 @@ function drawActiveSavedDistributionList(entry) {
       const toSave = ep.monto * (1 - (ep.pctRetener || 0) / 100);
       if (toSave > 0.5) {
         if (ep.meta === 'distribuir') {
-          const distEsp = distribuirAhorro(toSave, true);
+          // Usa el snapshot real aplicado (ep.dist); recalcular aquí mentiría porque los saldos ya cambiaron.
+          const distEsp = ep.dist || distribuirAhorro(toSave, true);
           state.metas.forEach(m => {
             if (m.tipo !== 'personal' && !m.dueno && (distEsp[m.id] || 0) > 0.5) {
               if (!unifiedDist[m.id]) unifiedDist[m.id] = { m, base: 0, extra: 0 };
