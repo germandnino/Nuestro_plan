@@ -1231,9 +1231,9 @@ function drawSavingsDonut() {
     return `<div class="card dark" style="padding:18px 16px;">
       <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
       <div style="display:flex; align-items:center; gap:20px;">
-        <div style="width:90px; height:90px; flex-shrink:0;">
-          <svg viewBox="0 0 100 100" style="width:100%; height:100%;">
-            <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(246,241,230,.08)" stroke-width="8" />
+        <div style="width:128px; height:128px; flex-shrink:0;">
+          <svg viewBox="0 0 100 100" style="width:100%; height:100%; overflow:visible;">
+            <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(246,241,230,.08)" stroke-width="11" />
             <text x="50" y="53" text-anchor="middle" font-family="var(--sans)" font-size="8" fill="rgba(246,241,230,.3)" font-weight="600">Vacío</text>
           </svg>
         </div>
@@ -1249,18 +1249,11 @@ function drawSavingsDonut() {
   
   metasConSaldo.sort((a,b) => b.saldo - a.saldo);
 
-  metasConSaldo.forEach(m => {
+  const PALETTE = ['#d9a84a','#5b9aa0','#c87a53','#7fae6e','#a36a84','#6f8fc7','#cf8fb0','#b5923f','#7bc0b8','#c0673f'];
+  metasConSaldo.forEach((m, i) => {
     const pct = (m.saldo / total) * 100;
-    let color = '#2f5a44';
-    if (m.tipo === 'imprevistos') color = '#2f5a44';
-    else if (m.tipo === 'sueno') color = '#c08a2d';
-    else if (m.tipo === 'invertir') color = '#5b9aa0';
-    else if (m.tipo === 'personal') {
-      color = m.dueno === 'p1' ? '#c87a53' : '#a36a84';
-    } else if (m.dueno) {
-      color = m.dueno === 'p1' ? '#d69677' : '#be8ba3';
-    }
-    
+    const color = PALETTE[i % PALETTE.length];
+
     segments.push({
       ...m,
       pct,
@@ -1274,16 +1267,16 @@ function drawSavingsDonut() {
   let svgCircles = '';
   segments.forEach(seg => {
     const offset = C - (seg.pct / 100) * C;
-    svgCircles += `<circle cx="50" cy="50" r="35" fill="none" stroke="${seg.color}" stroke-width="8" stroke-dasharray="${C} ${C}" stroke-dashoffset="${offset}" transform="rotate(${seg.startAngle} 50 50)" stroke-linecap="butt" />`;
+    svgCircles += `<circle cx="50" cy="50" r="35" fill="none" stroke="${seg.color}" stroke-width="11" stroke-dasharray="${C} ${C}" stroke-dashoffset="${offset}" transform="rotate(${seg.startAngle} 50 50)" stroke-linecap="butt" />`;
   });
 
   const legend = segments.map(seg => `
-    <div style="display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:rgba(246,241,230,.85)">
-      <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; color:rgba(246,241,230,.85)">
+      <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">
         <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${seg.color}; flex-shrink:0;"></span>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px;">${seg.nombre}</span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${seg.nombre}</span>
       </div>
-      <div style="font-variant-numeric:tabular-nums; margin-left:8px; flex-shrink:0;">
+      <div style="font-variant-numeric:tabular-nums; flex-shrink:0;">
         <b style="color:var(--cream);">${fmtK(seg.saldo)}</b>
         <span style="font-size:10px; color:rgba(246,241,230,.45); margin-left:2px;">(${Math.round(seg.pct)}%)</span>
       </div>
@@ -1293,11 +1286,11 @@ function drawSavingsDonut() {
   return `<div class="card dark" style="padding:18px 16px;">
     <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
     <div style="display:flex; align-items:center; gap:20px;">
-      <div style="width:96px; height:96px; flex-shrink:0;">
+      <div style="width:128px; height:128px; flex-shrink:0;">
         <svg viewBox="0 0 100 100" style="width:100%; height:100%; overflow:visible;">
           ${svgCircles}
-          <text x="50" y="47" text-anchor="middle" font-family="var(--sans)" font-size="6.5" fill="rgba(246,241,230,.5)" font-weight="700" letter-spacing="0.05em">TOTAL</text>
-          <text x="50" y="57" text-anchor="middle" font-family="var(--serif)" font-size="11.5" fill="var(--cream)" font-weight="600">${fmtK(total)}</text>
+          <text x="50" y="46" text-anchor="middle" font-family="var(--sans)" font-size="7" fill="rgba(246,241,230,.5)" font-weight="700" letter-spacing="0.05em">TOTAL</text>
+          <text x="50" y="58" text-anchor="middle" font-family="var(--serif)" font-size="13" fill="var(--cream)" font-weight="600">${fmtK(total)}</text>
         </svg>
       </div>
       <div style="flex:1; display:flex; flex-direction:column; gap:7px; overflow:hidden;">
