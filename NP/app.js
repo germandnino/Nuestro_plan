@@ -3025,6 +3025,7 @@ async function desaplicarMes(mes) {
       }
     });
   }
+  if (entry.cobertura) revertirCobertura(entry.cobertura);
   
   if (entry.especiales) {
     entry.especiales.forEach(ep => {
@@ -3293,6 +3294,9 @@ function openAsistenteIngresoExtra() {
           <option value="p1">${c.nombreP1}</option>
           <option value="p2">${c.nombreP2}</option>
         </select>
+        <div class="hint" style="margin-top:4px; font-size:11px; color:rgba(246,241,230,.5); line-height:1.3;">
+          Nota: En reparto 'Ambos', tu 50% de retención se aplicará a tu bolsillo; el 50% de tu pareja se reflejará en su propio dispositivo al sincronizar.
+        </div>
       </div>` : `<select id="aePersona" style="display:none"><option value="p1">${c.nombreP1}</option></select>`}
 
       <div>
@@ -3841,9 +3845,13 @@ async function aplicar(){
   if (!canEditShared()) { flash('No tienes permisos para aportar'); return; }
   const mes=selectedMonth;if(!mes){flash('Elige el mes');return;}
   const ex=state.log.find(e=>e.mes===mes);
-  if(ex&&ex.aplicado){if(!await customConfirm('Ese mes ya se aplicó. ¿Aplicar de nuevo? Sumará otra vez a las metas.', false))return;}
+  if(ex&&ex.aplicado){if(!await customConfirm('Ese mes ya se aplicó. ¿Recalcular y aplicar de nuevo? No se duplica: primero se deshace lo anterior.', false))return;}
   const r=computeReparto(0,0),c=state.config;
-  if(r.ahorro < 0){flash('No se puede aportar: el ahorro es negativo');return;}
+  let cobertura=null;
+  if(r.ahorro < 0){
+    cobertura = await openAsistenteDeficit(-r.ahorro);
+    if(!cobertura){flash('Mes sin aplicar: el déficit quedó sin cubrir');return;}
+  }
   // Revertir distribución previa antes de re-aplicar para evitar doble conteo
   if(ex && ex.aplicado && ex.reparto && ex.reparto.dist){
     state.metas.forEach(m=>{
@@ -3855,6 +3863,7 @@ async function aplicar(){
       }
     });
   }
+  if(ex && ex.aplicado && ex.cobertura) revertirCobertura(ex.cobertura);
   state.metas.forEach(m=>{
     if(m.tipo!=='personal'){
       if(m.tipo==='deuda'){
@@ -3864,6 +3873,7 @@ async function aplicar(){
       }
     }
   });
+  if(cobertura) aplicarCobertura(cobertura, mes);
   const p1Extra = especialesPendientes.filter(ep => ep.persona === 'p1').reduce((s, ep) => s + ep.monto, 0) + especialesPendientes.filter(ep => ep.persona === 'ambos').reduce((s, ep) => s + ep.monto * 0.5, 0);
   const p2Extra = especialesPendientes.filter(ep => ep.persona === 'p2').reduce((s, ep) => s + ep.monto, 0) + especialesPendientes.filter(ep => ep.persona === 'ambos').reduce((s, ep) => s + ep.monto * 0.5, 0);
   
@@ -3928,7 +3938,10 @@ async function aplicar(){
   
   especialesPendientes=[];
   
-  const aporte=libreOf(perfil)+retenPersonal;
+  // En mes con déficit el "dinero libre" no existió; solo aplica la retención de extras.
+  // Trade-off contable: En un ingreso "ambos" con retención, cada dispositivo solo aplica su 50%
+  // localmente en su propio bolsillo (Option 2).
+  const aporte=(r.ahorro>=0?libreOf(perfil):0)+retenPersonal;
   const ya=per.aportes.find(x=>x.mes===mes);
   let delta = aporte;
   if(ya){
@@ -3950,7 +3963,7 @@ async function aplicar(){
         }
       }
     });
-    per.saldo += rem;
+    per.saldo = Math.max(0, per.saldo + rem);
   }
 
   const snapshot = {
@@ -3988,7 +4001,8 @@ async function aplicar(){
       entra: r.entra,
       dist: Object.assign({}, r.dist)
     },
-    especiales: yaInmediatos.concat(espSnapshot)
+    especiales: yaInmediatos.concat(espSnapshot),
+    cobertura: cobertura || null
   };
   state.log=state.log.filter(e=>e.mes!==mes);state.log.push(snapshot);
   state.log.sort((x,y)=>y.mes.localeCompare(x.mes));
@@ -4002,7 +4016,8 @@ async function aplicar(){
       sobranteTxt=` · remanente ${fmt(total)} → ${dest}`;
     }
   }
-  flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓'+sobranteTxt);
+  if(cobertura){flash('Mes en rojo cubierto ✓ · déficit de '+fmt(-r.ahorro)+' registrado');}
+  else{flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓'+sobranteTxt);}
 }
 
 /* =========================================================
