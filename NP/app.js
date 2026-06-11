@@ -3102,6 +3102,8 @@ async function desaplicarMes(mes) {
   save();
   renderMiMes();
   flash('Mes reabierto. Presupuesto liberado para edición ✓');
+}
+
 /* =========================================================
    COBERTURA DE DÉFICIT (mes en rojo)
    ========================================================= */
