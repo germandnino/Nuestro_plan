@@ -884,13 +884,15 @@ function aplicarAporteDirecto(m, monto){
 }
 // Reverso exacto de un aporte directo (para deshacer ingresos).
 function revertirAporteDirecto(m, monto){
+  if(monto<=0) return;
   if(m.tipo==='deuda') m.saldo+=monto;
   else m.saldo=Math.max(0, m.saldo-monto);
 }
 // ¿La meta destino es del terreno personal del perfil activo?
+// Cubre bolsillo (tipo personal) y metas individuales: ambas llevan dueno.
 function esDestinoPersonal(metaId){
   const m=metaById(metaId);
-  return !!(m && (m.tipo==='personal' || m.dueno));
+  return !!(m && m.dueno===state.config.perfil);
 }
 
 /* ---------- navegación ---------- */
