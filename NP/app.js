@@ -923,6 +923,8 @@ function openModalSobrante(monto, metaLlena){
     ov.querySelector('#sobMeta').onclick=()=>done({accion:'meta',metaId:ov.querySelector('#sobMetaSel').value});
     ov.querySelector('#sobBolsillo').onclick=()=>done({accion:'bolsillo'});
     ov.querySelector('#sobPendiente').onclick=()=>done({accion:'pendiente'});
+    ov.onclick=e=>{if(e.target===ov)done({accion:'pendiente'});};
+
     if(otras.length===0){ov.querySelector('#sobMeta').disabled=true;ov.querySelector('#sobMetaSel').disabled=true;}
   });
 }
