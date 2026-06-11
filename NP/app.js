@@ -485,7 +485,9 @@ async function syncCheckOwner(planId, uid) {
 }
 
 let _lastEditNotif = 0;
+let _firstSyncSnapshot = true;
 function syncSubscribe(planId) {
+  _firstSyncSnapshot = true;
   if (unsubscribeSync) unsubscribeSync();
   unsubscribeSync = db.collection('planes').doc(planId)
     .collection('shared').doc('data')
@@ -494,10 +496,22 @@ function syncSubscribe(planId) {
       const remote = doc.data();
       // Aviso "tu pareja editó": ignora el eco de escrituras propias.
       const esEco = (doc.metadata && doc.metadata.hasPendingWrites) || remote.lastEditBy === state.config.perfil;
-      if (remote.lastEditBy && !esEco && Date.now() - _lastEditNotif > 8000) {
+      const remoteUpdatedMs = (remote.updatedAt && remote.updatedAt.toMillis) ? remote.updatedAt.toMillis() : 0;
+      if (_firstSyncSnapshot) {
+        // Primera carga de la sesión: ¿hubo cambios del otro mientras no estabas?
+        _firstSyncSnapshot = false;
+        const lastSeen = Number(localStorage.getItem('lastSeenUpdate') || 0);
+        if (remote.lastEditBy && !esEco && remoteUpdatedMs > lastSeen) {
+          _lastEditNotif = Date.now();
+          flash('✎ ' + perfilNombre(remote.lastEditBy) + ' actualizó el plan mientras no estabas');
+        }
+      } else if (remote.lastEditBy && !esEco && Date.now() - _lastEditNotif > 8000) {
+        // Cambio en vivo con la app abierta.
         _lastEditNotif = Date.now();
         flash('✎ ' + perfilNombre(remote.lastEditBy) + ' actualizó el plan');
       }
+      // Marca como visto el último estado sincronizado.
+      if (remoteUpdatedMs) { try { localStorage.setItem('lastSeenUpdate', String(remoteUpdatedMs)); } catch(_){} }
       const perfilLocal = state.config.perfil;
       const personalesLocales = state.metas.filter(m => m.tipo === 'personal');
       const remoteMetas = remote.metas || [];
@@ -3344,8 +3358,8 @@ function openAsistenteIngresoExtra() {
           <option value="p1">${c.nombreP1}</option>
           <option value="p2">${c.nombreP2}</option>
         </select>
-        <div class="hint" style="margin-top:4px; font-size:11px; color:rgba(246,241,230,.5); line-height:1.3;">
-          Nota: En reparto 'Ambos', tu 50% de retención se aplicará a tu bolsillo; el 50% de tu pareja se reflejará en su propio dispositivo al sincronizar.
+        <div class="hint" style="margin-top:4px; font-size:11px; line-height:1.3;">
+          Define a quién se le acredita el % retenido al bolsillo. El resto va a la meta que elijas abajo. En 'Ambos', la retención se reparte 50/50 (la parte de tu pareja aparece en su dispositivo al sincronizar).
         </div>
       </div>` : `<select id="aePersona" style="display:none"><option value="p1">${c.nombreP1}</option></select>`}
 
