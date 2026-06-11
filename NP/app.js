@@ -922,12 +922,23 @@ let openExtraFormOnLoad = false;
 
 function renderInicio(){
   const c=state.config;
-  // Privacidad: el dashboard suma lo conjunto + lo del perfil de este teléfono.
   const perfil=c.perfil;
-  const esVisible=m=>!m.dueno||m.dueno===perfil;
-  const totalAhorros = state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && esVisible(m)).reduce((s,m)=>s+m.saldo,0) + (metaPersonal(perfil)?.saldo||0);
-  const totalDeudas = state.metas.filter(m => m.tipo === 'deuda' && esVisible(m)).reduce((s,m)=>s+m.saldo,0);
-  const patrimonioNeto = totalAhorros - totalDeudas;
+  const esPareja = c.modo !== 'individual';
+  // Compartido: lo de la pareja (sin dueño). Idéntico en ambos teléfonos.
+  const ahorrosCompartidos = state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
+  const deudasCompartidas = state.metas.filter(m => m.tipo === 'deuda' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
+  // Mi parte: bolsillo personal + metas individuales propias − deudas individuales propias. Privada.
+  const miBolsillo = (metaPersonal(perfil)?.saldo||0)
+    + state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0)
+    - state.metas.filter(m => m.tipo === 'deuda' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
+
+  // Pareja: el número grande es SOLO lo compartido (mismo en ambos teléfonos).
+  // Individual: una sola persona, se suma todo.
+  const patrimonioNeto = esPareja
+    ? (ahorrosCompartidos - deudasCompartidas)
+    : (ahorrosCompartidos + miBolsillo - deudasCompartidas);
+  const totalDeudas = deudasCompartidas;
+  const bolsilloColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   const headerHtml = c.modo === 'individual'
     ? `<header><div class="ey">${esc(c.nombreP1)}</div><h1>Mi plan</h1></header>`
@@ -936,15 +947,22 @@ function renderInicio(){
   // 1. Patrimonio Neto Card
   const sign = patrimonioNeto >= 0 ? '+' : '';
   const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
+  const desgloseHtml = esPareja
+    ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${bolsilloColor}; margin-right:4px;"></span>Mi bolsillo: <b>${fmt(miBolsillo)}</b></span>
+      </div>
+      ${deudasCompartidas > 0 ? `<div style="margin-top:6px; font-size:12.5px;"><span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(deudasCompartidas)}</b></span></div>` : ''}
+      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tu bolsillo es privado y no entra en el total de la pareja.</div>`
+    : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + miBolsillo)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(totalDeudas)}</b></span>
+      </div>`;
   const patHtml = `
     <div class="card dark" style="border-left: 4px solid ${patColor};">
-      <div class="k">${c.modo === 'individual' ? 'Mis ahorros e inversiones' : 'Ahorro conjunto + mi parte'}${totalDeudas > 0 ? ' <span style="text-transform:none; font-weight:400; opacity:.7;">(menos deudas)</span>' : ''}</div>
+      <div class="k">${esPareja ? 'Patrimonio de la pareja' : 'Mis ahorros e inversiones'}${totalDeudas > 0 ? ' <span style="text-transform:none; font-weight:400; opacity:.7;">(menos deudas)</span>' : ''}</div>
       <div class="num big" style="color:var(--cream);">${sign}${fmt(patrimonioNeto)}</div>
-      <div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:4px;"></span>Ahorros: <b>${fmt(totalAhorros)}</b></span>
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(totalDeudas)}</b></span>
-      </div>
-      ${c.modo === 'pareja' ? '<div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">El bolsillo y las metas individuales de tu pareja son privados; no se suman aquí.</div>' : ''}
+      ${desgloseHtml}
     </div>
   `;
 
