@@ -3530,13 +3530,14 @@ function renderMiMes(){
   } else {
     logH = showLogs.map(e => {
       const ec = e.config || c;
+      const enRojo = e.reparto && e.reparto.ahorro < 0;
       const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
       const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
       const p1Total = (ec.nominaP1 || 0) + e.p1;
       const p2Total = (ec.nominaP2 || 0) + e.p2;
       return `<div class="card tap tap-hist" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
         <div style="flex:1">
-          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
+          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}${enRojo ? ' <span style="display:inline-block;vertical-align:middle;background:rgba(224,108,117,.15);color:#e06c75;border:1px solid rgba(224,108,117,.35);font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;margin-left:4px;">Mes cubierto</span>' : ''}</div>
           <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
