@@ -52,8 +52,9 @@ service cloud.firestore {
     }
 
     match /planes/{planId}/bolsillos/{uid} {
-      // Phase A: Permisivo - Cualquier miembro puede leer/escribir cualquier bolsillo
-      allow read, write: if isMember(planId);
+      // Privacidad: cada miembro solo lee/escribe SU propio bolsillo.
+      // Los saldos acumulados del otro nunca salen del servidor.
+      allow read, write: if isMember(planId) && request.auth.uid == uid;
     }
   }
 }
