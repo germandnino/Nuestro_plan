@@ -1473,6 +1473,75 @@ function drawFixedBudgetCard() {
   </div>`;
 }
 
+function ahorroDeMes(e){
+  if (e.reparto && typeof e.reparto.ahorro === 'number') {
+    return e.reparto.ahorro + (e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0);
+  }
+  const base = computeBase();
+  const comb = (e.p1 || 0) + (e.p2 || 0);
+  return base + comb * (1 - state.config.pctPremio / 100);
+}
+
+function drawStatsBI(){
+  if (!state.log || state.log.length === 0) return '';
+  const c = state.config;
+  const logs = state.log.slice();
+  const ahorros = logs.map(ahorroDeMes);
+  const n = ahorros.length;
+  const totalAhorrado = ahorros.reduce((s, v) => s + v, 0);
+  const avgAhorro = totalAhorrado / n;
+  const avgExtra = avgVar();
+
+  let bestIdx = 0;
+  ahorros.forEach((v, i) => { if (v > ahorros[bestIdx]) bestIdx = i; });
+
+  const ingresoMensual = c.soloAhorroDirecto ? 0 : ((c.nominaP1 || 0) + (c.nominaP2 || 0));
+  const tasa = ingresoMensual > 0 ? Math.round(Math.max(0, Math.min(100, avgAhorro / ingresoMensual * 100))) : null;
+
+  const mesAnterior = (mes) => {
+    const [y, m] = mes.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const meses = logs.map(e => e.mes).sort();
+  let racha = meses.length ? 1 : 0;
+  for (let i = meses.length - 1; i > 0; i--) {
+    if (mesAnterior(meses[i]) === meses[i - 1]) racha++; else break;
+  }
+
+  const lastAhorro = ahorroDeMes(logs.find(e => e.mes === meses[meses.length - 1]));
+  let trend = '';
+  if (avgAhorro > 0 && n >= 2) {
+    const diff = Math.round((lastAhorro - avgAhorro) / avgAhorro * 100);
+    if (diff !== 0) {
+      const up = diff > 0;
+      trend = `<span style="font-size:11px;font-weight:700;color:${up ? '#0f8f2c' : '#c0673f'};margin-left:6px;">${up ? '↑' : '↓'} ${Math.abs(diff)}%</span>`;
+    }
+  }
+
+  const tile = (label, value, sub) => `
+    <div style="background:rgba(246,241,230,.04); border-radius:10px; padding:11px 12px;">
+      <div style="font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:var(--gb); margin-bottom:4px;">${label}</div>
+      <div style="font-family:var(--serif); font-size:19px; font-weight:600; color:var(--cream); line-height:1.1;">${value}</div>
+      ${sub ? `<div style="font-size:10.5px; color:rgba(246,241,230,.45); margin-top:3px;">${sub}</div>` : ''}
+    </div>`;
+
+  let tiles = '';
+  tiles += tile('Ahorro mensual prom.', `${fmtK(avgAhorro)}${trend}`, '');
+  tiles += tile('Ingreso extra prom.', fmtK(avgExtra), '');
+  tiles += tile('Total ahorrado', fmtK(totalAhorrado), '');
+  tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(logs[bestIdx].mes));
+  if (tasa !== null) tiles += tile('Tasa de ahorro', `${tasa}%`, 'del ingreso');
+  tiles += tile('Constancia', `${n} ${n === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
+
+  return `<div class="card dark" style="padding:18px 16px; margin-bottom:12px;">
+    <div class="k" style="margin-bottom:14px;">Estadísticas</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:9px;">
+      ${tiles}
+    </div>
+  </div>`;
+}
+
 function drawSavingsHistoryCard() {
   if (!state.log || state.log.length === 0) {
     return `<div class="card dark" style="padding:18px 16px; border: 1px dashed rgba(246,241,230,.15); background: transparent;">
@@ -1483,54 +1552,43 @@ function drawSavingsHistoryCard() {
     </div>`;
   }
 
-  const historyData = state.log.slice(0, 6).reverse().map(e => {
-    let ahorro = 0;
-    if (e.reparto && typeof e.reparto.ahorro === 'number') {
-      ahorro = e.reparto.ahorro + (e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0);
-    } else {
-      const base = computeBase();
-      const comb = e.p1 + e.p2;
-      ahorro = base + comb * (1 - state.config.pctPremio / 100);
-    }
-    return {
-      mesLabel: fmtMes(e.mes),
-      ahorro: ahorro
-    };
-  });
+  const historyData = state.log.slice(0, 6).reverse().map(e => ({
+    mesLabel: fmtMes(e.mes),
+    ahorro: ahorroDeMes(e)
+  }));
 
   const maxVal = Math.max(...historyData.map(d => d.ahorro), 500000);
+  const avgVal = historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length;
   const N = historyData.length;
   
   const graphWidth = 250;
   const startX = 35;
-  const startY = 90;
+  const startY = 130;
+  const plotH = 100;
   const colWidth = graphWidth / N;
-  const barWidth = Math.min(22, colWidth * 0.45);
+  const barWidth = Math.min(26, colWidth * 0.5);
 
   let barElements = '';
   historyData.forEach((d, i) => {
-    const barHeight = Math.max(4, (d.ahorro / maxVal) * 65);
+    const barHeight = Math.max(4, (d.ahorro / maxVal) * plotH);
     const x = startX + i * colWidth + (colWidth - barWidth) / 2;
     const y = startY - barHeight;
 
     barElements += `
-      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="url(#barGrad)" rx="3" ry="3" />
-      <text x="${x + barWidth/2}" y="${y - 5}" text-anchor="middle" font-family="var(--sans)" font-size="8.5" fill="var(--cream)" font-weight="600">${fmtK(d.ahorro)}</text>
-      <text x="${x + barWidth/2}" y="${startY + 15}" text-anchor="middle" font-family="var(--sans)" font-size="8" fill="rgba(246,241,230,.4)" font-weight="600">${d.mesLabel.split(' ')[0]}</text>
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${d.ahorro >= avgVal ? 'var(--gb)' : 'rgba(246,241,230,.25)'}" rx="3" ry="3" />
+      <text x="${x + barWidth/2}" y="${y - 6}" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="var(--cream)" font-weight="600">${fmtK(d.ahorro)}</text>
+      <text x="${x + barWidth/2}" y="${startY + 16}" text-anchor="middle" font-family="var(--sans)" font-size="8.5" fill="rgba(246,241,230,.4)" font-weight="600">${d.mesLabel.split(' ')[0]}</text>
     `;
   });
 
+  const avgY = (startY - Math.min(plotH, (avgVal / maxVal) * plotH)).toFixed(1);
+
   return `<div class="card dark" style="padding:18px 16px;">
-    <div class="k" style="margin-bottom:14px;">Evolución del Ahorro</div>
-    <div style="height:120px; width:100%;">
-      <svg viewBox="0 0 300 120" style="width:100%; height:100%; overflow:visible;">
-        <defs>
-          <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="var(--gb)" />
-            <stop offset="100%" stop-color="var(--green)" />
-          </linearGradient>
-        </defs>
+    <div class="k" style="margin-bottom:14px;">Evolución del Ahorro <span style="color:rgba(246,241,230,.4); font-weight:600;">· prom ${fmtK(avgVal)}</span></div>
+    <div style="height:172px; width:100%;">
+      <svg viewBox="0 0 300 170" style="width:100%; height:100%; overflow:visible;">
         <line x1="${startX - 10}" y1="${startY}" x2="${startX + graphWidth + 10}" y2="${startY}" stroke="rgba(246,241,230,.12)" stroke-width="1" />
+        <line x1="${startX - 10}" y1="${avgY}" x2="${startX + graphWidth + 10}" y2="${avgY}" stroke="rgba(246,241,230,.4)" stroke-width="1" stroke-dasharray="3 3" />
         ${barElements}
       </svg>
     </div>
@@ -1672,6 +1730,7 @@ function renderMetas(){
     contentHtml = `
       ${drawSavingsDonut()}
       <div style="height:12px;"></div>
+      ${drawStatsBI()}
       ${drawSavingsHistoryCard()}
       <div style="height:72px;"></div>
     `;
