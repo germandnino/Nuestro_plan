@@ -1318,13 +1318,14 @@ function drawWarningsChip() {
 function drawStickyCTA(canEdit) {
   const r = computeReparto(0, 0);
   const ahorro = r.ahorro || 0;
-  let label, disabled;
+  let label, disabled, cls = 'btn gold';
   if (!canEdit) {
     label = 'Distribuir Ahorro en mis Metas';
     disabled = 'disabled style="opacity:0.65;pointer-events:none;"';
   } else if (ahorro < 0) {
-    label = 'Cubrir mes en rojo';
+    label = `Cubrir mes en rojo · ${fmt(-ahorro)}`;
     disabled = '';
+    cls = 'btn danger';
   } else if (ahorro === 0) {
     label = 'Sin ahorro para distribuir';
     disabled = 'disabled';
@@ -1333,7 +1334,7 @@ function drawStickyCTA(canEdit) {
     disabled = '';
   }
   return `<div class="mimes-cta" id="mimesCta">
-    <button class="btn gold" id="btnApplyPreSave" ${disabled}>${label}</button>
+    <button class="${cls}" id="btnApplyPreSave" ${disabled}>${label}</button>
   </div>`;
 }
 
@@ -3000,15 +3001,19 @@ function updatePlanningSummary() {
     const canEdit = canEditShared();
     if (!canEdit) {
       btn.disabled = true;
+      btn.className = 'btn gold';
       btn.textContent = 'Distribuir Ahorro en mis Metas';
     } else if (ahorro < 0) {
       btn.disabled = false;
-      btn.textContent = 'Cubrir mes en rojo';
+      btn.className = 'btn danger';
+      btn.textContent = `Cubrir mes en rojo · ${fmt(-ahorro)}`;
     } else if (ahorro === 0) {
       btn.disabled = true;
+      btn.className = 'btn gold';
       btn.textContent = 'Sin ahorro para distribuir';
     } else {
       btn.disabled = false;
+      btn.className = 'btn gold';
       btn.textContent = `Distribuir ${fmt(ahorro)} en mis Metas`;
     }
   }
@@ -3114,15 +3119,23 @@ async function desaplicarMes(mes) {
    COBERTURA DE DÉFICIT (mes en rojo)
    ========================================================= */
 function deficitFuentes(){
-  return {
-    imprevistos: emergenciaPrincipal(),
-    bolsillo: metaPersonal(state.config.perfil),
-    deudas: state.metas.filter(m => m.tipo === 'deuda' && !m.dueno)
-  };
+  const perfil = state.config.perfil;
+  // Fuentes: cualquier meta/bolsillo con saldo, propia o compartida.
+  // Privacidad: se excluyen las del otro perfil.
+  const fuentes = state.metas.filter(m =>
+    m.tipo !== 'deuda' && (!m.dueno || m.dueno === perfil) && m.saldo > 0.5
+  );
+  const deudas = state.metas.filter(m => m.tipo === 'deuda' && (!m.dueno || m.dueno === perfil));
+  return { fuentes, deudas };
+}
+function deficitFuenteNombre(m){
+  if (m.tipo === 'personal') return 'Mi bolsillo';
+  if (m.dueno) return m.nombre + ' (individual)';
+  return m.nombre;
 }
 
-// cob: [{fuente:'imprevistos'|'bolsillo'|'deuda', metaId, monto, gastoId?}]
-// Imprevistos/bolsillo: resta saldo y deja gasto trazable. Deuda: crece (origen de fondos).
+// cob: [{fuente:'meta'|'deuda', metaId, monto, gastoId?}]
+// meta: resta saldo y deja gasto trazable. Deuda: crece (origen de fondos).
 function aplicarCobertura(cob, mes){
   cob.forEach(item => {
     const m = metaById(item.metaId);
@@ -3156,24 +3169,24 @@ function revertirCobertura(cob){
 function openAsistenteDeficit(faltante){
   return new Promise(resolve => {
     const f = deficitFuentes();
-    const imp = f.imprevistos, bol = f.bolsillo;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.id = 'modalDeficit';
     overlay.style.display = 'flex';
     const deudaOpts = f.deudas.map(d => `<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
+    const fuentesHtml = f.fuentes.length
+      ? f.fuentes.map(m => `<div>
+          <label class="lbl">${esc(deficitFuenteNombre(m))} <span style="font-weight:400;color:var(--gs)">(disponible ${fmt(m.saldo)})</span></label>
+          <input class="sf money df-src" data-metaid="${m.id}" inputmode="numeric" placeholder="$0">
+        </div>`).join('')
+      : `<div class="hint" style="font-size:12px;margin:0;">No tienes metas ni bolsillo con saldo. Cubre el faltante con una tarjeta o deuda.</div>`;
     overlay.innerHTML = `
       <div class="modal-card animate-in" style="max-width:400px;">
         <h3 class="modal-title" style="font-size:20px;">Mes en rojo</h3>
-        <div class="hint" style="font-size:12.5px;line-height:1.4;margin:0;">Este mes faltaron <b style="color:#e06c75">${fmt(faltante)}</b>. Registra de dónde salió la plata en la vida real y el mes quedará en el historial como cubierto.</div>
-        ${imp ? `<div>
-          <label class="lbl">Fondo de imprevistos <span style="font-weight:400;color:var(--gs)">(disponible ${fmt(imp.saldo)})</span></label>
-          <input class="sf money" id="dfImp" inputmode="numeric" placeholder="$0">
-        </div>` : ''}
-        ${bol ? `<div>
-          <label class="lbl">Mi bolsillo <span style="font-weight:400;color:var(--gs)">(disponible ${fmt(bol.saldo)})</span></label>
-          <input class="sf money" id="dfBol" inputmode="numeric" placeholder="$0">
-        </div>` : ''}
+        <div class="hint" style="font-size:12.5px;line-height:1.4;margin:0;">Este mes faltaron <b style="color:#e06c75">${fmt(faltante)}</b>. Elige de qué meta, bolsillo o deuda salió la plata en la vida real y el mes quedará en el historial como cubierto.</div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-height:42vh;overflow-y:auto;margin-top:4px;">
+          ${fuentesHtml}
+        </div>
         <div>
           <label class="lbl">Tarjeta / deuda</label>
           <select class="sf" id="dfDeudaSel">
@@ -3191,6 +3204,9 @@ function openAsistenteDeficit(faltante){
       </div>`;
     document.body.appendChild(overlay);
     const q = sel => overlay.querySelector(sel);
+
+    // Mapa metaId -> saldo disponible, para validar cada fila.
+    const srcSaldo = {}; f.fuentes.forEach(m => srcSaldo[m.id] = m.saldo);
 
     // Formateo de moneda idéntico al de aeMonto.
     overlay.querySelectorAll('input.money').forEach(inp => {
@@ -3216,18 +3232,24 @@ function openAsistenteDeficit(faltante){
     };
 
     function vals(){
-      return {
-        vImp: imp ? parse(q('#dfImp').value) : 0,
-        vBol: bol ? parse(q('#dfBol').value) : 0,
-        vDeu: q('#dfDeudaSel').value ? parse(q('#dfDeuda').value) : 0
-      };
+      let total = 0, exceso = null;
+      overlay.querySelectorAll('.df-src').forEach(inp => {
+        const v = parse(inp.value);
+        const id = inp.dataset.metaid;
+        if (v > srcSaldo[id] + 0.5 && !exceso) {
+          const m = metaById(id);
+          exceso = m ? deficitFuenteNombre(m) : 'Una fuente';
+        }
+        total += v;
+      });
+      const vDeu = q('#dfDeudaSel').value ? parse(q('#dfDeuda').value) : 0;
+      return { total, vDeu, exceso };
     }
     function recalc(){
-      const {vImp, vBol, vDeu} = vals();
-      const falta = faltante - (vImp + vBol + vDeu);
+      const { total, vDeu, exceso } = vals();
+      const falta = faltante - (total + vDeu);
       let msg = '', ok = false;
-      if (imp && vImp > imp.saldo) msg = 'El fondo de imprevistos no tiene tanto.';
-      else if (bol && vBol > bol.saldo) msg = 'Tu bolsillo no tiene tanto.';
+      if (exceso) msg = `"${exceso}" no tiene tanto.`;
       else if (Math.abs(falta) <= 0.5) { msg = 'Cobertura completa ✓'; ok = true; }
       else if (falta > 0) msg = 'Faltan ' + fmt(falta) + ' por cubrir.';
       else msg = 'Te pasaste por ' + fmt(-falta) + '. Ajusta los montos.';
@@ -3237,10 +3259,12 @@ function openAsistenteDeficit(faltante){
 
     q('#dfCancel').onclick = () => { overlay.remove(); resolve(null); };
     q('#dfOk').onclick = () => {
-      const {vImp, vBol, vDeu} = vals();
       const cob = [];
-      if (vImp > 0.5) cob.push({fuente:'imprevistos', metaId:imp.id, monto:vImp});
-      if (vBol > 0.5) cob.push({fuente:'bolsillo', metaId:bol.id, monto:vBol});
+      overlay.querySelectorAll('.df-src').forEach(inp => {
+        const v = parse(inp.value);
+        if (v > 0.5) cob.push({fuente:'meta', metaId:inp.dataset.metaid, monto:v});
+      });
+      const vDeu = q('#dfDeudaSel').value ? parse(q('#dfDeuda').value) : 0;
       if (vDeu > 0.5) {
         let dId = q('#dfDeudaSel').value;
         if (dId === '__nueva__') {
