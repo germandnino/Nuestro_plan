@@ -1917,7 +1917,9 @@ function renderMetas(){
           <div class="num med">${fmt(m.saldo)}</div>
           ${pct!=null?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
           <div class="muted" style="font-size:12px">${metaSub(m)}</div>
-        </div><span class="chev">›</span></div>`;
+        </div>
+        ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar meta" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:8px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:18px;height:18px;pointer-events:none;')}</button>` : ''}
+        <span class="chev">›</span></div>`;
     };
 
     const sp=sumaPct();
@@ -2041,7 +2043,9 @@ function renderMetas(){
           </div>
           ${obj > 0 ? `<div class="bar light" style="margin:8px 0 4px;background:rgba(224,108,117,0.12);"><i style="width:${pct.toFixed(1)}%;background:#e06c75;"></i></div>` : ''}
           <div class="muted" style="font-size:12px">${metaSub(m)}</div>
-        </div><span class="chev">›</span></div>`;
+        </div>
+        ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar deuda" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:8px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:18px;height:18px;pointer-events:none;')}</button>` : ''}
+        <span class="chev">›</span></div>`;
     };
 
     const debtsShared = metasCompartidas().filter(m => m.tipo === 'deuda').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
@@ -2113,12 +2117,19 @@ function renderMetas(){
   }
 
   $('r1').querySelectorAll('[data-mid]').forEach(el=>el.onclick=(e)=>{
-    if(e.target.closest('.drag-handle') || e.target.closest('#helpPrioBtn')) return;
+    if(e.target.closest('.drag-handle') || e.target.closest('#helpPrioBtn') || e.target.closest('.btn-card-edit')) return;
     if(el.classList.contains('dragged')){
       el.classList.remove('dragged');
       return;
     }
     openDetail(el.dataset.mid);
+  });
+
+  $('r1').querySelectorAll('.btn-card-edit').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openMetaForm(btn.dataset.editmid);
+    };
   });
 
   // filter chips click handlers
