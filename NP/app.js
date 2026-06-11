@@ -2832,6 +2832,17 @@ function renderDetail(){
     const per = (g.fromPocket||g.toPocket) ? metaPersonal(m.dueno||state.config.perfil) : null;
     if (g.mov === 'transfer-out' || g.mov === 'transfer-in') {
       const par = state.gastos.find(x => x.transferId === g.transferId && x.id !== g.id);
+      if (!par) {
+        // Mitad huérfana (la pareja borró su lado en otro dispositivo): revertir solo este lado.
+        const m1 = metaById(g.meta);
+        if (m1) {
+          if (g.mov === 'transfer-out') m1.saldo += g.monto;
+          else if (m1.tipo === 'deuda') m1.saldo += g.monto;
+          else m1.saldo = Math.max(0, m1.saldo - g.monto);
+        }
+        state.gastos = state.gastos.filter(x => x.id !== g.id);
+        save(); renderDetail(); flash('Transferencia incompleta: se revirtió solo este lado'); return;
+      }
       const out = g.mov === 'transfer-out' ? g : par;
       const inn = g.mov === 'transfer-in' ? g : par;
       const mo = out ? metaById(out.meta) : null, md = inn ? metaById(inn.meta) : null;
