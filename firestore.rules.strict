@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function metaDoc(planId) {
+      return get(/databases/$(database)/documents/meta/$(planId)).data;
+    }
+    function isOwner(planId) {
+      return isSignedIn() && metaDoc(planId).ownerUid == request.auth.uid;
+    }
+    function isPartner(planId) {
+      return isSignedIn() && metaDoc(planId).partnerUid == request.auth.uid;
+    }
+    function isMember(planId) {
+      return isOwner(planId) || isPartner(planId);
+    }
+    function partnerCanWrite(planId) {
+      let data = metaDoc(planId);
+      return isPartner(planId) && (!('partnerRole' in data) || data.partnerRole != 'viewer');
+    }
+
+    match /meta/{planId} {
+      // Leer: miembros, o cualquier autenticado con el código de invitación
+      allow read: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid
+        || resource.data.partnerUid == request.auth.uid
+        || !('partnerUid' in resource.data)
+        || resource.data.partnerUid == null
+      );
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        // El owner administra todo
+        resource.data.ownerUid == request.auth.uid
+        // El invitado reclama el cupo vacío
+        || (
+          (!('partnerUid' in resource.data) || resource.data.partnerUid == null)
+          && request.resource.data.partnerUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['partnerUid', 'partnerEmail', 'partnerName'])
+        )
+        // El partner ya vinculado refresca sus propios datos
+        || (
+          resource.data.partnerUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['partnerUid', 'partnerEmail', 'partnerName'])
+          && request.resource.data.partnerUid == request.auth.uid
+        )
+      );
+      allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /planes/{planId}/shared/{docId} {
+      allow read: if isMember(planId);
+      // Phase B: Estricto - Solo owner o partner con rol diferente de 'viewer' pueden escribir
+      allow write: if isOwner(planId) || partnerCanWrite(planId);
+    }
+
+    match /planes/{planId}/bolsillos/{uid} {
+      // Phase B: Estricto - Cada miembro solo puede leer/escribir su propio bolsillo
+      allow read, write: if isMember(planId) && request.auth.uid == uid;
+    }
+  }
+}
