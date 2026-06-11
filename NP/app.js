@@ -949,13 +949,13 @@ function renderInicio(){
   const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
   const desgloseHtml = esPareja
     ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${bolsilloColor}; margin-right:4px;"></span>Mi bolsillo: <b>${fmt(miBolsillo)}</b></span>
       </div>
       ${deudasCompartidas > 0 ? `<div style="margin-top:6px; font-size:12.5px;"><span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(deudasCompartidas)}</b></span></div>` : ''}
       <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tu bolsillo es privado y no entra en el total de la pareja.</div>`
     : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + miBolsillo)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + miBolsillo)}</b></span>
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(totalDeudas)}</b></span>
       </div>`;
   const patHtml = `
