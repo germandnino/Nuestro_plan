@@ -46,13 +46,13 @@ input.amt{width:100%;font-family:var(--serif);font-variant-numeric:tabular-nums;
 input.amt:focus{border-color:var(--gold)}
 input.sf,select.sf{width:100%;font-family:var(--sans);font-size:15px;background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);outline:none;-webkit-appearance:none}
 input.sf:focus{border-color:var(--gold)}
-.btn{width:100%;margin-top:10px;background:var(--green);color:var(--cream);border:none;border-radius:10px;padding:13px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em;transition:transform .12s}
+.btn{width:100%;margin-top:10px;background:var(--green);color:var(--cream);border:1px solid rgba(246,241,230,.45);border-radius:10px;padding:13px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em;transition:transform .12s}
 .btn:active{transform:scale(.985)}
 .btn:disabled{opacity:.4}
 .btn.ghost{background:transparent;border:1px solid rgba(246,241,230,.35);color:var(--cream);margin-top:8px}
 .card .btn.ghost, .modal-card .btn.ghost, details .btn.ghost{border-color:var(--gs);color:var(--gs)}
-.btn.gold{background:var(--gb);color:#231703}
-.btn.danger{background:#7a2222;margin-top:6px}
+.btn.gold{background:var(--gb);color:#231703;border:none}
+.btn.danger{background:#7a2222;color:var(--cream);border:none;margin-top:6px}
 .btn.sm{padding:9px;font-size:13px;margin-top:6px}
 #onb .btn.ghost{border-color:rgba(246,241,230,.35);color:var(--cream)}
 #onb .btn.ghost:active{background:rgba(246,241,230,.08)}

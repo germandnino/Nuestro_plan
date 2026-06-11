@@ -120,7 +120,7 @@ function showCustomModal({ title, message, type = 'alert', placeholder = '', isD
       `;
       buttonsHtml = `
         <button class="btn ghost" id="modal-btn-cancel">Cancelar</button>
-        <button class="btn gold" id="modal-btn-ok">Aceptar</button>
+        <button class="btn" id="modal-btn-ok">Aceptar</button>
       `;
     } else if (type === 'confirm') {
       const confirmClass = isDestructive ? 'btn danger' : 'btn';
@@ -1009,7 +1009,7 @@ function renderInicio(){
     <div class="stitle">¿Qué quieres hacer hoy?</div>
     <div class="card" style="padding: 14px;">
       <div class="shortcuts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <button class="btn sm gold" id="btnGoMiMes" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('calendar')} Planificar Mes</button>
+        <button class="btn sm gold" id="btnGoMiMes" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('calendar')} Distribuir Ahorros</button>
         <button class="btn sm ghost" id="btnGoAddMeta" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('target')} Nueva Meta/Deuda</button>
         <button class="btn sm ghost" id="btnGoAddExtra" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; grid-column: span 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('dollar')} Registrar Ingreso Extra</button>
       </div>
@@ -2474,7 +2474,7 @@ function renderDetail(){
         <div class="hint" style="margin-bottom:8px">Suma dinero a tu bolsillo (p. ej. tu dinero libre del mes). Desde aquí fondeas tus metas individuales.</div>
         <div class="transfer-row">
           <input class="sf money" id="pIngreso" inputmode="numeric" placeholder="Monto $0" style="margin:0;">
-          <button class="btn sm gold" id="btnPocketIn" style="margin:0;padding:10px 14px;">Ingresar</button>
+          <button class="btn sm" id="btnPocketIn" style="margin:0;padding:10px 14px;">Ingresar</button>
         </div>
       </div>`;
   }
@@ -2494,7 +2494,7 @@ function renderDetail(){
         <div class="transfer-container">
           <div class="transfer-row">
             <input class="sf money" id="tAmount" inputmode="numeric" placeholder="Monto $0" style="margin:0;">
-            <button class="btn sm gold" id="btnTransferToMeta" style="margin:0;padding:10px 14px;">${isDeuda ? 'Abonar / Pagar' : 'Abonar a meta'}</button>
+            <button class="btn sm" id="btnTransferToMeta" style="margin:0;padding:10px 14px;">${isDeuda ? 'Abonar / Pagar' : 'Abonar a meta'}</button>
           </div>
           ${!isDeuda ? `<button class="btn sm ghost" id="btnTransferToPocket" style="margin-top:2px;margin-bottom:2px;width:100%;font-size:12.5px;">Retirar a mi bolsillo</button>` : ''}
         </div>
@@ -3321,7 +3321,7 @@ function openAsistenteDeficit(faltante){
         <div id="dfResumen" class="hint" style="margin:4px 0 0;font-size:12px;"></div>
         <div style="display:flex;gap:10px;margin-top:8px;">
           <button class="btn ghost sm" id="dfCancel" style="flex:1;margin:0;">Cancelar</button>
-          <button class="btn sm gold" id="dfOk" style="flex:1;margin:0;" disabled>Cubrir y aplicar</button>
+          <button class="btn sm" id="dfOk" style="flex:1;margin:0;" disabled>Cubrir y aplicar</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -3463,7 +3463,7 @@ function openAsistenteIngresoExtra() {
       
       <div style="display:flex; gap:10px; margin-top:8px;">
         <button class="btn ghost sm" id="btnCancelAE" style="flex:1; margin:0;">Cancelar</button>
-        <button class="btn sm gold" id="btnApplyAE" style="flex:1; margin:0;">Aplicar Ingreso</button>
+        <button class="btn sm" id="btnApplyAE" style="flex:1; margin:0;">Aplicar Ingreso</button>
       </div>
     </div>
   `;
@@ -3745,7 +3745,7 @@ function renderMiMes(){
             ¿Recibiste ingresos adicionales este mes? Repártelos de forma inteligente: 80% directo a tus metas o deudas y 20% para tu bolsillo de disfrute personal.
           </div>
           ${!isMonthOpen(mes) ? `<div style="font-size:11.5px; color:var(--gs); text-align:center; margin-bottom:8px; padding:6px 10px; background:rgba(255,255,255,0.04); border-radius:8px;">Este mes ya está cerrado — solo se pueden agregar ingresos extras al mes actual${new Date().getDate()<=5?' o el mes anterior (período de gracia)':''}.</div>` : ''}
-          <button class="btn gold sm" id="btnLaunchAE" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" ${disExtra}>${getSVG('plus')} Registrar Ingreso Extra</button>
+          <button class="btn sm gold" id="btnLaunchAE" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" ${disExtra}>${getSVG('plus')} Registrar Ingreso Extra</button>
         </div>
 
         ${entry.especiales && entry.especiales.length > 0 ? `
@@ -4247,7 +4247,7 @@ function renderAprender(){
       <div class="stitle">Tus metas, tu plan</div>
       <div class="card" style="text-align:center;">
         <div style="font-size:13.5px; color:var(--gs); line-height:1.5; margin-bottom:12px;">Aún no tienes metas. Crea una y aquí te diremos exactamente dónde poner la plata según su plazo.</div>
-        <button class="btn gold" id="aprCrearMeta" style="margin-top:0;">Crear mi primera meta</button>
+        <button class="btn" id="aprCrearMeta" style="margin-top:0;">Crear mi primera meta</button>
       </div>
     `;
   }
@@ -4392,7 +4392,7 @@ function renderPlan(){
     installHtml = `
 <details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary>Instalar en el teléfono</summary><div class="dpad">
   <div class="hint" style="margin-top:0">Instala "Nuestro plan" en tu pantalla de inicio para usarla como una aplicación, más rápido y sin conexión a internet.</div>
-  <button class="btn gold" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
+  <button class="btn" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
   <div id="pwaIosHint" style="display:${isIOS()?'block':'none'};margin-top:10px;background:rgba(28,58,44,.04);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--ink)">
     <div style="font-weight:700;margin-bottom:6px;color:var(--green)">Instrucciones para iPhone / iPad (Safari):</div>
     <ol style="padding-left:18px;font-size:12.5px;line-height:1.45;display:flex;flex-direction:column;gap:6px">
@@ -4568,7 +4568,7 @@ function renderPlan(){
           <label class="lbl">Contraseña (mínimo 6 caracteres)</label>
           <input class="sf" type="password" id="settingsAuthPassword" placeholder="Contraseña">
         </div>
-        <button class="btn gold" id="btnSettingsEmailSubmit" style="width:100%;margin-top:4px;">
+        <button class="btn" id="btnSettingsEmailSubmit" style="width:100%;margin-top:4px;">
           Iniciar Sesión
         </button>
         <div style="text-align:center;margin-top:8px;">
@@ -5024,7 +5024,7 @@ function renderOb(){
             <label class="lbl">Contraseña (mínimo 6 caracteres)</label>
             <input class="sf" type="password" id="authPassword" placeholder="Contraseña">
           </div>
-          <button class="btn gold" id="btnObEmailSubmit" style="width:100%;margin-top:4px;">
+          <button class="btn" id="btnObEmailSubmit" style="width:100%;margin-top:4px;">
             Iniciar Sesión
           </button>
           <div style="text-align:center;margin-top:8px;">
@@ -5251,7 +5251,7 @@ function renderOb(){
               <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Tenla a un toque, más rápida y disponible sin conexión.</div>
             </div>
           </div>
-          <button class="btn gold" id="obInstallPWA" style="display:${deferredPrompt?'block':'none'}; width:100%; margin-top:12px;">Instalar aplicación</button>
+          <button class="btn" id="obInstallPWA" style="display:${deferredPrompt?'block':'none'}; width:100%; margin-top:12px;">Instalar aplicación</button>
           <div id="obIosHint" style="display:${isIOS()?'block':'none'}; margin-top:10px; background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.12); border-radius:10px; padding:10px 12px; color:rgba(246,241,230,.85);">
             <div style="font-weight:700; margin-bottom:6px; font-size:12px; color:var(--gb);">En iPhone / iPad (Safari):</div>
             <ol style="padding-left:16px; font-size:11.5px; line-height:1.45; display:flex; flex-direction:column; gap:4px; margin:0;">
