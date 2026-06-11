@@ -953,6 +953,12 @@ function aplicarDecisionSobrante(dec, monto){
   return {tipo:'pendiente'};
 }
 
+// Sobrantes sin asignar viven en state.ingresos con flag sinAsignar (persisten y sincronizan).
+function registrarSobrantePendiente(monto, origenNombre){
+  state.ingresos.unshift({id:uid(),mes:selectedMonth||curMonth(),nombre:'Sobrante de '+origenNombre,monto:monto,meta:'sinAsignar',sinAsignar:true,persona:state.config.perfil});
+}
+function sobrantesPendientes(){return state.ingresos.filter(i=>i.sinAsignar);}
+
 /* ---------- navegación ---------- */
 const RENDER=[renderInicio,renderMetas,renderMiMes,renderAprender,renderPlan];
 function go(t){
@@ -4032,6 +4038,10 @@ function renderMiMes(){
         <button id="btnNextMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">›</button>
       </div>
     </header>
+    ${sobrantesPendientes().length?`<div class="card" style="border:1px solid var(--gold);padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="font-size:13px;"><b style="color:var(--gold)">${fmt(sobrantesPendientes().reduce((s,i)=>s+i.monto,0))}</b> sin asignar</div>
+      <button class="btn sm gold" id="btnAsignarPendiente" style="margin:0;">Asignar</button>
+    </div>`:''}
     ${contentHtml}
     <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Historial de Meses</div>${logH}</div>
     ${!isApplied ? '<div class="mimes-cta-spacer"></div>' : ''}
@@ -4129,6 +4139,17 @@ function renderMiMes(){
   if (btnFull) {
     btnFull.onclick = () => openHistoryList();
   }
+  const btnPend=$('btnAsignarPendiente');
+  if(btnPend) btnPend.onclick=async()=>{
+    const p=sobrantesPendientes()[0];
+    if(!p)return;
+    const dec=await openModalSobrante(p.monto,{id:'_pend',nombre:p.nombre});
+    if(dec.accion==='pendiente')return;
+    const res=aplicarDecisionSobrante(dec,p.monto);
+    if(res.tipo==='pendiente')return;
+    state.ingresos=state.ingresos.filter(i=>i.id!==p.id);
+    save();renderMiMes();flash('Sobrante asignado ✓');
+  };
 
   if (openExtraFormOnLoad) {
     openExtraFormOnLoad = false;
