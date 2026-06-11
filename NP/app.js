@@ -33,7 +33,7 @@ function metasPersonales(){
 }
 
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
-let curTab=0, detailKey=null, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
+let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let mForm=null; // estado del formulario de meta en edición
 let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este cierre
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
@@ -794,17 +794,7 @@ function distribuirAhorro(monto, esEspecial = false){
     return res;
   }
 
-  // (1) deudas y aportes fijos en $ (se cubren de primero para evitar desatender compromisos mensuales recurrentes o deudas)
-  if(!esEspecial){
-    comp.filter(m=>(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')&&(m.aporteFijo||0)>0).forEach(m=>{
-      let add=m.aporteFijo;
-      const falta=getMetaFalta(m, res);
-      add=Math.min(add,falta,rem);res[m.id]+=add;rem-=add;
-    });
-    if(rem<=0.5)return res;
-  }
-
-  // (2) prioritaria primero si es secuencial
+  // (1) prioritaria primero si es secuencial
   if(c.estrategia==='secuencial'){
     const prio=getMetaPrioritaria();
     if(prio){
@@ -814,7 +804,7 @@ function distribuirAhorro(monto, esEspecial = false){
     if(rem<=0.5)return res;
   }
 
-  // (3) cada meta toma su % del resto (base fija = remanente tras fijos y prioritario)
+  // (2) cada meta toma su % del resto (base fija = remanente)
   const baseRem=rem;
   comp.filter(m=>(m.aportePct||0)>0&&(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')).forEach(m=>{
     let add=baseRem*m.aportePct/100;
@@ -823,7 +813,7 @@ function distribuirAhorro(monto, esEspecial = false){
   });
   if(rem<=0.5)return res;
 
-  // (4) sobrante -> cascada inteligente (colchón emergencia, luego inversión)
+  // (3) sobrante -> colocar en fondo de emergencias / inversión
   colocarSobrante(rem,res);
   return res;
 }
@@ -836,19 +826,7 @@ function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
   
   let rem = monto;
   
-  // 1. Aportes fijos
-  if (!esEspecial) {
-    indivs.filter(m => (m.aporteFijo||0) > 0).forEach(m => {
-      let add = m.aporteFijo;
-      const falta = getMetaFalta(m, res);
-      add = Math.min(add, falta, rem);
-      res[m.id] += add;
-      rem -= add;
-    });
-    if (rem <= 0.5) return { dist: res, rem };
-  }
-  
-  // 2. Aportes porcentuales
+  // Aportes porcentuales
   const baseRem = rem;
   indivs.filter(m => (m.aportePct||0) > 0).forEach(m => {
     let add = (baseRem * m.aportePct) / 100;
@@ -860,6 +838,70 @@ function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
   
   return { dist: res, rem };
 }
+
+function autoAdjustPercentages(editedId, newPct) {
+  const c = state.config;
+  if (c.estrategia === 'cascada') return;
+  
+  const isPrio = (m) => getMetaPrioritaria()?.id === m.id;
+  const eligible = metasCompartidas().filter(m => {
+    if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
+    if (c.estrategia === 'secuencial' && isPrio(m)) return false;
+    return true;
+  }).sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+  
+  if (eligible.length <= 1) return;
+  
+  const editedMeta = eligible.find(m => m.id === editedId);
+  if (editedMeta) {
+    editedMeta.aportePct = newPct;
+  }
+  
+  let targetIndex = eligible.length - 1;
+  if (eligible[targetIndex].id === editedId) {
+    targetIndex = eligible.length - 2;
+  }
+  
+  const targetMeta = eligible[targetIndex];
+  let sumOthers = 0;
+  eligible.forEach(m => {
+    if (m.id !== targetMeta.id) {
+      sumOthers += (m.id === editedId ? newPct : (m.aportePct || 0));
+    }
+  });
+  
+  targetMeta.aportePct = Math.max(0, 100 - sumOthers);
+}
+
+function autoAdjustIndividualPercentages(perfil, editedId, newPct) {
+  const eligible = metasIndividuales(perfil).filter(m => {
+    if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
+    return true;
+  }).sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+  
+  if (eligible.length <= 1) return;
+  
+  const editedMeta = eligible.find(m => m.id === editedId);
+  if (editedMeta) {
+    editedMeta.aportePct = newPct;
+  }
+  
+  let targetIndex = eligible.length - 1;
+  if (eligible[targetIndex].id === editedId) {
+    targetIndex = eligible.length - 2;
+  }
+  
+  const targetMeta = eligible[targetIndex];
+  let sumOthers = 0;
+  eligible.forEach(m => {
+    if (m.id !== targetMeta.id) {
+      sumOthers += (m.id === editedId ? newPct : (m.aportePct || 0));
+    }
+  });
+  
+  targetMeta.aportePct = Math.max(0, 100 - sumOthers);
+}
+
 
 /* =========================================================
    MOVIMIENTOS UNIFICADOS — helpers
@@ -913,7 +955,6 @@ function openModalSobrante(monto, metaLlena){
             <select class="sf" id="sobMetaSel" style="flex:1; margin:0;">${opts}</select>
             <button class="btn sm" id="sobMeta" style="margin:0; flex-shrink:0;">Enviar</button>
           </div>
-          <button class="btn ghost sm" id="sobBolsillo" style="margin:0;">A mi bolsillo personal</button>
           <button class="btn ghost sm" id="sobPendiente" style="margin:0;">Dejarlo pendiente (decido luego)</button>
         </div>
       </div>`;
@@ -921,7 +962,6 @@ function openModalSobrante(monto, metaLlena){
     const done=r=>{ov.remove();resolve(r);};
     ov.querySelector('#sobMotor').onclick=()=>done({accion:'motor'});
     ov.querySelector('#sobMeta').onclick=()=>done({accion:'meta',metaId:ov.querySelector('#sobMetaSel').value});
-    ov.querySelector('#sobBolsillo').onclick=()=>done({accion:'bolsillo'});
     ov.querySelector('#sobPendiente').onclick=()=>done({accion:'pendiente'});
     ov.onclick=e=>{if(e.target===ov)done({accion:'pendiente'});};
 
@@ -970,17 +1010,16 @@ function openRetiroDinero(){
   const c=state.config;
   const conSaldo=m=>m&&(m.saldo||0)>0;
   const origenes=metasCompartidas().filter(m=>m.tipo!=='deuda'&&conSaldo(m))
-    .concat(metasIndividuales(c.perfil).filter(m=>m.tipo!=='deuda'&&conSaldo(m)))
-    .concat([metaPersonal(c.perfil)].filter(conSaldo));
+    .concat(metasIndividuales(c.perfil).filter(m=>m.tipo!=='deuda'&&conSaldo(m)));
   if(origenes.length===0){flash('No hay metas con saldo para retirar');return;}
   const ov=document.createElement('div');
   ov.className='modal-overlay'; ov.style.display='flex';
-  const origOpts=origenes.map(m=>`<option value="${m.id}">${m.tipo==='personal'?'Mi bolsillo':m.nombre} — ${fmt(m.saldo)}</option>`).join('');
+  const origOpts=origenes.map(m=>`<option value="${m.id}">${m.nombre} — ${fmt(m.saldo)}</option>`).join('');
   ov.innerHTML=`
     <div class="modal-card animate-in" style="max-width:400px;">
       <h3 class="modal-title" style="font-size:20px;">Retirar dinero</h3>
       <div><label class="lbl">¿De dónde sale?</label><select class="sf" id="rtOrigen">${origOpts}</select></div>
-      <div><label class="lbl">Monto</label><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0"></div>
+      <div><label class="lbl">Monto</label><div style="display:flex;gap:6px;align-items:center;"><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0" style="flex:1;margin:0;"><button class="btn ghost sm" id="rtTodo" type="button" style="flex-shrink:0;white-space:nowrap;margin:0;padding:0 12px;">Todo</button></div></div>
       <div><label class="lbl">¿A dónde va?</label><select class="sf" id="rtDestino"></select></div>
       <div><label class="lbl">Nota (opcional)</label><input class="sf" id="rtNota" placeholder="Ej: compra del viaje, imprevisto"></div>
       <div style="display:flex; gap:10px; margin-top:8px;">
@@ -992,17 +1031,16 @@ function openRetiroDinero(){
   const selO=ov.querySelector('#rtOrigen'), selD=ov.querySelector('#rtDestino');
   const fillDestinos=()=>{
     const oid=selO.value;
-    const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado);
-    const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado);
-    const bolsillo=metaPersonal(c.perfil);
+    const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado&&m.tipo!=='deuda');
+    const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado&&m.tipo!=='deuda');
     const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
     selD.innerHTML=`<option value="fuera">Fuera del plan (gasto real)</option>`
-      +og('Metas comunes',comp)+og('Mis metas (privadas)',indiv)
-      +(bolsillo&&bolsillo.id!==oid?`<optgroup label="Personal"><option value="${bolsillo.id}">Mi bolsillo</option></optgroup>`:'');
+      +og('Metas comunes',comp)+og('Mis metas (privadas)',indiv);
   };
   fillDestinos(); selO.onchange=fillDestinos;
   const mi=ov.querySelector('#rtMonto');
   mi.addEventListener('input',e=>{const d=e.target.value.replace(/\D/g,'');e.target.value=d?'$'+Number(d).toLocaleString('es-CO'):'';});
+  ov.querySelector('#rtTodo').onclick=()=>{const o=metaById(selO.value);if(o&&o.saldo>0)mi.value='$'+Math.round(o.saldo).toLocaleString('es-CO');};
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   ov.querySelector('#rtCancel').onclick=()=>ov.remove();
   ov.querySelector('#rtOk').onclick=()=>{
@@ -1032,7 +1070,7 @@ function openRetiroDinero(){
 /* ---------- navegación ---------- */
 const RENDER=[renderInicio,renderMetas,renderMiMes,renderAprender,renderPlan];
 function go(t){
-  curTab=t;detailKey=null;
+  curTab=t;
   if(t===2 && !selectedMonth) {
     selectedMonth = curMonth();
   }
@@ -1146,18 +1184,15 @@ function renderInicio(){
   const esPareja = c.modo !== 'individual';
   // Compartido: lo de la pareja (sin dueño). Idéntico en ambos teléfonos.
   const ahorrosCompartidos = state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
-  const deudasCompartidas = state.metas.filter(m => m.tipo === 'deuda' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
-  // Mi parte: bolsillo personal + metas individuales propias − deudas individuales propias. Privada.
+  // Mi parte: bolsillo personal + metas individuales propias. Privada.
   const miBolsillo = (metaPersonal(perfil)?.saldo||0)
-    + state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0)
-    - state.metas.filter(m => m.tipo === 'deuda' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
+    + state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
 
   // Pareja: el número grande es SOLO lo compartido (mismo en ambos teléfonos).
   // Individual: una sola persona, se suma todo.
   const patrimonioNeto = esPareja
-    ? (ahorrosCompartidos - deudasCompartidas)
-    : (ahorrosCompartidos + miBolsillo - deudasCompartidas);
-  const totalDeudas = deudasCompartidas;
+    ? ahorrosCompartidos
+    : (ahorrosCompartidos + miBolsillo);
   const bolsilloColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   const headerHtml = c.modo === 'individual'
@@ -1165,23 +1200,20 @@ function renderInicio(){
     : `<header><div class="ey">${esc(c.nombreP1)} &amp; ${esc(c.nombreP2)}</div><h1>Nuestro plan</h1></header>`;
 
   // 1. Patrimonio Neto Card
-  const sign = patrimonioNeto >= 0 ? '+' : '';
   const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
   const desgloseHtml = esPareja
     ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${bolsilloColor}; margin-right:4px;"></span>Mi bolsillo: <b>${fmt(miBolsillo)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${bolsilloColor}; margin-right:4px;"></span>Individual: <b>${fmt(miBolsillo)}</b></span>
       </div>
-      ${deudasCompartidas > 0 ? `<div style="margin-top:6px; font-size:12.5px;"><span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(deudasCompartidas)}</b></span></div>` : ''}
-      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tu bolsillo es privado y no entra en el total de la pareja.</div>`
+      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tus ahorros individuales son privados y no entran en el total de la pareja.</div>`
     : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + miBolsillo)}</b></span>
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e06c75; margin-right:4px;"></span>Deudas: <b>${fmt(totalDeudas)}</b></span>
       </div>`;
   const patHtml = `
     <div class="card dark" style="border-left: 4px solid ${patColor};">
-      <div class="k">${esPareja ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}${totalDeudas > 0 ? ' <span style="text-transform:none; font-weight:400; opacity:.7;">(menos deudas)</span>' : ''}</div>
-      <div class="num big" style="color:var(--cream);">${sign}${fmt(patrimonioNeto)}</div>
+      <div class="k">${esPareja ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
+      <div class="num big" style="color:var(--cream);">${fmt(patrimonioNeto)}</div>
       ${desgloseHtml}
     </div>
   `;
@@ -1193,7 +1225,7 @@ function renderInicio(){
       <div class="shortcuts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         <button class="btn sm gold" id="btnGoAddExtra" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; grid-column: span 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('plus')} Añadir Dinero</button>
         <button class="btn sm ghost" id="btnGoMiMes" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('calendar')} Ver Mi Mes</button>
-        <button class="btn sm ghost" id="btnGoAddMeta" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('target')} Nueva Meta/Deuda</button>
+        <button class="btn sm ghost" id="btnGoAddMeta" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('target')} Nueva Meta</button>
       </div>
     </div>
   `;
@@ -1243,9 +1275,9 @@ function renderInicio(){
   } else if (!currentLog || !currentLog.aplicado) {
     tipPool = [
       {
-        t: _svgTip('calendar') + ' Distribuye tu ahorro',
-        d: `Aún no ${_ind?'has':'han'} distribuido el ahorro de <b>${fmtMes(curMonth())}</b>. Sepáralo al inicio del mes para que vaya directo a ${_ind?'tus':'sus'} metas — el dinero que no se mueve, se gasta.`,
-        a: 'Distribuir ahorro',
+        t: _svgTip('calendar') + ' Confirma tu aporte',
+        d: `Aún no ${_ind?'has':'han'} confirmado el aporte de <b>${fmtMes(curMonth())}</b>. Hazlo al inicio del mes para que vaya directo a ${_ind?'tus':'sus'} metas — el dinero que no se mueve, se gasta.`,
+        a: 'Confirmar aporte',
         fn: () => go(2)
       },
       {
@@ -1260,73 +1292,26 @@ function renderInicio(){
         a: 'Ir a Mi Mes',
         fn: () => go(2)
       },
-      {
-        t: _svgTip('target') + (_ind ? 'Metas individuales' : '¿Ya tienen metas individuales?'),
-        d: _ind
-          ? `Recuerda que puedes crear <b>metas individuales</b> que se fondean de tu bolsillo personal — para tus ahorros propios sin afectar el plan general.`
-          : `¿Sabían que cada uno ya tiene metas individuales de su bolsillo personal? Úsalas para ahorros propios sin afectar el plan de pareja.`,
-        a: 'Ver metas',
-        fn: () => go(1)
-      },
-    ];
-  } else if (totalDeudas > 0) {
-    tipPool = [
-      {
-        t: _svgTip('shield') + ' Prioridad: Pagar Deudas',
-        d: `${_ind?'Tienes':'Tienen'} deudas por <b>${fmt(totalDeudas)}</b>. Reducir una deuda de tarjeta de crédito equivale financieramente a una inversión de alta rentabilidad sin riesgo. ¡Priorícenlas!`,
-        a: 'Ver mis deudas',
-        fn: () => { go(1); setTimeout(() => { const b=$('btnTabDeudas'); if(b) b.click(); }, 50); }
-      },
-      {
-        t: _svgTip('shield') + ' Método: Bola de nieve',
-        d: `Estrategia probada: paga primero la deuda más <b>pequeña</b>, sin importar el interés. Al liquidarla, esa cuota se suma a la siguiente. El impulso psicológico es real y funciona.`,
-        a: 'Ver mis deudas',
-        fn: () => { go(1); setTimeout(() => { const b=$('btnTabDeudas'); if(b) b.click(); }, 50); }
-      },
-      {
-        t: _svgTip('shield') + ' Método: Avalancha',
-        d: `La estrategia más rentable: ataca primero la deuda con <b>mayor tasa de interés</b>. Pagas menos en total. Mantén los mínimos en las demás para no acumular mora.`,
-        a: 'Ver mis deudas',
-        fn: () => { go(1); setTimeout(() => { const b=$('btnTabDeudas'); if(b) b.click(); }, 50); }
-      },
-      {
-        t: _svgTip('shield') + ' No sumes deuda nueva',
-        d: `Mientras ${_ind?'liquidas':'liquidan'} las deudas actuales, evita créditos nuevos. Cada deuda nueva reinicia el reloj. Un ingreso extra directo a la deuda puede acelerar el proceso drásticamente.`,
-        a: 'Ver mis deudas',
-        fn: () => { go(1); setTimeout(() => { const b=$('btnTabDeudas'); if(b) b.click(); }, 50); }
-      },
-      {
-        t: _svgTip('shield') + ' Abonar extra supera cualquier CDT',
-        d: `Las deudas de consumo en Colombia cobran ~<b>26% anual</b>. Cada peso que abonas extra hoy te rinde más que un CDT o fondo de inversión. En la ficha de tu deuda puedes ver cuántos meses ahorras con un abono extra.`,
-        a: 'Ver mis deudas',
-        fn: () => { go(1); setTimeout(() => { const b=$('btnTabDeudas'); if(b) b.click(); }, 50); }
-      },
-      {
-        t: _svgTip('target') + ' Ahorra aunque tengas deudas',
-        d: `Las deudas son prioridad, pero guarda aunque sea un <b>fondo mínimo de emergencias</b>. Sin ese colchón, cualquier imprevisto se convierte en deuda nueva que borra el avance.`,
-        a: 'Ver mis deudas',
-        fn: () => { go(1); setTimeout(() => { const b=$('btnTabDeudas'); if(b) b.click(); }, 50); }
-      },
     ];
   } else {
     tipPool = [
       {
         t: _svgTip('trending') + ' Hora de Invertir y Crecer',
-        d: `¡${_ind?'Felicidades':'Felicitaciones'}! ${_ind?'Tienes':'Tienen'} el mes al día y sin deudas. Es el momento ideal para que ${_ind?'tu':'su'} dinero trabaje solo. Explora${_ind?'':'n'} plataformas de inversión recomendadas.`,
+        d: `¡${_ind?'Felicidades':'Felicitaciones'}! ${_ind?'Tienes':'Tienen'} el mes al día. Es el momento ideal para que ${_ind?'tu':'su'} dinero trabaje solo. Explora${_ind?'':'n'} plataformas de inversión recomendadas.`,
         a: 'Ver dónde invertir',
         fn: () => go(3)
       },
       {
-        t: _svgTip('target') + (_ind ? 'Metas de tu bolsillo personal' : 'Metas individuales de pareja'),
+        t: _svgTip('target') + ' ¿Ya tienen metas?',
         d: _ind
-          ? `El plan va bien. ¿Ya ${_ind?'tienes':'tienen'} metas individuales de tu bolsillo personal? Úsalas para ahorrar para tus gustos sin mezclarlos con el plan general.`
-          : `El plan va genial. ¿Cada uno ya tiene metas individuales de su bolsillo personal? Son perfectas para ahorrar para gustos propios sin afectar las metas compartidas.`,
+          ? `El plan va bien. ¿Ya tienes metas claras? Úsalas para organizar tus ahorros sin mezclarlos.`
+          : `El plan va genial. ¿Ya tienen sus metas claras? Son perfectas para organizar sus ahorros.`,
         a: 'Ver metas',
         fn: () => go(1)
       },
       {
         t: _svgTip('trending') + ' Sube el porcentaje de ahorro',
-        d: `Sin deudas es el mejor momento para aumentar el porcentaje de ahorro. Incluso un <b>2% más</b> del ingreso tiene un impacto enorme a largo plazo gracias al interés compuesto.`,
+        d: `Es el mejor momento para aumentar el porcentaje de ahorro. Incluso un <b>2% más</b> del ingreso tiene un impacto enorme a largo plazo gracias al interés compuesto.`,
         a: 'Configurar plan',
         fn: () => go(2)
       },
@@ -1365,7 +1350,6 @@ function renderInicio(){
     ${patHtml}
     ${shortcutsHtml}
     ${tipHtml}
-    ${drawFixedBudgetCard()}
   `;
 
   // Asignar clics
@@ -1386,18 +1370,16 @@ function heroMeta(m){
 }
 
 function drawSavingsDonut() {
-  const total = computeTotal();
   const perfil = state.config.perfil;
   const metasConSaldo = state.metas.filter(m => {
     if (m.tipo === 'deuda') return false;
+    if (m.tipo === 'personal') return false;
     // Privacidad: nada del otro perfil (ni su bolsillo ni sus metas individuales).
     if (m.dueno && m.dueno !== perfil) return false;
     return true;
   }).map(m => {
     let nombre = m.nombre;
-    if (m.tipo === 'personal') {
-      nombre = 'Mi bolsillo';
-    } else if (m.dueno) {
+    if (m.dueno) {
       nombre = `${m.nombre} (Individual)`;
     }
     return {
@@ -1408,6 +1390,8 @@ function drawSavingsDonut() {
       dueno: m.dueno
     };
   }).filter(m => m.saldo > 0);
+
+  const total = metasConSaldo.reduce((s, m) => s + m.saldo, 0);
 
   if (total === 0 || metasConSaldo.length === 0) {
     return `<div class="card dark" style="padding:18px 16px;">
@@ -1729,7 +1713,7 @@ function drawSavingsHistoryCard() {
     return `<div class="card dark" style="padding:18px 16px; border: 1px dashed rgba(246,241,230,.15); background: transparent;">
       <div class="k" style="color:rgba(246,241,230,.5)">Evolución del Ahorro</div>
       <div style="font-size:12.5px; color:rgba(246,241,230,.5); line-height:1.45; text-align:center; padding:12px 6px;">
-        El gráfico de ahorro mensual se activará cuando distribuyan su primer mes en <b>Distribuir Ahorro del Mes</b>.
+        El gráfico de ahorro mensual se activará cuando confirmen su primer aporte en <b>Mi Mes</b>.
       </div>
     </div>`;
   }
@@ -1782,16 +1766,6 @@ function drawSavingsHistoryCard() {
    ========================================================= */
 /* ---------- estimador de tiempo de metas ---------- */
 function calcularTiempoRestante(m) {
-  if (m.tipo === 'deuda') {
-    if (m.saldo <= 0) return null;
-    const P = m.saldo;
-    const r = Math.pow(1.26, 1/12) - 1; // ~1.94% mensual, tasa promedio mercado colombiano 26% EA
-    const M = (m.pagoMinimo || 0) + (m.aporteFijo || 0);
-    if (M <= 0) return null;
-    if (M <= P * r) return -1; // cuota no cubre intereses
-    return Math.ceil(-Math.log(1 - (r * P) / M) / Math.log(1 + r));
-  }
-  
   if (!m.objetivo || m.saldo >= m.objetivo) return null;
   const falta = m.objetivo - m.saldo;
   const aporteMes = aporteMensualEstimado(m);
@@ -1810,25 +1784,7 @@ function aporteMensualEstimado(m){
 }
 
 function metaSub(m){
-  if(m.tipo==='personal')return 'Tu premio + libre · privado de tu teléfono';
-  
-  if (m.tipo === 'deuda') {
-    let s = [];
-    if (m.pagoMinimo > 0) s.push(`Cuota: ${fmtK(m.pagoMinimo)}/mes`);
-    if (m.aporteFijo > 0) s.push(`+${fmtK(m.aporteFijo)} extra`);
-    if (m.aportePct > 0) s.push(`+${m.aportePct}% extra`);
-    if (m.saldo > 0) {
-      const mRestantes = calcularTiempoRestante(m);
-      if (mRestantes === -1) {
-        s.push(`<span style="color:var(--red);font-weight:600">⚠️ Cuota no cubre intereses</span>`);
-      } else if (mRestantes !== null) {
-        s.push(`<span style="color:#9b671c;font-weight:600">~${mRestantes} mes${mRestantes !== 1 ? 'es' : ''} est.</span>`);
-      }
-    } else {
-      s.push(`<span style="color:var(--green);font-weight:600;display:inline-flex;align-items:center;gap:4px">¡Saldada! ${getSVG('party', '', 'stroke:var(--green); width:14px; height:14px;')}</span>`);
-    }
-    return s.join(' · ');
-  }
+  if(m.tipo==='personal')return 'Individual';
   
   let s=[];
   const isCompleted = m.objetivo > 0 && m.saldo >= m.objetivo;
@@ -1845,21 +1801,10 @@ function metaSub(m){
   if(m.objetivo)s.push('meta '+fmtK(m.objetivo));
 
   if(isCompleted){
-    if((m.aporteFijo||0)>0||(m.aportePct||0)>0){
-      s.push('<span style="color:var(--green);font-weight:600">Aportes liberados (llena)</span>');
-    } else {
-      s.push('completada');
-    }
-  } else {
-    const prio = state.config.estrategia==='secuencial' ? getMetaPrioritaria() : null;
-    const isPrio = prio && prio.id === m.id;
-    if(!isPrio){
-      if((m.aporteFijo||0)>0)s.push('+'+fmtK(m.aporteFijo)+'/mes');
-      if((m.aportePct||0)>0)s.push('+'+m.aportePct+'% del resto');
-    }
+    s.push('completada');
   }
 
-  if(m.tipo==='invertir'&&!m.objetivo&&!(m.aporteFijo||0)&&!(m.aportePct||0)){
+  if(m.tipo==='invertir'&&!m.objetivo&&!(m.aportePct||0)){
     const sp=sumaPct();
     const rest=Math.max(0,100-sp);
     s.push(`recibe el sobrante (${rest}% del resto)`);
@@ -1898,11 +1843,11 @@ function renderMetas(){
     </div>`;
   };
 
+  if (curMetasSubTab === 2) curMetasSubTab = 1;
   let subTabsHtml = `
     <div class="seg dark-seg" style="margin-bottom:16px;">
       <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Distribución</button>
       <button id="btnTabAhorros" class="${curMetasSubTab===1?'on':''}">Ahorros</button>
-      <button id="btnTabDeudas" class="${curMetasSubTab===2?'on':''}">Deudas</button>
     </div>
   `;
   
@@ -1922,34 +1867,66 @@ function renderMetas(){
       const isPersonal = m.tipo === 'personal';
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;padding:4px 0;display:inline-flex;align-items:center;color:var(--gs);touch-action:none;user-select:none;margin-right:8px">${getSVG('drag', '', 'opacity:0.6;')}</span>`;
 
-      return `<div class="card tap" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
+      const strat = state.config.estrategia;
+      const isPrio = getMetaPrioritaria()?.id === m.id;
+      const showPct = m.tipo !== 'personal' && (
+        (strat === 'simultaneo') ||
+        (strat === 'secuencial' && !isPrio)
+      );
+      
+      const pctBadge = (canEdit && showPct && m.tipo !== 'personal')
+        ? `<div class="inline-pct-container">
+             <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}">
+             <span class="pct-sign">%</span>
+           </div>`
+        : (showPct && m.tipo !== 'personal' ? `<span class="pill" style="margin-left:6px;">${m.aportePct||0}%</span>` : '');
+
+      return `<div class="card" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
         ${dragHandle}
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="k" style="margin:0">${m.nombre}</span>
             ${m.tipo!=='personal'?'<span class="pill">'+tipoLabel(m.tipo)+'</span>':''}
+            ${pctBadge}
           </div>
           <div class="num med">${fmt(m.saldo)}</div>
           ${pct!=null?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
           <div class="muted" style="font-size:12px">${metaSub(m)}</div>
         </div>
-        ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar meta" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:8px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:18px;height:18px;pointer-events:none;')}</button>` : ''}
-        <span class="chev">›</span></div>`;
+        ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar meta" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : ''}
+        </div>`;
     };
 
-    const sp=sumaPct();
+    const strat = state.config.estrategia;
     let adviceHtml = '';
-    if(sp>0){
-      const over=sp>100;
-      const inv=inversionAbierta();
-      const em=emergenciaPrincipal();
-      const colchonPend = em && em.objetivo>0 && em.saldo<em.objetivo;
+    if (strat !== 'cascada') {
+      const sp = sumaPct();
+      const over = sp > 100;
+      const inv = inversionAbierta();
+      const em = emergenciaPrincipal();
+      const colchonPend = em && em.objetivo > 0 && em.saldo < em.objetivo;
       const targetName = inv
-        ? (colchonPend ? `tu fondo de emergencia (hasta el colchón) y luego ${inv.nombre}` : inv.nombre)
+        ? (colchonPend ? `tu fondo de emergencia y luego ${inv.nombre}` : inv.nombre)
         : (em ? em.nombre : 'el fondo de emergencias');
-      adviceHtml=`<div class="card" style="background:${over?'rgba(122,34,34,.12)':'rgba(192,138,45,.1)'};border-color:${over?'#7a2222':'rgba(192,138,45,.35)'};margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center"><span class="k" style="margin:0;color:${over?'#ff6b6b':'var(--gb)'}">Reparto del ahorro restante (%)</span><span class="num" style="font-size:18px;color:${over?'#ff6b6b':'var(--gb)'}">${sp}%</span></div>
-        <div class="hint" style="margin-top:6px;color:rgba(246,241,230,.7)">${over?'Te pasaste de 100%: las últimas metas recibirán menos de lo que indica su %.':(sp<100?`El ${100-sp}% restante va a ${targetName}.`:'Repartes el 100%; las metas abiertas solo reciben lo que no alcance otra meta.')}</div></div>`;
+      
+      let hintText = '';
+      if (over) {
+        hintText = 'Te pasaste de 100%: las últimas metas recibirán menos de lo que indica su %.';
+      } else if (sp < 100) {
+        hintText = `El ${100-sp}% restante va a ${targetName}.`;
+      } else {
+        hintText = 'Repartes el 100% de tu ahorro mensual.';
+      }
+      
+      adviceHtml = `
+        <div class="card" style="background:${over?'rgba(224,108,117,.12)':'rgba(246,241,230,.03)'}; border-color:${over?'#e06c75':'var(--line)'}; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="k" style="margin:0; color:${over?'#e06c75':'var(--gs)'}">Distribución del Ahorro</span>
+            <span class="num" style="font-size:18px; color:${over?'#e06c75':'var(--ink)'}">${sp}%</span>
+          </div>
+          <div class="hint" style="margin-top:6px; color:var(--gs);">${hintText}</div>
+        </div>
+      `;
     }
 
     let chipsHtml = '';
@@ -1958,7 +1935,6 @@ function renderMetas(){
         <div class="filter-chips">
           <button class="chip ${curAhorrosFilter==='all'?'on':''}" data-f="all">Todas</button>
           <button class="chip ${curAhorrosFilter==='goals'?'on':''}" data-f="goals">Mis Metas</button>
-          <button class="chip ${curAhorrosFilter==='personal'?'on':''}" data-f="personal">Bolsillo Personal</button>
         </div>
       `;
     } else {
@@ -1967,7 +1943,6 @@ function renderMetas(){
           <button class="chip ${curAhorrosFilter==='all'?'on':''}" data-f="all">Todas</button>
           <button class="chip ${curAhorrosFilter==='shared'?'on':''}" data-f="shared">Compartidas</button>
           <button class="chip ${curAhorrosFilter==='individual'?'on':''}" data-f="individual">Individuales</button>
-          <button class="chip ${curAhorrosFilter==='personal'?'on':''}" data-f="personal">Bolsillo Personal</button>
         </div>
       `;
     }
@@ -2011,13 +1986,8 @@ function renderMetas(){
     }
 
     let personalHtml = '';
-    const showPersonal = curAhorrosFilter === 'all' || curAhorrosFilter === 'personal';
-    if (showPersonal) {
-      personalHtml += `<div class="stitle">Bolsillo Personal</div>`;
-      personalHtml += card(metaPersonal(state.config.perfil));
-    }
 
-    // Filtro "Todas" sin ninguna meta creada (solo existe el Bolsillo Personal de sistema):
+    // Filtro "Todas" sin ninguna meta creada:
     // sin esto el usuario nuevo ve la vista vacía sin acción.
     let allEmptyCTA = '';
     const indivCount = isIndiv ? 0 : metasIndividuales(state.config.perfil).filter(m => m.tipo !== 'deuda').length;
@@ -2117,10 +2087,8 @@ function renderMetas(){
 
   const tabDist = $('btnTabDist');
   const tabAhorros = $('btnTabAhorros');
-  const tabDeudas = $('btnTabDeudas');
   if (tabDist) tabDist.onclick = () => { curMetasSubTab = 0; rerender(); };
   if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
-  if (tabDeudas) tabDeudas.onclick = () => { curMetasSubTab = 2; rerender(); };
 
   const helpBtn = $('helpPrioBtn');
   if(helpBtn){
@@ -2131,13 +2099,27 @@ function renderMetas(){
     };
   }
 
-  $('r1').querySelectorAll('[data-mid]').forEach(el=>el.onclick=(e)=>{
-    if(e.target.closest('.drag-handle') || e.target.closest('#helpPrioBtn') || e.target.closest('.btn-card-edit')) return;
-    if(el.classList.contains('dragged')){
-      el.classList.remove('dragged');
-      return;
-    }
-    openDetail(el.dataset.mid);
+  // Attach change listener to inline percentage inputs
+  $('r1').querySelectorAll('.inline-pct-input').forEach(input => {
+    input.onchange = (e) => {
+      const mid = input.dataset.pctmid;
+      const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+      const m = metaById(mid);
+      if (m) {
+        if (m.dueno) {
+          autoAdjustIndividualPercentages(m.dueno, mid, val);
+        } else {
+          autoAdjustPercentages(mid, val);
+        }
+        save();
+        rerender();
+      }
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        input.blur();
+      }
+    };
   });
 
   $('r1').querySelectorAll('.btn-card-edit').forEach(btn => {
@@ -2258,7 +2240,6 @@ function openMetaForm(id, defaultTipo = 'sueno'){
   }
   const existing=id?metaById(id):null;
   mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:metasCompartidas().length,reparto:null};
-  detailKey=null;
   ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
   $('sf').classList.add('on');$('sf').scrollTop=0;
   $('mainnav').classList.add('hide');
@@ -2271,7 +2252,6 @@ function renderMetaForm(editing){
     <button data-tipo="imprevistos" class="${m.tipo==='imprevistos'?'on':''}">Para imprevistos</button>
     <button data-tipo="invertir" class="${m.tipo==='invertir'?'on':''}">Para invertir</button>
     <button data-tipo="sueno" class="${m.tipo==='sueno'?'on':''}">Para un sueño</button>
-    <button data-tipo="deuda" class="${m.tipo==='deuda'?'on':''}">Pagar deuda</button>
   </div>`;
   
   let visHtml = '';
@@ -2292,7 +2272,6 @@ function renderMetaForm(editing){
         <div class="hint" id="fVisHint" style="margin-top:10px;">
           ${m.dueno ? '<b>Meta Individual (Privada):</b> Solo tú verás esta meta y la financiarás desde tu bolsillo personal.' : '<b>Meta Compartida:</b> Ambos verán la meta y aportarán a ella desde el ahorro colectivo.'}
         </div>
-        ${m.dueno && state.config.soloAhorroDirecto ? `<div class="hint" style="margin-top:8px;background:rgba(192,138,45,.1);border:1px solid rgba(192,138,45,.3);border-radius:10px;padding:10px 12px;color:rgba(246,241,230,.85)"><b>Ojo:</b> Tu ahorro se calcula "por valor", así que tu bolsillo personal no se fondea solo cada mes. Para llenar esta meta, entra a <b>Bolsillo Personal</b> y usa <b>"Ingresar a mi bolsillo"</b>, o retén un % de tus ingresos extra al cerrar el mes.</div>` : ''}
       </div>
     `;
   }
@@ -2309,19 +2288,6 @@ function renderMetaForm(editing){
       ${sug>0 ? `<div class="hint" style="margin-top:6px">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de tus gastos fijos':'~6 meses de tu ahorro mensual'}). Ajústalo a tu realidad. El ahorro sobrante completa este colchón antes de ir a inversión.</div>` : ''}
       ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
       <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
-  }else if(m.tipo==='deuda'){
-    fields=`<div class="card">
-      <label class="lbl">¿Cuánto debes actualmente en total?</label>
-      <input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0">
-      <label class="lbl" style="margin-top:14px">¿Cuánto debías inicialmente? (opcional, para ver progreso)</label>
-      <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
-      <label class="lbl" style="margin-top:14px">¿Cuánto pagas mensualmente? (cuota total)</label>
-      <input class="amt money" id="fMinimo" inputmode="numeric" value="${m.pagoMinimo?fmt(m.pagoMinimo):''}" placeholder="$0">
-      <div class="hint" style="margin-bottom:12px;">Incluye esta cuota en tus Gastos Fijos de Mi Mes para que tu presupuesto sea preciso.</div>
-      <label class="lbl" style="margin-top:14px">¿Cuánto quieres abonar extra sobre la cuota? (opcional)</label>
-      ${aporteFields()}
-      <div class="deriv" id="fDeriv" style="margin-top:14px"></div>
-    </div>`;
   }else{
     const prio = getMetaPrioritaria();
     const isPrio = prio && prio.id === m.id;
@@ -2340,12 +2306,12 @@ function renderMetaForm(editing){
   }
   $('rf').innerHTML=`
 <button class="bk" id="fBack">‹ Cancelar</button>
-<header style="padding-top:6px"><div class="ey">${editing?'Editar':'Nueva'} meta / deuda</div><h1>${editing?m.nombre||'Objetivo':'¿Qué quieren lograr?'}</h1></header>
-<div class="card"><label class="lbl">Nombre</label><input class="sf" id="fNom" value="${(m.nombre||'').replace(/"/g,'&quot;')}" placeholder="Viaje a Japón, Carro, Tarjeta Visa…"></div>
+<header style="padding-top:6px"><div class="ey">${editing?'Editar':'Nueva'} meta</div><h1>${editing?m.nombre||'Objetivo':'¿Qué quieren lograr?'}</h1></header>
+<div class="card"><label class="lbl">Nombre</label><input class="sf" id="fNom" value="${(m.nombre||'').replace(/"/g,'&quot;')}" placeholder="Viaje a Japón, Carro, Fondo imprevistos…"></div>
 ${m.tipo!=='personal'?'<div class="stitle" style="color:rgba(246,241,230,.65)">¿Para qué es?</div><div class="card">'+tipoBtns+'</div>':''}
 ${visHtml}
 ${fields}
-${m.tipo!=='deuda'&&m.tipo!=='personal' ? `<div class="card"><label class="lbl">¿Ya tienes algo guardado aquí? (opcional)</label><input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0"></div>` : ''}
+${m.tipo!=='personal' ? `<div class="card"><label class="lbl">¿Ya tienes algo guardado aquí? (opcional)</label><input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0"></div>` : ''}
 ${m.tipo==='invertir' ? `<div class="card" id="fColocado" style="cursor:pointer;display:flex;align-items:center;gap:12px">
   <div style="width:22px;height:22px;border-radius:6px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:2px solid ${m.colocado?'var(--green)':'var(--line)'};background:${m.colocado?'var(--green)':'transparent'}">${m.colocado?'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--cream)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>':''}</div>
   <div style="flex:1;min-width:0">
@@ -2360,10 +2326,8 @@ ${editing&&m.tipo!=='imprevistos'?'<button class="btn danger" id="fDel">Eliminar
 
 function aporteFields(){
   const m=mForm;
-  return `<input class="amt money" id="fFijo" inputmode="numeric" value="${m.aporteFijo?fmt(m.aporteFijo):''}" placeholder="$0 fijo / mes">
-    <label class="lbl" style="margin-top:12px">Además, un % de lo que sobra (opcional)</label>
-    <input class="sf" id="fPct" inputmode="numeric" value="${m.aportePct||''}" placeholder="0 %">
-    <div class="hint">Puedes usar uno, el otro o los dos: primero se aparta el monto fijo y, del resto que queda, esta meta toma ese %.</div>`;
+  return `<input class="sf" id="fPct" inputmode="numeric" value="${m.aportePct||''}" placeholder="0 %">
+    <div class="hint">Define qué porcentaje del ahorro mensual se destinará a esta meta.</div>`;
 }
 function repartoEditor(){
   const r=(mForm.reparto||[]);
@@ -2378,7 +2342,7 @@ function readMetaForm(){
   m.nombre=($('fNom')?$('fNom').value.trim():m.nombre);
   if($('fObj'))m.objetivo=parse($('fObj').value);
   if($('fFechaTrigger'))m.fecha=$('fFechaTrigger').dataset.val||null;
-  if($('fFijo'))m.aporteFijo=parse($('fFijo').value);
+  m.aporteFijo=0;
   if($('fPct'))m.aportePct=Math.max(0,Math.min(100,parse($('fPct').value)));
   if($('fSaldo'))m.saldo=parse($('fSaldo').value);
   if(state.config.estrategia==='secuencial'){
@@ -2400,7 +2364,6 @@ function updateDeriv(){
   const c=state.config;
   const p=c.perfil;
   const obj=$('fObj')?parse($('fObj').value):0;const fecha=$('fFechaTrigger')?$('fFechaTrigger').dataset.val:'';
-  const fijo=$('fFijo')?parse($('fFijo').value):0;
   const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
   const saldo=$('fSaldo')?parse($('fSaldo').value):0;
 
@@ -2416,15 +2379,13 @@ function updateDeriv(){
     const libre = p === 'p1' ? c.libreP1 : c.libreP2;
     const estPocket = c.soloAhorroDirecto ? (prem * pf) : (libre + prem * pf);
 
-    const fijosIndivs = metasIndividuales(p).reduce((s,m) => s + (m.id === mForm.id ? fijo : (m.aporteFijo || 0)), 0);
-    const restPocket = Math.max(0, estPocket - fijosIndivs);
-    pctMes = restPocket * pct / 100;
+    pctMes = estPocket * pct / 100;
   } else {
     pctMes=est*pct/100;
   }
 
-  const aporteMes=fijo+pctMes;
-  const apTxt=()=>{let p=[];if(fijo>0)p.push(fmt(fijo)+' fijos');if(pct>0)p.push('~'+fmt(pctMes)+' ('+pct+'% del resto)');return p.join(' + ');};
+  const aporteMes=pctMes;
+  const apTxt=()=>pct>0 ? '~'+fmt(pctMes)+' ('+pct+'% del ahorro)' : '';
 
   let txt='';
   const strat = c.estrategia;
@@ -2522,7 +2483,7 @@ function attachMetaForm(editing){
   const colBtn = $('fColocado');
   if (colBtn) colBtn.onclick = () => { readMetaForm(); mForm.colocado = !mForm.colocado; renderMetaForm(editing); };
 
-  ['fObj','fFijo','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
+  ['fObj','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
   const fTrigger = $('fFechaTrigger');
   if(fTrigger) {
     fTrigger.onclick = async () => {
@@ -2577,9 +2538,7 @@ function attachMetaForm(editing){
     });
   };
 }
-function openDetail(id){detailKey=id;renderDetail();
-  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));$('sd').classList.add('on');$('sd').scrollTop=0;
-  $('mainnav').classList.add('hide');}
+
 
 function gastosDe(id){return state.gastos.filter(g=>g.meta===id);}
 function obtenerRecomendacionInversion(m) {
@@ -2678,129 +2637,6 @@ function obtenerRecomendacionInversionCard(m) {
       </div>
     </div>
   `;
-}
-
-function renderDetail(){
-  const m=metaById(detailKey);if(!m){go(1);return;}
-  const isDeuda = m.tipo === 'deuda';
-  const obj = m.objetivo || 0;
-  let pct = 0;
-  let falta = 0;
-
-  if (isDeuda) {
-    pct = obj ? Math.max(0, Math.min(100, (obj - m.saldo) / obj * 100)) : 0;
-    falta = m.saldo; // lo que falta para llegar a 0 de deuda es el saldo
-  } else {
-    pct = obj ? Math.min(100, m.saldo / obj * 100) : 0;
-    falta = Math.max(0, obj - m.saldo);
-  }
-
-  const canEdit = canEditShared() || (m.tipo === 'personal' && m.dueno === state.config.perfil);
-  let body='';
-  if(obj){
-    body+=`<div class="bar light"><i style="width:${pct.toFixed(1)}%"></i></div>
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--gs)"><b class="gold">${pct.toFixed(0)}%</b><span>${isDeuda ? (falta > 0 ? 'pendiente ' + fmt(falta) : '✓ saldada') : (falta > 0 ? 'faltan ' + fmt(falta) : '✓ cumplido')}</span></div>`;
-    if(m.fecha){
-      const mr=monthsUntil(m.fecha),ap=mr>0&&falta>0?Math.ceil(falta/mr):null;
-      if(ap) body+=`<div class="hint">Para ${fmtMes(m.fecha)}: ${fmt(ap)}/mes (${mr} mes${mr!==1?'es':''}).</div>`;
-    }
-  }
-
-  // editor saldo
-  body+=`<label class="lbl" style="margin-top:14px">${isDeuda ? 'Saldo pendiente inicial/actual' : 'Saldo actual'}</label><input class="amt money" id="dSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" ${!canEdit ? 'disabled style="opacity:0.65;pointer-events:none;"' : ''}>
-    <div class="hint">${isDeuda ? 'El saldo pendiente disminuye al registrar abonos.' : 'El saldo se actualiza solo al cerrar el mes.'} Edítalo a mano únicamente para corregir el punto de partida.</div>`;
-
-  // Fondear bolsillo personal a mano. Único stream confiable en modo "por valor" (soloAhorroDirecto),
-  // donde el bolsillo no recibe dinero libre mensual y las metas individuales se quedarían sin fondeo.
-  if (m.tipo === 'personal' && canEdit) {
-    body += `
-      <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-        <div class="k">Ingresar a mi bolsillo</div>
-        <div class="hint" style="margin-bottom:8px">Suma dinero a tu bolsillo (p. ej. tu dinero libre del mes). Desde aquí fondeas tus metas individuales.</div>
-        <div class="transfer-row">
-          <input class="sf money" id="pIngreso" inputmode="numeric" placeholder="Monto $0" style="margin:0;">
-          <button class="btn sm" id="btnPocketIn" style="margin:0;padding:10px 14px;">Ingresar</button>
-        </div>
-      </div>`;
-  }
-
-  // pagos y abonos para deuda / gastos para meta
-  let ghist='';
-  if(m.tipo!=='personal'){
-    const gs=gastosDe(m.id).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha));
-    ghist=gs.length?gs.map(g=>`<div class="lrow"><div><div class="lm">${g.nota||(isDeuda ? 'Abono a deuda' : 'Salida')}</div><div class="ls">${fmtFecha(g.fecha)}</div></div>
-      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px;color:${g.entrada?'#0f8f2c':'inherit'}">${g.entrada?'+':'−'}${fmt(g.monto)}</span>${canEdit ? `<button class="ldel" data-gdel="${g.id}">×</button>` : ''}</div></div>`).join(''):`<div class="empty">Sin ${isDeuda ? 'pagos' : 'movimientos'} registrados.</div>`;
-    
-    if (canEdit) {
-      body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-        <button class="btn ghost sm" id="dRetirar" style="width:100%;margin-top:8px;">Retirar o mover dinero ›</button>
-        <div style="margin-top:16px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Movimientos'}</div>${ghist}</div></div>`;
-    } else {
-      body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Movimientos'}</div>${ghist}</div>`;
-    }
-  }
-  const canEditMeta = m.tipo!=='personal' && canEdit;
-  $('rd').innerHTML=`<button class="bk" id="dBack">‹ Volver a Metas</button>
-    <header style="padding-top:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-      <div style="min-width:0"><div class="ey">${m.tipo==='personal'?'Personal':tipoLabel(m.tipo)}</div><h1>${esc(m.nombre)}</h1></div>
-      ${canEditMeta?`<button id="dEdit" aria-label="Editar esta ${isDeuda ? 'deuda' : 'meta'}" style="flex-shrink:0;margin-top:6px;width:38px;height:38px;border-radius:10px;border:1px solid rgba(246,241,230,.18);background:rgba(246,241,230,.05);color:var(--cream);display:inline-flex;align-items:center;justify-content:center;cursor:pointer">${getSVG('edit')}</button>`:''}
-    </header>
-    <div class="card"><div class="k">${isDeuda ? 'Saldo Pendiente' : 'Saldo'}</div><div class="num big">${fmt(m.saldo)}</div>${body}</div>
-    ${obtenerRecomendacionInversionCard(m)}`;
-  $('dBack').onclick=()=>go(1);
-  const ds=$('dSaldo');
-  ds.addEventListener('focus',()=>{ds.value=String(m.saldo||0);ds.select();});
-  ds.addEventListener('blur',()=>{m.saldo=parse(ds.value);ds.value=m.saldo?fmt(m.saldo):'';save();renderDetail();});
-  
-  const btnPocketIn = $('btnPocketIn');
-  if (btnPocketIn) {
-    btnPocketIn.onclick = () => {
-      const amt = parse($('pIngreso').value);
-      if (amt <= 0) { flash('Ingresa un monto válido'); return; }
-      m.saldo += amt;
-      save();
-      renderDetail();
-      flash(`Ingresados ${fmt(amt)} a tu bolsillo ✓`);
-    };
-  }
-
-  const ed=$('dEdit');if(ed)ed.onclick=()=>openMetaForm(m.id);
-  const dr=$('dRetirar');if(dr)dr.onclick=()=>openRetiroDinero();
-  $('rd').querySelectorAll('[data-gdel]').forEach(b=>b.onclick=()=>{const g=state.gastos.find(x=>x.id===b.dataset.gdel);if(g){
-    const per = (g.fromPocket||g.toPocket) ? metaPersonal(m.dueno||state.config.perfil) : null;
-    if (g.mov === 'transfer-out' || g.mov === 'transfer-in') {
-      const par = state.gastos.find(x => x.transferId === g.transferId && x.id !== g.id);
-      if (!par) {
-        // Mitad huérfana (la pareja borró su lado en otro dispositivo): revertir solo este lado.
-        const m1 = metaById(g.meta);
-        if (m1) {
-          if (g.mov === 'transfer-out') m1.saldo += g.monto;
-          else if (m1.tipo === 'deuda') m1.saldo += g.monto;
-          else m1.saldo = Math.max(0, m1.saldo - g.monto);
-        }
-        state.gastos = state.gastos.filter(x => x.id !== g.id);
-        save(); renderDetail(); flash('Transferencia incompleta: se revirtió solo este lado'); return;
-      }
-      const out = g.mov === 'transfer-out' ? g : par;
-      const inn = g.mov === 'transfer-in' ? g : par;
-      const mo = out ? metaById(out.meta) : null, md = inn ? metaById(inn.meta) : null;
-      if (mo) mo.saldo += out.monto;
-      if (md) { if (md.tipo === 'deuda') md.saldo += inn.monto; else md.saldo = Math.max(0, md.saldo - inn.monto); }
-      state.gastos = state.gastos.filter(x => x.transferId !== g.transferId);
-      save(); renderDetail(); return;
-    } else if (g.entrada) {                // abono a meta desde bolsillo: revertir entrada y devolver al bolsillo
-      m.saldo = Math.max(0, m.saldo - g.monto);
-      if (per) per.saldo += g.monto;
-    } else if (g.mov === 'retiro') {        // retiro a bolsillo: devolver a la meta y quitar del bolsillo
-m.saldo += g.monto;
-      if (per) per.saldo = Math.max(0, per.saldo - g.monto);
-    } else if (g.mov === 'pagoDesdeBolsillo') { // abono a deuda desde bolsillo
-      m.saldo += g.monto;
-      if (per) per.saldo += g.monto;
-    } else {                                // salida / cobertura / pago manual
-      m.saldo += g.monto;
-    }
-    state.gastos=state.gastos.filter(x=>x.id!==g.id);save();renderDetail();}});
 }
 
 /* ---------- historial de meses cerrados ---------- */
@@ -3222,7 +3058,7 @@ function updatePlanningSummary() {
     if (!canEdit) {
       btn.disabled = true;
       btn.className = 'btn gold';
-      btn.textContent = 'Distribuir Ahorro en mis Metas';
+      btn.textContent = 'Confirmar aporte del mes';
     } else if (ahorro < 0) {
       btn.disabled = false;
       btn.className = 'btn danger';
@@ -3234,7 +3070,7 @@ function updatePlanningSummary() {
     } else {
       btn.disabled = false;
       btn.className = 'btn gold';
-      btn.textContent = `Distribuir ${fmt(ahorro)} en mis Metas`;
+      btn.textContent = `Confirmar aporte de ${fmt(ahorro)}`;
     }
   }
 }
@@ -3367,7 +3203,10 @@ function deficitFuentes(){
   return { fuentes, deudas };
 }
 function deficitFuenteNombre(m){
-  if (m.tipo === 'personal') return 'Mi bolsillo';
+  if (m.tipo === 'personal') {
+    const c = state.config;
+    return c.modo === 'pareja' ? 'Individual ' + (m.dueno === 'p2' ? c.nombreP2 : c.nombreP1) : 'Individual';
+  }
   if (m.dueno) return m.nombre + ' (individual)';
   return m.nombre;
 }
@@ -3526,11 +3365,10 @@ function openAsistenteIngresoExtra(preFill = null) {
   overlay.id = 'modalAsistente';
   overlay.style.display = 'flex';
 
-  const comp = metasCompartidas().filter(m => !m.colocado);
-  const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
-  const bolsillo = metaPersonal(c.perfil);
+  const comp = metasCompartidas().filter(m => !m.colocado && m.tipo !== 'deuda');
+  const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado && m.tipo !== 'deuda');
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
-  const optionsHtml = og('Metas comunes', comp) + og('Mis metas (privadas)', indiv) + (bolsillo ? `<optgroup label="Personal"><option value="${bolsillo.id}">Mi bolsillo</option></optgroup>` : '');
+  const optionsHtml = og('Metas comunes', comp) + og('Mis metas (privadas)', indiv);
 
   const defaultConcepto = preFill ? preFill.concepto : '';
   const defaultMonto = preFill && preFill.monto ? '$' + Number(preFill.monto).toLocaleString('es-CO') : '';
@@ -3566,30 +3404,14 @@ function openAsistenteIngresoExtra(preFill = null) {
         </select>
       </div>
 
-      <div>
-        <button type="button" class="btn ghost sm" id="aeToggleRet" style="margin:0;width:100%;">+ Apartar un % a bolsillo personal</button>
-        <div id="aeRetBox" style="display:none;margin-top:8px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <label class="lbl" style="margin:0;">% Retenido para bolsillo</label>
-            <span id="aePctLabel" style="font-weight:700; color:var(--gold); font-size:14px;">0%</span>
-          </div>
-          <input type="range" id="aePctRange" min="0" max="100" step="5" value="0" style="width:100%; accent-color:var(--gold);">
-          <div id="aePersonaBox">${c.modo === 'pareja' ? `
-            <label class="lbl" style="margin-top:8px;">¿A bolsillo de quién?</label>
-            <select class="sf" id="aePersona">
-              <option value="ambos">Ambos (50/50)</option>
-              <option value="p1">${c.nombreP1}</option>
-              <option value="p2">${c.nombreP2}</option>
-            </select>` : `<select id="aePersona" style="display:none"><option value="p1">${c.nombreP1}</option></select>`}
-          </div>
-        </div>
-      </div>
-
+      <!-- hidden placeholder inputs to keep backward compatibility with form selectors -->
+      <input type="range" id="aePctRange" value="0" style="display:none;">
+      <select id="aePersona" style="display:none;"><option value="ambos">Ambos</option></select>
       <div id="aePreviewContainer" style="display:none; margin-top:10px; background:rgba(246,241,230,0.04); border:1px dashed var(--line); border-radius:12px; padding:10px 12px; font-size:12.5px; flex-direction:column; gap:6px;"></div>
 
       <div style="display:flex; gap:10px; margin-top:8px;">
         <button class="btn ghost sm" id="btnCancelAE" style="flex:1; margin:0;">Cancelar</button>
-        <button class="btn sm" id="btnApplyAE" style="flex:1; margin:0;">Aplicar Ingreso</button>
+        <button class="btn sm" id="btnApplyAE" style="flex:1; margin:0;">Añadir al plan</button>
       </div>
     </div>
   `;
@@ -3612,17 +3434,22 @@ function openAsistenteIngresoExtra(preFill = null) {
 
   const range = overlay.querySelector('#aePctRange');
   const label = overlay.querySelector('#aePctLabel');
-  range.oninput = () => {
-    label.innerText = range.value + '%';
-  };
+  if (range && label) {
+    range.oninput = () => {
+      label.innerText = range.value + '%';
+    };
+  }
 
-  const retBox = overlay.querySelector('#aeRetBox');
-  overlay.querySelector('#aeToggleRet').onclick = () => {
-    const open = retBox.style.display === 'none';
-    retBox.style.display = open ? 'block' : 'none';
-    if (!open) { range.value = 0; label.innerText = '0%'; }
-    updateModalPreview();
-  };
+  const aeToggleRet = overlay.querySelector('#aeToggleRet');
+  if (aeToggleRet) {
+    const retBox = overlay.querySelector('#aeRetBox');
+    aeToggleRet.onclick = () => {
+      const open = retBox.style.display === 'none';
+      retBox.style.display = open ? 'block' : 'none';
+      if (!open) { range.value = 0; label.innerText = '0%'; }
+      updateModalPreview();
+    };
+  }
 
   overlay.querySelector('#btnCancelAE').onclick = () => {
     overlay.remove();
@@ -4200,14 +4027,14 @@ function getMonthlyDistributionData(mes) {
       if (ing.persona === 'p1' || ing.persona === 'ambos') {
         const pId = 'pocket_p1';
         if (!distMap[pId]) {
-          distMap[pId] = { name: c.modo === 'pareja' ? `Bolsillo ${c.nombreP1}` : 'Mi bolsillo', amount: 0, color: '#c8a2c8', isPocket: true };
+          distMap[pId] = { name: c.modo === 'pareja' ? `Individual ${c.nombreP1}` : 'Individual', amount: 0, color: '#c8a2c8', isPocket: true };
         }
         distMap[pId].amount += toPocket * (ing.persona === 'ambos' ? 0.5 : 1);
       }
       if (c.modo === 'pareja' && (ing.persona === 'p2' || ing.persona === 'ambos')) {
         const pId = 'pocket_p2';
         if (!distMap[pId]) {
-          distMap[pId] = { name: `Bolsillo ${c.nombreP2}`, amount: 0, color: '#e5a3ad', isPocket: true };
+          distMap[pId] = { name: `Individual ${c.nombreP2}`, amount: 0, color: '#e5a3ad', isPocket: true };
         }
         distMap[pId].amount += toPocket * (ing.persona === 'ambos' ? 0.5 : 1);
       }
@@ -4242,7 +4069,7 @@ function getMonthlyDistributionData(mes) {
           const pId = (ing.duenoPriv || c.perfil) === 'p2' ? 'pocket_p2' : 'pocket_p1';
           if (!distMap[pId]) {
             distMap[pId] = {
-              name: c.modo === 'pareja' ? `Bolsillo ${(ing.duenoPriv || c.perfil) === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Mi bolsillo',
+              name: c.modo === 'pareja' ? `Individual ${(ing.duenoPriv || c.perfil) === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Individual',
               amount: 0,
               color: (ing.duenoPriv || c.perfil) === 'p2' ? '#e5a3ad' : '#c8a2c8',
               isPocket: true
@@ -4288,7 +4115,7 @@ function getMonthlyDistributionData(mes) {
         const pId = sr.perfil === 'p2' ? 'pocket_p2' : 'pocket_p1';
         if (!distMap[pId]) {
           distMap[pId] = {
-            name: c.modo === 'pareja' ? `Bolsillo ${sr.perfil === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Mi bolsillo',
+            name: c.modo === 'pareja' ? `Individual ${sr.perfil === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Individual',
             amount: 0,
             color: sr.perfil === 'p2' ? '#e5a3ad' : '#c8a2c8',
             isPocket: true
@@ -4403,8 +4230,14 @@ function processTransactionsForDisplay(rawList) {
       if (gOut && gIn) {
         const mOut = metaById(gOut.meta);
         const mIn = metaById(gIn.meta);
-        const nameOut = mOut ? (mOut.tipo === 'personal' ? 'Mi bolsillo' : mOut.nombre) : 'Origen';
-        const nameIn = mIn ? (mIn.tipo === 'personal' ? 'Mi bolsillo' : mIn.nombre) : 'Destino';
+        const nameOut = mOut ? (mOut.tipo === 'personal' ? (state.config.modo === 'pareja' ? `Individual ${mOut.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}` : 'Individual') : mOut.nombre) : 'Origen';
+        const nameIn = mIn
+          ? (mIn.tipo === 'personal'
+            ? (state.config.modo === 'pareja' ? `Individual ${mIn.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}` : 'Individual')
+            : (gOut && gOut.aTerrenoPersonal && mIn.dueno && mIn.dueno !== state.config.perfil
+              ? `Lo personal de ${mIn.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}`
+              : mIn.nombre))
+          : 'Destino';
         
         processed.push({
           type: 'transfer',
@@ -5685,7 +5518,7 @@ function rerenderPlanKeepOpen(){renderPlan();}
    ONBOARDING (bienvenida + 5 pasos)
    ========================================================= */
 let obStep=0,obMetaTipo='sueno',obReparto=[{n:'Renta variable',pct:50},{n:'Renta fija',pct:30},{n:'Reserva',pct:20}];
-const OB_TOTAL=5;
+const OB_TOTAL=4;
 function startOnboarding(){
   if (currentUser) {
     obStep = 1;
@@ -5791,9 +5624,9 @@ function renderOb(){
     if (isInv) {
       h=`<div class="ob-step on">
         <div class="ob-mark">✦</div>
-        <div class="ob-eyebrow">Paso 1 de 4</div>
+        <div class="ob-eyebrow">Paso 1 de 2</div>
         <div class="ob-h">¿Quién eres en este teléfono?</div>
-        <div class="ob-p" style="margin-top:4px;">Cada uno instala la app en el suyo. Elige tu nombre para acceder a tu bolsillo personal.</div>
+        <div class="ob-p" style="margin-top:4px;">Cada uno instala la app en el suyo. Elige tu nombre para acceder a tus metas individuales.</div>
         <div class="ob-field" id="obDeviceField">
           <div class="seg dark-seg" style="margin-top:14px;">
             <button id="obPf1" class="${c.perfil==='p1'?'on':''}">Soy ${c.nombreP1 || 'Persona 1'}</button>
@@ -5803,7 +5636,7 @@ function renderOb(){
       </div>`;
     } else {
       const isIndiv = c.modo === 'individual';
-      h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 4</div>
+      h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 2</div>
         <div class="ob-h">¿Cómo usarás la app?</div>
         <div class="ob-field" style="margin-bottom:14px;">
           <div class="mode-cards dark-seg" id="obModoSeg">
@@ -5835,39 +5668,22 @@ function renderOb(){
       </div>`;
     }
   } else if(obStep===2){
-    h=`<div class="ob-step on" style="display:flex; flex-direction:column; gap:10px;">
-      <div class="ob-eyebrow">Paso 2 de 4</div>
-      <div class="ob-h" style="margin-bottom:2px;">Tu aporte mensual</div>
-      <div class="ob-p" style="margin-top:4px; margin-bottom:8px; font-size:13.5px; opacity:0.85; line-height:1.4;">
-        ¿Cuánto ${c.modo==='pareja'?'aportan':'aportas'} al plan cada mes? Es el dinero que el motor repartirá entre tus metas. Podrás ajustarlo cuando quieras, y en la vista Flujo puedes calcularlo al detalle desde tu presupuesto.
-      </div>
-      <div class="card dark" style="margin-bottom:6px; background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.08); padding:10px 14px; border-radius:12px;">
-        <div style="font-size:11px; color:var(--cream); opacity:0.8; text-transform:uppercase; font-weight:600; letter-spacing:0.5px;">Aporte mensual al plan</div>
-        <div class="num big" id="obLiveAhorro" style="color:var(--gb); margin-top:2px; font-size:32px;">${c.ahorroDirecto?fmt(c.ahorroDirecto):'$0'}</div>
-      </div>
-      <div class="ob-field" style="margin:0">
-        <label class="lbl">Monto mensual</label>
-        <input class="sf money" id="obAhorroDirecto" inputmode="numeric" value="${c.ahorroDirecto?fmt(c.ahorroDirecto):''}" placeholder="$1.000.000">
-      </div>
-    </div>`;
-  } else if(obStep===3){
     h=`<div class="ob-step on">
-      <div class="ob-eyebrow">Paso 3 de 4</div>
-      <div class="ob-h">¿Tienes una primera meta o deuda?</div>
+      <div class="ob-eyebrow">Paso 2 de 2</div>
+      <div class="ob-h">¿Tienes una primera meta?</div>
       <div class="ob-p">Agrégala ahora para ver cómo se distribuye tu plan. Si no la tienes, puedes crearla después.</div>
-      ${c.modo === 'pareja' ? `<div class="hint" style="margin-top:2px; line-height:1.4; color:rgba(246,241,230,.7); background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.1); border-radius:10px; padding:10px 12px;">Más adelante podrás crear <b>metas conjuntas</b> (parte del plan compartido) o <b>metas individuales</b> (de tu bolsillo personal). El tipo se elige al crear cada meta.</div>` : ''}
+      ${c.modo === 'pareja' ? `<div class="hint" style="margin-top:2px; line-height:1.4; color:rgba(246,241,230,.7); background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.1); border-radius:10px; padding:10px 12px;">Más adelante podrás crear <b>metas conjuntas</b> o <b>metas individuales</b>. El tipo se elige al crear cada meta.</div>` : ''}
       
       <div class="ob-field">
         <label class="lbl">¿Cómo se llama?</label>
-        <input class="sf" id="obMetaNom" placeholder="ej: Fondo de emergencias, Viaje, Tarjeta de Crédito...">
+        <input class="sf" id="obMetaNom" placeholder="ej: Fondo de emergencias, Viaje, Regalos...">
       </div>
       
       <div class="ob-field">
         <label class="lbl">Tipo de Meta</label>
-        <div class="seg dark-seg" style="margin-top:6px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+        <div class="seg dark-seg" style="margin-top:6px; display:grid; grid-template-columns:1fr 1fr; gap:6px;">
           <button id="obTipoSueno" class="on" style="display:inline-flex;align-items:center;justify-content:center;gap:5px;">${getSVG('star', '', 'width:14px;height:14px;')} Sueño</button>
           <button id="obTipoImprev" style="display:inline-flex;align-items:center;justify-content:center;gap:5px;">${getSVG('shield', '', 'width:14px;height:14px;')} Imprevistos</button>
-          <button id="obTipoDeuda" style="display:inline-flex;align-items:center;justify-content:center;gap:5px;">${getSVG('card', '', 'width:14px;height:14px;')} Deuda</button>
         </div>
         <div class="hint" id="obTipoHint" style="margin-top:8px; line-height:1.4; color:rgba(246,241,230,.7);">Una meta con fecha u objetivo concreto: viaje, carro, apartamento…</div>
       </div>
@@ -5876,18 +5692,12 @@ function renderOb(){
         <label class="lbl" id="obObjLabel">¿Cuánto necesitas ahorrar?</label>
         <input class="sf money" id="obMetaObj" inputmode="numeric" placeholder="$15.000.000">
       </div>
-      
-      <div class="ob-field" id="obMinField" style="display:none">
-        <label class="lbl">Pago mínimo mensual sugerido/obligatorio</label>
-        <input class="sf money" id="obMetaMin" inputmode="numeric" placeholder="$200.000">
-        <div class="hint" style="margin-top:4px; color:rgba(246,241,230,.7);">Se incluirá en el presupuesto de tus deudas para control de pasivos.</div>
-      </div>
     </div>`;
-  } else if(obStep===4){
-    const isCapacitorOb = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
+  } else if(obStep===3){
+    const isNativeApp = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
     const isStandalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
     let obInstallHtml = '';
-    if (!isCapacitorOb && !isStandalone) {
+    if (!isNativeApp && !isStandalone) {
       obInstallHtml = `
         <div class="card" style="padding:12px 14px; background:rgba(217,168,74,.08); border:1px solid rgba(217,168,74,.3); border-radius:12px; margin-top:4px;">
           <div style="display:flex; gap:10px; align-items:flex-start;">
@@ -5942,7 +5752,7 @@ function renderOb(){
           <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(246,241,230,0.08);flex-shrink:0;">${getSVG('home', '', 'color:var(--cream);')}</div>
           <div style="flex:1;">
             <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Inicio</div>
-            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Tus ahorros acumulados (menos deudas) y atajos rápidos para tu día a día.</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Tus ahorros acumulados y atajos rápidos para tu día a día.</div>
           </div>
         </div>
         
@@ -5950,7 +5760,7 @@ function renderOb(){
           <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(246,241,230,0.08);flex-shrink:0;">${getSVG('target', '', 'color:var(--cream);')}</div>
           <div style="flex:1;">
             <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Metas</div>
-            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Separa y visualiza tus metas de ahorro tradicional de tus deudas, con gráficos de reparto y recomendaciones.</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Separa y visualiza tus metas de ahorro, con gráficos de reparto y recomendaciones.</div>
           </div>
         </div>
         
@@ -5958,7 +5768,7 @@ function renderOb(){
           <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(246,241,230,0.08);flex-shrink:0;">${getSVG('calendar', '', 'color:var(--cream);')}</div>
           <div style="flex:1;">
             <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Mi Mes</div>
-            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Distribuye tu ahorro entre las metas al inicio de cada mes y gestiona ingresos adicionales durante el mes.</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Confirma tu aporte mensual, añade ingresos extra y gestiona movimientos durante el mes.</div>
           </div>
         </div>
         
@@ -6167,63 +5977,43 @@ function attachOb(){
     }
   }
   if(obStep===2){
-    const inp=$('obAhorroDirecto');
-    if(inp){
-      inp.addEventListener('input',()=>{ $('obLiveAhorro').textContent=fmt(parse(inp.value)||0); });
-      inp.addEventListener('focus', () => {
-        const val = parse(inp.value);
-        inp.value = val ? String(val) : '';
-        inp.select();
-      });
-      inp.addEventListener('blur', () => {
-        const val = parse(inp.value);
-        inp.value = val ? fmt(val) : '';
-        $('obLiveAhorro').textContent=fmt(val||0);
-      });
-    }
-  }
-  if(obStep===3){
-    const btnS=$('obTipoSueno'),btnP=$('obTipoImprev'),btnD=$('obTipoDeuda');
+    const btnS=$('obTipoSueno'),btnP=$('obTipoImprev');
     const TIPO_HINTS={
       sueno:'Una meta con fecha u objetivo concreto: viaje, carro, apartamento…',
-      imprevistos:'Se llena primero cada mes, antes que las otras metas. Ideal como colchón de emergencias.',
-      deuda:'Para pagar tus pasivos (tarjetas de crédito, préstamos). Visualiza el saldo decreciendo hacia $0.'
+      imprevistos:'Se llena primero cada mes, antes que las otras metas. Ideal como colchón de emergencias.'
     };
     
     const setTipo=(t)=>{
       obMetaTipo=t;
-      [btnS,btnP,btnD].forEach(b=>b&&b.classList.remove('on'));
-      ({sueno:btnS,imprevistos:btnP,deuda:btnD})[t].classList.add('on');
+      if(btnS) btnS.classList.remove('on');
+      if(btnP) btnP.classList.remove('on');
+      if(t==='sueno' && btnS) btnS.classList.add('on');
+      if(t==='imprevistos' && btnP) btnP.classList.add('on');
       
       const hint=$('obTipoHint'); if(hint) hint.textContent=TIPO_HINTS[t]||'';
       
-      const minField=$('obMinField'); if(minField) minField.style.display=t==='deuda'?'':'none';
-      
       const objLabel=$('obObjLabel');
-      if(objLabel) objLabel.textContent=t==='deuda'?'¿Cuál es el saldo total pendiente?':'¿Cuánto necesitas ahorrar?';
+      if(objLabel) objLabel.textContent='¿Cuánto necesitas ahorrar?';
       
       const nom=$('obMetaNom');
-      if(nom) nom.placeholder=t==='imprevistos'?'ej: Fondo de emergencias, Colchón…':t==='deuda'?'ej: Tarjeta Nu, Préstamo familiar…':'ej: Viaje a Europa, Carro, Apartamento…';
+      if(nom) nom.placeholder=t==='imprevistos'?'ej: Fondo de emergencias, Colchón…':'ej: Viaje a Europa, Carro, Apartamento…';
     };
     
     if(btnS) btnS.onclick=()=>setTipo('sueno');
     if(btnP) btnP.onclick=()=>setTipo('imprevistos');
-    if(btnD) btnD.onclick=()=>setTipo('deuda');
     
-    ['obMetaObj', 'obMetaMin'].forEach(id=>{
-      const el=$(id);
-      if(el){
-        el.addEventListener('focus',()=>{
-          const v=parse(el.value);
-          el.value=v?String(v):'';
-          el.select();
-        });
-        el.addEventListener('blur',()=>{
-          const v=parse(el.value);
-          el.value=v?fmt(v):'';
-        });
-      }
-    });
+    const el=$('obMetaObj');
+    if(el){
+      el.addEventListener('focus',()=>{
+        const v=parse(el.value);
+        el.value=v?String(v):'';
+        el.select();
+      });
+      el.addEventListener('blur',()=>{
+        const v=parse(el.value);
+        el.value=v?fmt(v):'';
+      });
+    }
   }
   const obInstallBtn = $('obInstallPWA');
   if (obInstallBtn) {
@@ -6267,10 +6057,6 @@ function obSaveStep(){
     }
   }
   if(obStep===2){
-    c.soloAhorroDirecto=true;
-    c.ahorroDirecto=parse($('obAhorroDirecto') ? $('obAhorroDirecto').value : '')||c.ahorroDirecto;
-  }
-  if(obStep===3){
     // Idempotente: quitar la meta creada antes en este onboarding para no duplicarla
     // al navegar Atrás/Continuar o re-guardar el mismo paso.
     if(obMetaCreatedId){
@@ -6283,35 +6069,18 @@ function obSaveStep(){
       const prio=metasCompartidas().length;
       const nuevaId=uid();
       obMetaCreatedId=nuevaId;
-      if(obMetaTipo==='deuda') {
-        const min=parse($('obMetaMin')?$('obMetaMin').value:'');
-        state.metas.push({
-          id:nuevaId,
-          nombre:nom,
-          tipo:'deuda',
-          saldo:obj||0,
-          objetivo:obj||0,
-          pagoMinimo:min||0,
-          aporteFijo:0,
-          aportePct:0,
-          fecha:null,
-          prioridad:prio,
-          reparto:null
-        });
-      } else {
-        state.metas.push({
-          id:nuevaId,
-          nombre:nom,
-          tipo:obMetaTipo,
-          saldo:0,
-          objetivo:obj||0,
-          aporteFijo:0,
-          aportePct:0,
-          fecha:null,
-          prioridad:prio,
-          reparto:null
-        });
-      }
+      state.metas.push({
+        id:nuevaId,
+        nombre:nom,
+        tipo:obMetaTipo,
+        saldo:0,
+        objetivo:obj||0,
+        aporteFijo:0,
+        aportePct:0,
+        fecha:null,
+        prioridad:prio,
+        reparto:null
+      });
     }
   }
 }

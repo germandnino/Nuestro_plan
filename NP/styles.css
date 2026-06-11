@@ -1,4 +1,4 @@
-﻿:root{--ink:#15241c;--green:#1c3a2c;--gd:#0f261c;--gs:#2f5a44;--gold:#c08a2d;--gb:#d9a84a;--cream:#f6f1e6;--paper:#fbf8f0;--line:rgba(28,58,44,.16);--serif:"Fraunces",Georgia,serif;--sans:"Hanken Grotesk",system-ui,sans-serif;}
+:root{--ink:#15241c;--green:#1c3a2c;--gd:#0f261c;--gs:#2f5a44;--gold:#c08a2d;--gb:#d9a84a;--cream:#f6f1e6;--paper:#fbf8f0;--line:rgba(28,58,44,.16);--serif:"Fraunces",Georgia,serif;--sans:"Hanken Grotesk",system-ui,sans-serif;}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{height:100%}
 body{font-family:var(--sans);background:var(--gd);color:var(--ink);display:flex;flex-direction:column;height:100dvh;overflow:hidden}
@@ -545,3 +545,46 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .mimes-cta{position:fixed;left:0;right:0;z-index:60;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--gd) 60%,transparent);pointer-events:none}
 .mimes-cta .btn{max-width:480px;margin:0 auto;display:block;pointer-events:auto}
 .mimes-cta-spacer{height:84px}
+
+/* Inline % editable badge in cards */
+.inline-pct-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px 6px;
+  color: var(--green);
+  font-weight: 700;
+  font-size: 13px;
+  margin-left: 6px;
+}
+.dark .inline-pct-container {
+  background: rgba(246,241,230,0.1);
+  border-color: rgba(246,241,230,0.2);
+  color: var(--cream);
+}
+.inline-pct-input {
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  text-align: right;
+  outline: none;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+.inline-pct-input::-webkit-outer-spin-button,
+.inline-pct-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pct-sign {
+  opacity: 0.8;
+  font-size: 11px;
+}
+
