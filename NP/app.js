@@ -3037,26 +3037,26 @@ async function desaplicarMes(mes) {
         }
       }
 
-      const pocketP1 = metaPersonal('p1');
-      const pocketP2 = metaPersonal('p2');
+      const perfil = state.config.perfil;
+      const per = metaPersonal(perfil);
       const toPocket = ep.monto - toSave;
-      if (toPocket > 0.5) {
-        if (ep.persona === 'p1' && pocketP1) pocketP1.saldo = Math.max(0, pocketP1.saldo - toPocket);
-        else if (ep.persona === 'p2' && pocketP2) pocketP2.saldo = Math.max(0, pocketP2.saldo - toPocket);
-        else if (ep.persona === 'ambos') {
-          if (pocketP1) pocketP1.saldo = Math.max(0, pocketP1.saldo - toPocket * 0.5);
-          if (pocketP2) pocketP2.saldo = Math.max(0, pocketP2.saldo - toPocket * 0.5);
+      if (toPocket > 0.5 && per) {
+        let share = 0;
+        if (ep.persona === perfil) share = toPocket;
+        else if (ep.persona === 'ambos') share = toPocket * 0.5;
+        if (share > 0) {
+          per.saldo = Math.max(0, per.saldo - share);
         }
       }
     });
   }
   
-  const pocketP1 = metaPersonal('p1');
-  const pocketP2 = metaPersonal('p2');
-  if (pocketP1) {
-    const yaP1 = pocketP1.aportes.find(x => x.mes === mes);
-    if (yaP1) {
-      const { dist, rem } = distribuirAhorroIndividual('p1', yaP1.monto);
+  const perfil = state.config.perfil;
+  const per = metaPersonal(perfil);
+  if (per) {
+    const ya = per.aportes.find(x => x.mes === mes);
+    if (ya) {
+      const { dist, rem } = distribuirAhorroIndividual(perfil, ya.monto);
       Object.keys(dist).forEach(id => {
         const m = metaById(id);
         if (m) {
@@ -3067,26 +3067,8 @@ async function desaplicarMes(mes) {
           }
         }
       });
-      pocketP1.saldo = Math.max(0, pocketP1.saldo - rem);
-      pocketP1.aportes = pocketP1.aportes.filter(x => x.mes !== mes);
-    }
-  }
-  if (pocketP2) {
-    const yaP2 = pocketP2.aportes.find(x => x.mes === mes);
-    if (yaP2) {
-      const { dist, rem } = distribuirAhorroIndividual('p2', yaP2.monto);
-      Object.keys(dist).forEach(id => {
-        const m = metaById(id);
-        if (m) {
-          if (m.tipo === 'deuda') {
-            m.saldo += dist[id];
-          } else {
-            m.saldo = Math.max(0, m.saldo - dist[id]);
-          }
-        }
-      });
-      pocketP2.saldo = Math.max(0, pocketP2.saldo - rem);
-      pocketP2.aportes = pocketP2.aportes.filter(x => x.mes !== mes);
+      per.saldo = Math.max(0, per.saldo - rem);
+      per.aportes = per.aportes.filter(x => x.mes !== mes);
     }
   }
   
