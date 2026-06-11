@@ -5336,86 +5336,19 @@ function renderOb(){
       </div>`;
     }
   } else if(obStep===2){
-    const isIndiv = c.modo === 'individual';
     h=`<div class="ob-step on" style="display:flex; flex-direction:column; gap:10px;">
       <div class="ob-eyebrow">Paso 2 de 4</div>
-      <div class="ob-h" style="margin-bottom:2px;">Ahorro mensual</div>
+      <div class="ob-h" style="margin-bottom:2px;">Tu aporte mensual</div>
       <div class="ob-p" style="margin-top:4px; margin-bottom:8px; font-size:13.5px; opacity:0.85; line-height:1.4;">
-        Elige cómo definir tu ahorro: calcúlalo restando tus gastos y dinero libre de tus ingresos estimados (la diferencia será tu ahorro), o define directamente un monto fijo mensual.
+        ¿Cuánto ${c.modo==='pareja'?'aportan':'aportas'} al plan cada mes? Es el dinero que el motor repartirá entre tus metas. Podrás ajustarlo cuando quieras, y en la vista Flujo puedes calcularlo al detalle desde tu presupuesto.
       </div>
-      
-      <div class="seg dark-seg" style="margin-bottom:6px;" id="obAhorroTipoSeg">
-        <button id="btnAhorroCalc" class="${!c.soloAhorroDirecto?'on':''}" style="font-size:12.5px; padding:10px;">Calcular desde presupuesto</button>
-        <button id="btnAhorroFijo" class="${c.soloAhorroDirecto?'on':''}" style="font-size:12.5px; padding:10px;">Definir monto fijo</button>
-      </div>
-
       <div class="card dark" style="margin-bottom:6px; background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.08); padding:10px 14px; border-radius:12px;">
-        <div style="font-size:11px; color:var(--cream); opacity:0.8; text-transform:uppercase; font-weight:600; letter-spacing:0.5px;" id="obLiveAhorroTitle">
-          ${c.soloAhorroDirecto ? 'Ahorro mensual fijado' : 'Ahorro mensual estimado'}
-        </div>
-        <div class="num big" id="obLiveAhorro" style="color:var(--gb); margin-top:2px; font-size:32px;">$0</div>
-        <div class="muted sm" style="margin-top:2px; font-size:10.5px;" id="obLiveFormula">
-          ${c.soloAhorroDirecto ? 'Monto directo destinado a tus metas' : 'Ingresos - Gastos - Dinero Libre'}
-        </div>
+        <div style="font-size:11px; color:var(--cream); opacity:0.8; text-transform:uppercase; font-weight:600; letter-spacing:0.5px;">Aporte mensual al plan</div>
+        <div class="num big" id="obLiveAhorro" style="color:var(--gb); margin-top:2px; font-size:32px;">${c.ahorroDirecto?fmt(c.ahorroDirecto):'$0'}</div>
       </div>
-
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        ${c.soloAhorroDirecto ? `
-          <div class="ob-field" style="margin:0">
-            <label class="lbl">¿Cuánto quieres ahorrar al mes en total?</label>
-            <input class="sf money" id="obAhorroDirecto" inputmode="numeric" value="${c.ahorroDirecto?fmt(c.ahorroDirecto):''}" placeholder="$1.000.000">
-          </div>
-        ` : (isIndiv ? `
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Tu nómina neta</label>
-              <input class="sf money" id="obN1" inputmode="numeric" value="${c.nominaP1?fmt(c.nominaP1):''}" placeholder="$3.000.000">
-            </div>
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Gastos fijos</label>
-              <input class="sf money" id="obGas" inputmode="numeric" value="${c.gastos?fmt(c.gastos):''}" placeholder="$1.500.000">
-            </div>
-          </div>
-          <div class="ob-field" style="margin:0">
-            <label class="lbl">Tu dinero personal</label>
-            <div class="lbl-sub">Para tus gustos del día a día</div>
-            <input class="sf money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$500.000">
-          </div>
-        ` : `
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Nómina de ${c.nombreP1 || 'Persona 1'}</label>
-              <input class="sf money" id="obN1" inputmode="numeric" value="${c.nominaP1?fmt(c.nominaP1):''}" placeholder="$3.000.000">
-            </div>
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Nómina de ${c.nombreP2 || 'Persona 2'}</label>
-              <input class="sf money" id="obN2" inputmode="numeric" value="${c.nominaP2?fmt(c.nominaP2):''}" placeholder="$3.000.000">
-            </div>
-          </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Gastos hogar</label>
-              <input class="sf money" id="obGas" inputmode="numeric" value="${c.gastos?fmt(c.gastos):''}" placeholder="$2.500.000">
-            </div>
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Para los dos</label>
-              <div class="lbl-sub">Citas, salidas y planes juntos</div>
-              <input class="sf money" id="obPP" inputmode="numeric" value="${c.planPareja?fmt(c.planPareja):''}" placeholder="$1.000.000">
-            </div>
-          </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Personal de ${c.nombreP1 || 'Persona 1'}</label>
-              <div class="lbl-sub">A su gusto, sin rendir cuentas</div>
-              <input class="sf money" id="obL1" inputmode="numeric" value="${c.libreP1?fmt(c.libreP1):''}" placeholder="$400.000">
-            </div>
-            <div class="ob-field" style="margin:0">
-              <label class="lbl">Personal de ${c.nombreP2 || 'Persona 2'}</label>
-              <div class="lbl-sub">A su gusto, sin rendir cuentas</div>
-              <input class="sf money" id="obL2" inputmode="numeric" value="${c.libreP2?fmt(c.libreP2):''}" placeholder="$400.000">
-            </div>
-          </div>
-        `)}
+      <div class="ob-field" style="margin:0">
+        <label class="lbl">Monto mensual</label>
+        <input class="sf money" id="obAhorroDirecto" inputmode="numeric" value="${c.ahorroDirecto?fmt(c.ahorroDirecto):''}" placeholder="$1.000.000">
       </div>
     </div>`;
   } else if(obStep===3){
@@ -5735,59 +5668,20 @@ function attachOb(){
     }
   }
   if(obStep===2){
-    const btnCalc = $('btnAhorroCalc');
-    const btnFijo = $('btnAhorroFijo');
-    if (btnCalc && btnFijo) {
-      btnCalc.onclick = () => {
-        c.soloAhorroDirecto = false;
-        renderOb();
-      };
-      btnFijo.onclick = () => {
-        c.soloAhorroDirecto = true;
-        renderOb();
-      };
+    const inp=$('obAhorroDirecto');
+    if(inp){
+      inp.addEventListener('input',()=>{ $('obLiveAhorro').textContent=fmt(parse(inp.value)||0); });
+      inp.addEventListener('focus', () => {
+        const val = parse(inp.value);
+        inp.value = val ? String(val) : '';
+        inp.select();
+      });
+      inp.addEventListener('blur', () => {
+        const val = parse(inp.value);
+        inp.value = val ? fmt(val) : '';
+        $('obLiveAhorro').textContent=fmt(val||0);
+      });
     }
-
-    const calcLive=()=>{
-      if (c.soloAhorroDirecto) {
-        const val = parse($('obAhorroDirecto') ? $('obAhorroDirecto').value : '0');
-        const elAhorro = $('obLiveAhorro');
-        if (elAhorro) elAhorro.textContent = fmt(val);
-      } else {
-        const n1 = parse($('obN1') ? $('obN1').value : '0');
-        const n2 = $('obN2') ? parse($('obN2').value) : 0;
-        const gas = parse($('obGas') ? $('obGas').value : '0');
-        const pp = $('obPP') ? parse($('obPP').value) : 0;
-        const l1 = parse($('obL1') ? $('obL1').value : '0');
-        const l2 = $('obL2') ? parse($('obL2').value) : 0;
-        
-        const totalIngresos = n1 + n2;
-        const totalEgresos = gas + pp + l1 + l2;
-        const ahorro = Math.max(0, totalIngresos - totalEgresos);
-        
-        const elAhorro = $('obLiveAhorro');
-        if (elAhorro) elAhorro.textContent = fmt(ahorro);
-      }
-    };
-    
-    const ids = c.soloAhorroDirecto ? ['obAhorroDirecto'] : ['obN1', 'obN2', 'obGas', 'obPP', 'obL1', 'obL2'];
-    ids.forEach(id => {
-      const el = $(id);
-      if (el) {
-        el.addEventListener('input', calcLive);
-        el.addEventListener('focus', () => {
-          const val = parse(el.value);
-          el.value = val ? String(val) : '';
-          el.select();
-        });
-        el.addEventListener('blur', () => {
-          const val = parse(el.value);
-          el.value = val ? fmt(val) : '';
-          calcLive();
-        });
-      }
-    });
-    calcLive();
   }
   if(obStep===3){
     const btnS=$('obTipoSueno'),btnP=$('obTipoImprev'),btnD=$('obTipoDeuda');
@@ -5874,22 +5768,8 @@ function obSaveStep(){
     }
   }
   if(obStep===2){
-    if (c.soloAhorroDirecto) {
-      c.ahorroDirecto=parse($('obAhorroDirecto') ? $('obAhorroDirecto').value : '')||c.ahorroDirecto;
-    } else {
-      c.nominaP1=parse($('obN1').value)||c.nominaP1;
-      if(c.modo==='individual'){
-        c.nominaP2=0;
-        c.planPareja=0;
-        c.libreP2=0;
-      } else {
-        c.nominaP2=parse($('obN2').value)||c.nominaP2;
-        c.planPareja=parse($('obPP').value)||c.planPareja;
-        c.libreP2=parse($('obL2').value)||c.libreP2;
-      }
-      c.gastos=parse($('obGas').value)||c.gastos;
-      c.libreP1=parse($('obL1').value)||c.libreP1;
-    }
+    c.soloAhorroDirecto=true;
+    c.ahorroDirecto=parse($('obAhorroDirecto') ? $('obAhorroDirecto').value : '')||c.ahorroDirecto;
   }
   if(obStep===3){
     // Idempotente: quitar la meta creada antes en este onboarding para no duplicarla
