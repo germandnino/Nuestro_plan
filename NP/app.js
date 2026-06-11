@@ -964,6 +964,71 @@ function especialesVisibles(arr){
   return (arr||[]).filter(ep=>!ep.privado||ep.duenoPriv===state.config.perfil);
 }
 
+/* Retiro = movimiento espejo: ¿de dónde? ¿cuánto? ¿a dónde? */
+function openRetiroDinero(){
+  if(!canEditShared()){flash('No tienes permisos para esto');return;}
+  const c=state.config;
+  const conSaldo=m=>m&&(m.saldo||0)>0;
+  const origenes=metasCompartidas().filter(m=>m.tipo!=='deuda'&&conSaldo(m))
+    .concat(metasIndividuales(c.perfil).filter(m=>m.tipo!=='deuda'&&conSaldo(m)))
+    .concat([metaPersonal(c.perfil)].filter(conSaldo));
+  if(origenes.length===0){flash('No hay metas con saldo para retirar');return;}
+  const ov=document.createElement('div');
+  ov.className='modal-overlay'; ov.style.display='flex';
+  const origOpts=origenes.map(m=>`<option value="${m.id}">${m.tipo==='personal'?'Mi bolsillo':m.nombre} — ${fmt(m.saldo)}</option>`).join('');
+  ov.innerHTML=`
+    <div class="modal-card animate-in" style="max-width:400px;">
+      <h3 class="modal-title" style="font-size:20px;">Retirar dinero</h3>
+      <div><label class="lbl">¿De dónde sale?</label><select class="sf" id="rtOrigen">${origOpts}</select></div>
+      <div><label class="lbl">Monto</label><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0"></div>
+      <div><label class="lbl">¿A dónde va?</label><select class="sf" id="rtDestino"></select></div>
+      <div><label class="lbl">Nota (opcional)</label><input class="sf" id="rtNota" placeholder="Ej: compra del viaje, imprevisto"></div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <button class="btn ghost sm" id="rtCancel" style="flex:1;margin:0;">Cancelar</button>
+        <button class="btn sm" id="rtOk" style="flex:1;margin:0;">Retirar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const selO=ov.querySelector('#rtOrigen'), selD=ov.querySelector('#rtDestino');
+  const fillDestinos=()=>{
+    const oid=selO.value;
+    const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado);
+    const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado);
+    const bolsillo=metaPersonal(c.perfil);
+    const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
+    selD.innerHTML=`<option value="fuera">Fuera del plan (gasto real)</option>`
+      +og('Metas comunes',comp)+og('Mis metas (privadas)',indiv)
+      +(bolsillo&&bolsillo.id!==oid?`<optgroup label="Personal"><option value="${bolsillo.id}">Mi bolsillo</option></optgroup>`:'');
+  };
+  fillDestinos(); selO.onchange=fillDestinos;
+  const mi=ov.querySelector('#rtMonto');
+  mi.addEventListener('input',e=>{const d=e.target.value.replace(/\D/g,'');e.target.value=d?'$'+Number(d).toLocaleString('es-CO'):'';});
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.querySelector('#rtCancel').onclick=()=>ov.remove();
+  ov.querySelector('#rtOk').onclick=()=>{
+    const o=metaById(selO.value), monto=parse(mi.value), nota=ov.querySelector('#rtNota').value.trim();
+    if(!o||monto<=0){flash('Pon un monto válido');return;}
+    if(monto>o.saldo){flash('Saldo insuficiente en el origen');return;}
+    const dval=selD.value;
+    if(dval==='fuera'){
+      o.saldo-=monto;
+      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan'});
+      flash('Retiro registrado ✓');
+    }else{
+      const d=metaById(dval);
+      if(!d){flash('Destino inválido');return;}
+      o.saldo-=monto;
+      if(d.tipo==='deuda') d.saldo=Math.max(0,d.saldo-monto); else d.saldo+=monto;
+      const tId=uid();
+      const cruzaTerreno=!o.dueno&&o.tipo!=='personal'&&(d.dueno||d.tipo==='personal');
+      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre))});
+      state.gastos.push({id:uid(),meta:d.id,fecha:today(),monto:monto,entrada:true,mov:'transfer-in',transferId:tId,nota:nota||('Transferencia desde '+o.nombre)});
+      flash('Transferencia realizada ✓');
+    }
+    save();ov.remove();rerender();
+  };
+}
+
 /* ---------- navegación ---------- */
 const RENDER=[renderInicio,renderMetas,renderMiMes,renderAprender,renderPlan];
 function go(t){
@@ -2765,7 +2830,16 @@ function renderDetail(){
     save();renderDetail();flash(isDeuda ? 'Pago registrado' : 'Salida registrada');};
   $('rd').querySelectorAll('[data-gdel]').forEach(b=>b.onclick=()=>{const g=state.gastos.find(x=>x.id===b.dataset.gdel);if(g){
     const per = (g.fromPocket||g.toPocket) ? metaPersonal(m.dueno||state.config.perfil) : null;
-    if (g.entrada) {                       // abono a meta desde bolsillo: revertir entrada y devolver al bolsillo
+    if (g.mov === 'transfer-out' || g.mov === 'transfer-in') {
+      const par = state.gastos.find(x => x.transferId === g.transferId && x.id !== g.id);
+      const out = g.mov === 'transfer-out' ? g : par;
+      const inn = g.mov === 'transfer-in' ? g : par;
+      const mo = out ? metaById(out.meta) : null, md = inn ? metaById(inn.meta) : null;
+      if (mo) mo.saldo += out.monto;
+      if (md) { if (md.tipo === 'deuda') md.saldo += inn.monto; else md.saldo = Math.max(0, md.saldo - inn.monto); }
+      state.gastos = state.gastos.filter(x => x.transferId !== g.transferId);
+      save(); renderDetail(); return;
+    } else if (g.entrada) {                // abono a meta desde bolsillo: revertir entrada y devolver al bolsillo
       m.saldo = Math.max(0, m.saldo - g.monto);
       if (per) per.saldo += g.monto;
     } else if (g.mov === 'retiro') {        // retiro a bolsillo: devolver a la meta y quitar del bolsillo
