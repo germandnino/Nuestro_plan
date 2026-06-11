@@ -3785,7 +3785,7 @@ function aplicarIngresoInmediatoActivo(ep) {
         const res = aplicarDecisionSobrante(dec, ep._sobra);
         if (res.tipo === 'pendiente') registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
         const reg = entry.especiales.find(x => x.id === ep.id);
-        if (reg) reg.sobranteRes = res;          // trazabilidad en el log
+        if (reg && res.tipo !== 'pendiente') reg.sobranteRes = Object.assign({monto: ep._sobra}, res); // trazabilidad + reverso
       }
       save(); renderMiMes();
     });
@@ -3819,6 +3819,24 @@ function revertirIngresoAdicionalActivo(id) {
     } else {
       const m = metaById(ep.meta);
       if (m) revertirAporteDirecto(m, ep.aplicadoDirecto != null ? ep.aplicadoDirecto : toSave);
+    }
+  }
+
+  // Deshacer también el sobrante que se aplicó al llenar la meta (si lo hubo)
+  if (ep.sobranteRes && (ep.sobranteRes.monto || 0) > 0) {
+    const sr = ep.sobranteRes;
+    if (sr.tipo === 'motor' && sr.dist) {
+      state.metas.forEach(m => {
+        if (m.tipo !== 'personal' && !m.dueno && (sr.dist[m.id] || 0) > 0.5) {
+          if (m.tipo === 'deuda') m.saldo += sr.dist[m.id]; else m.saldo = Math.max(0, m.saldo - sr.dist[m.id]);
+        }
+      });
+    } else if (sr.tipo === 'meta') {
+      const m2 = metaById(sr.metaId);
+      if (m2) revertirAporteDirecto(m2, sr.monto);
+    } else if (sr.tipo === 'bolsillo') {
+      const per = metaPersonal(sr.perfil);
+      if (per) per.saldo = Math.max(0, per.saldo - sr.monto);
     }
   }
 
