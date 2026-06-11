@@ -1577,7 +1577,7 @@ function drawFixedBudgetCard() {
 
 function ahorroDeMes(e){
   if (e.reparto && typeof e.reparto.ahorro === 'number') {
-    return e.reparto.ahorro + (e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto, 0) : 0);
+    return e.reparto.ahorro + especialesVisibles(e.especiales).reduce((s, ep) => s + ep.monto, 0);
   }
   const base = computeBase();
   const comb = (e.p1 || 0) + (e.p2 || 0);
