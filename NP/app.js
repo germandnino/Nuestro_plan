@@ -274,7 +274,7 @@ function showCustomMonthPicker(currentVal, allowClear = false) {
   });
 }
 let _syncTimer = null;
-function showSyncStatus(msg, isError = false) {
+function showSyncStatus(msg, isError = false, sticky = false) {
   const el = document.getElementById('syncStatus');
   if (!el) return;
   if (_syncTimer) clearTimeout(_syncTimer);
@@ -283,9 +283,14 @@ function showSyncStatus(msg, isError = false) {
     el.textContent = msg;
     el.style.background = isError ? '#7a2222' : 'var(--green)';
     el.style.display = 'block';
-    _syncTimer = setTimeout(() => { el.style.display = 'none'; }, 2000);
-  }, 800);
+    if (!sticky) _syncTimer = setTimeout(() => { el.style.display = 'none'; }, 2000);
+  }, sticky ? 0 : 800);
 }
+// Estado de conexión visible y persistente. Al volver la señal NO se escribe
+// automáticamente (un write automático con datos viejos pisaría a la pareja);
+// el próximo guardado natural del usuario sube los cambios.
+window.addEventListener('offline', () => showSyncStatus('Sin conexión · cambios solo en este teléfono', true, true));
+window.addEventListener('online', () => showSyncStatus('Conexión recuperada ✓'));
 function canEditShared() {
   if (!currentUser) return true;
   if (isOwner) return true;
@@ -461,6 +466,7 @@ async function syncSaveShared(planId, stateToSave) {
       log,
       ingresos,
       gastos,
+      lastEditBy: stateToSave.config.perfil || 'p1',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 }
@@ -478,6 +484,7 @@ async function syncCheckOwner(planId, uid) {
   return doc.data().ownerUid === uid;
 }
 
+let _lastEditNotif = 0;
 function syncSubscribe(planId) {
   if (unsubscribeSync) unsubscribeSync();
   unsubscribeSync = db.collection('planes').doc(planId)
@@ -485,6 +492,12 @@ function syncSubscribe(planId) {
     .onSnapshot(doc => {
       if (!doc.exists) return;
       const remote = doc.data();
+      // Aviso "tu pareja editó": ignora el eco de escrituras propias.
+      const esEco = (doc.metadata && doc.metadata.hasPendingWrites) || remote.lastEditBy === state.config.perfil;
+      if (remote.lastEditBy && !esEco && Date.now() - _lastEditNotif > 8000) {
+        _lastEditNotif = Date.now();
+        flash('✎ ' + perfilNombre(remote.lastEditBy) + ' actualizó el plan');
+      }
       const perfilLocal = state.config.perfil;
       const personalesLocales = state.metas.filter(m => m.tipo === 'personal');
       const remoteMetas = remote.metas || [];
