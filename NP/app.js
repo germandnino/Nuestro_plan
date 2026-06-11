@@ -3561,63 +3561,60 @@ function openAsistenteDeficit(faltante){
 
 function openAsistenteIngresoExtra() {
   const c = state.config;
-  const metas = metasVisiblesEnFondos();
-  
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'modalAsistente';
   overlay.style.display = 'flex';
-  
-  const optionsHtml = metas.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('');
-  
+
+  const comp = metasCompartidas().filter(m => !m.colocado);
+  const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
+  const bolsillo = metaPersonal(c.perfil);
+  const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
+  const optionsHtml = og('Metas comunes', comp) + og('Mis metas (privadas)', indiv) + (bolsillo ? `<optgroup label="Personal"><option value="${bolsillo.id}">Mi bolsillo</option></optgroup>` : '');
+
   overlay.innerHTML = `
     <div class="modal-card animate-in" style="max-width:400px;">
-      <h3 class="modal-title" style="font-size:20px;">Asistente de Ingreso Extra</h3>
-      <div class="hint" style="font-size:12.5px; line-height:1.4; margin:0;">Divide tu ingreso extra de forma inteligente. El estándar recomendado es <strong>80/20</strong> (80% ahorro/deuda, 20% disfrute libre).</div>
-      
+      <h3 class="modal-title" style="font-size:20px;">Añadir dinero al plan</h3>
+      <div class="hint" style="font-size:12.5px; line-height:1.4; margin:0;">Registra dinero que entra al plan y decide a dónde va.</div>
+
       <div>
         <label class="lbl">Concepto / Fuente</label>
         <input class="sf" id="aeConcepto" placeholder="Ej: Venta de garaje, Bono extra, Freelance">
       </div>
-      
+
       <div>
         <label class="lbl">Monto total</label>
         <input class="sf money" id="aeMonto" inputmode="numeric" placeholder="$0">
       </div>
-      
-      <div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <label class="lbl" style="margin:0;">% Retenido para bolsillo</label>
-          <span id="aePctLabel" style="font-weight:700; color:var(--gold); font-size:14px;">20%</span>
-        </div>
-        <input type="range" id="aePctRange" min="0" max="100" step="5" value="20" style="width:100%; accent-color:var(--gold);">
-        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--gs); margin-top:4px;">
-          <span>0% (Todo al plan)</span>
-          <span>100% (Todo a bolsillo)</span>
-        </div>
-      </div>
-      
-      ${c.modo === 'pareja' ? `
-      <div>
-        <label class="lbl">¿De quién es el ingreso?</label>
-        <select class="sf" id="aePersona">
-          <option value="ambos">Ambos (reparto 50/50)</option>
-          <option value="p1">${c.nombreP1}</option>
-          <option value="p2">${c.nombreP2}</option>
-        </select>
-        <div class="hint" style="margin-top:4px; font-size:11px; line-height:1.3;">
-          Define a quién se le acredita el % retenido al bolsillo. El resto va a la meta que elijas abajo. En 'Ambos', la retención se reparte 50/50 (la parte de tu pareja aparece en su dispositivo al sincronizar).
-        </div>
-      </div>` : `<select id="aePersona" style="display:none"><option value="p1">${c.nombreP1}</option></select>`}
 
       <div>
-        <label class="lbl">¿A dónde enviar el resto (ahorro)?</label>
+        <label class="lbl">¿A dónde va?</label>
         <select class="sf" id="aeMetaDestino">
           <option value="distribuir">Repartir entre metas comunes (según el plan)</option>
           ${optionsHtml}
         </select>
       </div>
-      
+
+      <div>
+        <button type="button" class="btn ghost sm" id="aeToggleRet" style="margin:0;width:100%;">+ Apartar un % a bolsillo personal</button>
+        <div id="aeRetBox" style="display:none;margin-top:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label class="lbl" style="margin:0;">% Retenido para bolsillo</label>
+            <span id="aePctLabel" style="font-weight:700; color:var(--gold); font-size:14px;">0%</span>
+          </div>
+          <input type="range" id="aePctRange" min="0" max="100" step="5" value="0" style="width:100%; accent-color:var(--gold);">
+          <div id="aePersonaBox">${c.modo === 'pareja' ? `
+            <label class="lbl" style="margin-top:8px;">¿A bolsillo de quién?</label>
+            <select class="sf" id="aePersona">
+              <option value="ambos">Ambos (50/50)</option>
+              <option value="p1">${c.nombreP1}</option>
+              <option value="p2">${c.nombreP2}</option>
+            </select>` : `<select id="aePersona" style="display:none"><option value="p1">${c.nombreP1}</option></select>`}
+          </div>
+        </div>
+      </div>
+
       <div style="display:flex; gap:10px; margin-top:8px;">
         <button class="btn ghost sm" id="btnCancelAE" style="flex:1; margin:0;">Cancelar</button>
         <button class="btn sm" id="btnApplyAE" style="flex:1; margin:0;">Aplicar Ingreso</button>
@@ -3625,7 +3622,7 @@ function openAsistenteIngresoExtra() {
     </div>
   `;
   document.body.appendChild(overlay);
-  
+
   const moneyInput = overlay.querySelector('#aeMonto');
   moneyInput.addEventListener('input', e => {
     const d = e.target.value.replace(/\D/g,'');
@@ -3640,39 +3637,49 @@ function openAsistenteIngresoExtra() {
     const d = e.target.value.replace(/\D/g,'');
     e.target.value = d ? '$' + Number(d).toLocaleString('es-CO') : '';
   });
-  
+
   const range = overlay.querySelector('#aePctRange');
   const label = overlay.querySelector('#aePctLabel');
   range.oninput = () => {
     label.innerText = range.value + '%';
   };
-  
+
+  const retBox = overlay.querySelector('#aeRetBox');
+  overlay.querySelector('#aeToggleRet').onclick = () => {
+    const open = retBox.style.display === 'none';
+    retBox.style.display = open ? 'block' : 'none';
+    if (!open) { range.value = 0; label.innerText = '0%'; }
+  };
+
   overlay.querySelector('#btnCancelAE').onclick = () => {
     overlay.remove();
   };
-  
+
   overlay.querySelector('#btnApplyAE').onclick = () => {
     const concepto = overlay.querySelector('#aeConcepto').value.trim() || 'Ingreso adicional';
     const monto = parse(overlay.querySelector('#aeMonto').value);
     const pctRetener = parseInt(range.value);
     const persona = overlay.querySelector('#aePersona').value;
     const meta = overlay.querySelector('#aeMetaDestino').value;
-    
+
     if (monto <= 0) {
       flash('Por favor ingresa un monto válido');
       return;
     }
-    
+
+    const esPriv = esDestinoPersonal(meta);
     const ep = {
       id: uid(),
       mes: selectedMonth || curMonth(),
       nombre: concepto,
       monto: monto,
       meta: meta,
-      persona: persona,
-      pctRetener: pctRetener
+      persona: esPriv ? c.perfil : persona,
+      pctRetener: esPriv ? 0 : pctRetener,
+      privado: esPriv || undefined,
+      duenoPriv: esPriv ? c.perfil : undefined
     };
-    
+
     aplicarIngresoInmediatoActivo(ep);
     overlay.remove();
   };
@@ -3710,11 +3717,11 @@ function aplicarIngresoInmediatoActivo(ep) {
     } else {
       const m = metaById(ep.meta);
       if (m) {
-        if (m.tipo === 'deuda') {
-          m.saldo = Math.max(0, m.saldo - toSave);
-        } else {
-          m.saldo += toSave;
+        const sobra = aplicarAporteDirecto(m, toSave);
+        if (sobra > 0.5) {
+          ep._sobra = sobra; ep._metaLlena = m;   // se resuelve async tras registrar
         }
+        ep.aplicadoDirecto = toSave - (ep._sobra || 0); // monto exacto aplicado, para revertir
       }
     }
   }
@@ -3730,7 +3737,7 @@ function aplicarIngresoInmediatoActivo(ep) {
       if (pocketP2) pocketP2.saldo += toPocket * 0.5;
     }
   }
-  
+
   if (!entry.especiales) entry.especiales = [];
   entry.especiales.push({
     id: ep.id,
@@ -3742,9 +3749,12 @@ function aplicarIngresoInmediatoActivo(ep) {
     dist: distInmediato,
     metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'),
     aplicadoInmediato: true,
-    fecha: today()
+    fecha: today(),
+    privado: ep.privado,
+    duenoPriv: ep.duenoPriv,
+    aplicadoDirecto: ep.aplicadoDirecto
   });
-  
+
   state.ingresos.unshift({
     id: ep.id,
     mes: mes,
@@ -3752,9 +3762,12 @@ function aplicarIngresoInmediatoActivo(ep) {
     monto: ep.monto,
     meta: ep.meta,
     persona: ep.persona || 'ambos',
-    pctRetener: pctR
+    pctRetener: pctR,
+    privado: ep.privado,
+    duenoPriv: ep.duenoPriv,
+    aplicadoDirecto: ep.aplicadoDirecto
   });
-  
+
   const perBug03 = metaPersonal(c.perfil);
   if (perBug03) {
     if (!Array.isArray(perBug03.inmediatosAplicados)) perBug03.inmediatosAplicados = [];
@@ -3764,6 +3777,19 @@ function aplicarIngresoInmediatoActivo(ep) {
   save();
   renderMiMes();
   flash('Ingreso extra aplicado con éxito ✓');
+
+  if (ep._sobra) {
+    openModalSobrante(ep._sobra, ep._metaLlena).then(dec => {
+      if (dec.accion === 'pendiente') { registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre); }
+      else {
+        const res = aplicarDecisionSobrante(dec, ep._sobra);
+        if (res.tipo === 'pendiente') registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
+        const reg = entry.especiales.find(x => x.id === ep.id);
+        if (reg) reg.sobranteRes = res;          // trazabilidad en el log
+      }
+      save(); renderMiMes();
+    });
+  }
 }
 
 function revertirIngresoAdicionalActivo(id) {
@@ -3792,13 +3818,7 @@ function revertirIngresoAdicionalActivo(id) {
       });
     } else {
       const m = metaById(ep.meta);
-      if (m) {
-        if (m.tipo === 'deuda') {
-          m.saldo += toSave;
-        } else {
-          m.saldo = Math.max(0, m.saldo - toSave);
-        }
-      }
+      if (m) revertirAporteDirecto(m, ep.aplicadoDirecto != null ? ep.aplicadoDirecto : toSave);
     }
   }
 
@@ -3816,7 +3836,7 @@ function revertirIngresoAdicionalActivo(id) {
 
   entry.especiales = entry.especiales.filter(x => x.id !== id);
   state.ingresos = state.ingresos.filter(ing => ing.id !== id);
-  
+
   save();
   renderMiMes();
   flash('Ingreso extra eliminado y saldos revertidos ✓');
