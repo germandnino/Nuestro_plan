@@ -2698,29 +2698,6 @@ function renderDetail(){
       </div>`;
   }
 
-  // Transferencia Manual
-  const isIndividualGoal = m.tipo !== 'personal' && (
-                           (state.config.modo === 'individual') ||
-                           (state.config.modo === 'pareja' && m.dueno === state.config.perfil)
-  );
-  if (isIndividualGoal && canEdit) {
-    const per = metaPersonal(state.config.perfil);
-    const maxBolsillo = per ? per.saldo : 0;
-    body += `
-      <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-        <div class="k">${isDeuda ? 'Abonar desde mi bolsillo' : 'Transferir desde/hacia mi bolsillo'}</div>
-        <div class="hint" style="margin-bottom:8px">Mueve saldo de tu "Bolsillo Personal" (${fmt(maxBolsillo)}) a esta ${isDeuda ? 'deuda (para abonar)' : 'meta, o viceversa'}.</div>
-        <div class="transfer-container">
-          <div class="transfer-row">
-            <input class="sf money" id="tAmount" inputmode="numeric" placeholder="Monto $0" style="margin:0;">
-            <button class="btn sm" id="btnTransferToMeta" style="margin:0;padding:10px 14px;">${isDeuda ? 'Abonar / Pagar' : 'Abonar a meta'}</button>
-          </div>
-          ${!isDeuda ? `<button class="btn sm ghost" id="btnTransferToPocket" style="margin-top:2px;margin-bottom:2px;width:100%;font-size:12.5px;">Retirar a mi bolsillo</button>` : ''}
-        </div>
-      </div>
-    `;
-  }
-
   // pagos y abonos para deuda / gastos para meta
   let ghist='';
   if(m.tipo!=='personal'){
@@ -2730,16 +2707,7 @@ function renderDetail(){
     
     if (canEdit) {
       body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
-        <button id="dToggleGasto" style="width:100%;background:none;border:none;padding:0;margin:0;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--cream)">
-          <span class="k" style="margin:0">${isDeuda ? 'Registrar abono o cuota' : 'Registrar salida'}</span>
-          <span id="dToggleIcon" style="display:inline-flex;color:var(--gs);transition:transform .2s">${getSVG('plus')}</span>
-        </button>
-        <div id="dGastoForm" style="display:none;margin-top:12px">
-          <div class="row2"><label class="lbl">Fecha<input class="sf" type="date" id="dFecha" value="${today()}" style="margin-top:4px"></label>
-          <label class="lbl">Monto<input class="sf money" id="dMonto" inputmode="numeric" placeholder="$0" style="margin-top:4px"></label></div>
-          <label class="lbl" style="margin-top:10px">Nota<input class="sf" id="dNota" placeholder="${isDeuda ? 'Ej: Pago de cuota, Abono extra' : '¿En qué fue?'}" style="margin-top:4px"></label>
-          <button class="btn sm" id="dGasto">${isDeuda ? 'Registrar Pago' : 'Registrar salida'}</button>
-        </div>
+        <button class="btn ghost sm" id="dRetirar" style="width:100%;margin-top:8px;">Retirar o mover dinero ›</button>
         <div style="margin-top:16px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Movimientos'}</div>${ghist}</div></div>`;
     } else {
       body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Movimientos'}</div>${ghist}</div>`;
@@ -2770,64 +2738,8 @@ function renderDetail(){
     };
   }
 
-  const btnToMeta = $('btnTransferToMeta');
-  if (btnToMeta) {
-    btnToMeta.onclick = () => {
-      const amt = parse($('tAmount').value);
-      if (amt <= 0) { flash('Ingresa un monto válido'); return; }
-      const per = metaPersonal(state.config.perfil);
-      if (!per || per.saldo < amt) { flash('Saldo insuficiente en tu bolsillo'); return; }
-      
-      per.saldo -= amt;
-      if (isDeuda) {
-        m.saldo = Math.max(0, m.saldo - amt); // Restar de la deuda
-      } else {
-        m.saldo += amt;
-      }
-      state.gastos.push({id:uid(),meta:m.id,fecha:today(),monto:amt,fromPocket:true,entrada:!isDeuda,mov:isDeuda?'pagoDesdeBolsillo':'abono',nota:isDeuda ? 'Abono manual desde bolsillo' : 'Abono manual'});
-      save();
-      renderDetail();
-      flash(isDeuda ? `Abonados ${fmt(amt)} a la deuda ✓` : `Transferidos ${fmt(amt)} a la meta ✓`);
-    };
-  }
-
-  const btnToPocket = $('btnTransferToPocket');
-  if (btnToPocket) {
-    btnToPocket.onclick = () => {
-      const amt = parse($('tAmount').value);
-      if (amt <= 0) { flash('Ingresa un monto válido'); return; }
-      if (m.saldo < amt) { flash('Saldo insuficiente en esta meta'); return; }
-      const per = metaPersonal(state.config.perfil);
-      if (!per) return;
-
-      m.saldo -= amt;
-      per.saldo += amt;
-      state.gastos.push({id:uid(),meta:m.id,fecha:today(),monto:amt,mov:'retiro',toPocket:true,nota:'Retiro manual a bolsillo'});
-      save();
-      renderDetail();
-      flash(`Transferidos ${fmt(amt)} a tu bolsillo ✓`);
-    };
-  }
-
   const ed=$('dEdit');if(ed)ed.onclick=()=>openMetaForm(m.id);
-  const tg=$('dToggleGasto');
-  if(tg)tg.onclick=()=>{
-    const f=$('dGastoForm'),ic=$('dToggleIcon');
-    const open=f.style.display==='none';
-    f.style.display=open?'block':'none';
-    if(ic)ic.style.transform=open?'rotate(45deg)':'';
-    if(open){const mi=$('dMonto');if(mi)mi.focus();}
-  };
-  const dg=$('dGasto');
-  if(dg)dg.onclick=()=>{const f=$('dFecha').value||today(),mo=parse($('dMonto').value),nt=$('dNota').value.trim();
-    if(mo<=0){flash('Pon el monto');return;}
-    if(isDeuda) {
-      m.saldo=Math.max(0,m.saldo-mo);
-    } else {
-      m.saldo=Math.max(0,m.saldo-mo);
-    }
-    state.gastos.push({id:uid(),meta:m.id,fecha:f,monto:mo,nota:nt||(isDeuda ? 'Pago de cuota' : 'Salida')});
-    save();renderDetail();flash(isDeuda ? 'Pago registrado' : 'Salida registrada');};
+  const dr=$('dRetirar');if(dr)dr.onclick=()=>openRetiroDinero();
   $('rd').querySelectorAll('[data-gdel]').forEach(b=>b.onclick=()=>{const g=state.gastos.find(x=>x.id===b.dataset.gdel);if(g){
     const per = (g.fromPocket||g.toPocket) ? metaPersonal(m.dueno||state.config.perfil) : null;
     if (g.mov === 'transfer-out' || g.mov === 'transfer-in') {
