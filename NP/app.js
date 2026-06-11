@@ -39,6 +39,7 @@ let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este c
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
 let obMetaCreatedId = null; // id de la meta creada en onboarding, para reemplazarla (no duplicar) al navegar atrás/adelante
+let _pctFlashId = null; // id de meta cuyo % se auto-ajustó; dispara flash visual en el próximo render
 
 // Sync Firebase
 let currentUser = null;       // firebase.User | null
@@ -59,6 +60,8 @@ const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleS
 const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+// Paleta categórica para donas (metas). Evita lila/rosa, reservados a bolsillos individuales (persona).
+const DONUT_PALETTE=['#d9a84a','#5b9aa0','#c87a53','#7fae6e','#6f8fc7','#b5923f','#7bc0b8','#c0673f','#4c936b','#8aa84a'];
 function getSVG(name, cls='', style='') {
   const icons = {
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
@@ -839,67 +842,48 @@ function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
   return { dist: res, rem };
 }
 
+// Mantiene la suma de % en 100 entre las metas elegibles. La meta editada toma
+// newPct (topada para que las demás no queden negativas); la última elegible
+// absorbe el resto. Devuelve el id de la meta compensada (para feedback visual).
+function rebalancePct(eligible, editedId, newPct) {
+  eligible = eligible.slice().sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+  const edited = eligible.find(m => m.id === editedId);
+  if (!edited) return null;
+  if (eligible.length === 1) {
+    edited.aportePct = Math.max(0, Math.min(100, newPct));
+    return null;
+  }
+  // target = última elegible distinta de la editada (absorbe el remanente)
+  let target = eligible[eligible.length - 1];
+  if (target.id === editedId) target = eligible[eligible.length - 2];
+  // suma de las metas que quedan fijas (ni editada ni target)
+  let sumFijas = 0;
+  eligible.forEach(m => { if (m.id !== editedId && m.id !== target.id) sumFijas += (m.aportePct || 0); });
+  const maxEdit = Math.max(0, 100 - sumFijas);
+  const val = Math.max(0, Math.min(maxEdit, newPct));
+  edited.aportePct = val;
+  target.aportePct = Math.max(0, 100 - sumFijas - val);
+  return target.id;
+}
+
 function autoAdjustPercentages(editedId, newPct) {
   const c = state.config;
-  if (c.estrategia === 'cascada') return;
-  
+  if (c.estrategia === 'cascada') return null;
   const isPrio = (m) => getMetaPrioritaria()?.id === m.id;
   const eligible = metasCompartidas().filter(m => {
     if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
     if (c.estrategia === 'secuencial' && isPrio(m)) return false;
     return true;
-  }).sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
-  
-  if (eligible.length <= 1) return;
-  
-  const editedMeta = eligible.find(m => m.id === editedId);
-  if (editedMeta) {
-    editedMeta.aportePct = newPct;
-  }
-  
-  let targetIndex = eligible.length - 1;
-  if (eligible[targetIndex].id === editedId) {
-    targetIndex = eligible.length - 2;
-  }
-  
-  const targetMeta = eligible[targetIndex];
-  let sumOthers = 0;
-  eligible.forEach(m => {
-    if (m.id !== targetMeta.id) {
-      sumOthers += (m.id === editedId ? newPct : (m.aportePct || 0));
-    }
   });
-  
-  targetMeta.aportePct = Math.max(0, 100 - sumOthers);
+  return rebalancePct(eligible, editedId, newPct);
 }
 
 function autoAdjustIndividualPercentages(perfil, editedId, newPct) {
   const eligible = metasIndividuales(perfil).filter(m => {
     if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
     return true;
-  }).sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
-  
-  if (eligible.length <= 1) return;
-  
-  const editedMeta = eligible.find(m => m.id === editedId);
-  if (editedMeta) {
-    editedMeta.aportePct = newPct;
-  }
-  
-  let targetIndex = eligible.length - 1;
-  if (eligible[targetIndex].id === editedId) {
-    targetIndex = eligible.length - 2;
-  }
-  
-  const targetMeta = eligible[targetIndex];
-  let sumOthers = 0;
-  eligible.forEach(m => {
-    if (m.id !== targetMeta.id) {
-      sumOthers += (m.id === editedId ? newPct : (m.aportePct || 0));
-    }
   });
-  
-  targetMeta.aportePct = Math.max(0, 100 - sumOthers);
+  return rebalancePct(eligible, editedId, newPct);
 }
 
 
@@ -1414,10 +1398,9 @@ function drawSavingsDonut() {
   
   metasConSaldo.sort((a,b) => b.saldo - a.saldo);
 
-  const PALETTE = ['#d9a84a','#5b9aa0','#c87a53','#7fae6e','#a36a84','#6f8fc7','#cf8fb0','#b5923f','#7bc0b8','#c0673f'];
   metasConSaldo.forEach((m, i) => {
     const pct = (m.saldo / total) * 100;
-    const color = PALETTE[i % PALETTE.length];
+    const color = DONUT_PALETTE[i % DONUT_PALETTE.length];
 
     segments.push({
       ...m,
@@ -1873,20 +1856,21 @@ function renderMetas(){
         (strat === 'secuencial' && !isPrio)
       );
       
+      const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
       const pctBadge = (canEdit && showPct && m.tipo !== 'personal')
-        ? `<div class="inline-pct-container">
-             <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}">
+        ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
+             <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}">
              <span class="pct-sign">%</span>
            </div>`
-        : (showPct && m.tipo !== 'personal' ? `<span class="pill" style="margin-left:6px;">${m.aportePct||0}%</span>` : '');
+        : (showPct && m.tipo !== 'personal' ? `<span class="pill${flashCls}" style="margin-left:6px;">${m.aportePct||0}%</span>` : '');
 
       return `<div class="card" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
         ${dragHandle}
-        <div style="flex:1">
+        <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="k" style="margin:0">${m.nombre}</span>
             ${m.tipo!=='personal'?'<span class="pill">'+tipoLabel(m.tipo)+'</span>':''}
-            ${pctBadge}
+            ${pctBadge?`<span style="flex:1"></span>${pctBadge}`:''}
           </div>
           <div class="num med">${fmt(m.saldo)}</div>
           ${pct!=null?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
@@ -2105,13 +2089,13 @@ function renderMetas(){
       const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
       const m = metaById(mid);
       if (m) {
-        if (m.dueno) {
-          autoAdjustIndividualPercentages(m.dueno, mid, val);
-        } else {
-          autoAdjustPercentages(mid, val);
-        }
+        const adjustedId = m.dueno
+          ? autoAdjustIndividualPercentages(m.dueno, mid, val)
+          : autoAdjustPercentages(mid, val);
+        _pctFlashId = adjustedId;
         save();
         rerender();
+        setTimeout(() => { _pctFlashId = null; }, 60);
       }
     };
     input.onkeydown = (e) => {
@@ -3915,7 +3899,7 @@ function getMonthlyDistributionData(mes) {
           const m = metaById(mId);
           if (m) {
             if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+              distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
             }
             distMap[mId].amount += dist[mId];
           }
@@ -3926,7 +3910,7 @@ function getMonthlyDistributionData(mes) {
           const m = metaById(mId);
           if (m) {
             if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+              distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
             }
             distMap[mId].amount += dist[mId];
           }
@@ -3950,7 +3934,7 @@ function getMonthlyDistributionData(mes) {
         if (m) {
           const mId = ing.meta;
           if (!distMap[mId]) {
-            distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+            distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
           }
           const amt = ing.aplicadoDirecto != null ? ing.aplicadoDirecto : toSave;
           distMap[mId].amount += amt;
@@ -3965,7 +3949,7 @@ function getMonthlyDistributionData(mes) {
           const m = metaById(mId);
           if (m) {
             if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+              distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
             }
             distMap[mId].amount += sr.dist[mId];
           }
@@ -3975,7 +3959,7 @@ function getMonthlyDistributionData(mes) {
         if (m2) {
           const mId = sr.metaId;
           if (!distMap[mId]) {
-            distMap[mId] = { name: m2.nombre, amount: 0, color: m2.color || '#4c936b', isPocket: false };
+            distMap[mId] = { name: m2.nombre, amount: 0, color: null, isPocket: false };
           }
           distMap[mId].amount += sr.monto;
         }
@@ -4000,7 +3984,7 @@ function getMonthlyDistributionData(mes) {
       const m = metaById(mId);
       if (m) {
         if (!distMap[mId]) {
-          distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+          distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
         }
         distMap[mId].amount += entry.reparto.dist[mId];
       }
@@ -4012,8 +3996,12 @@ function getMonthlyDistributionData(mes) {
 
 function drawMonthlyDistributionDonut(mes) {
   const data = getMonthlyDistributionData(mes);
+  // Metas llegan sin color (color:null); se asignan de la paleta por índice para
+  // diferenciarlas entre sí. Bolsillos conservan su color de persona (lila/rosa).
+  let _pi = 0;
+  data.forEach(s => { if (!s.color) s.color = DONUT_PALETTE[_pi++ % DONUT_PALETTE.length]; });
   const total = data.reduce((s, x) => s + x.amount, 0);
-  
+
   if (total <= 0.5) {
     return `
       <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 16px; text-align:center; color:var(--gs);">
