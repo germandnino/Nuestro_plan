@@ -4560,6 +4560,7 @@ function attachPlan(){
   const bResetSaldos = $('bResetSaldos');
   if (bResetSaldos) {
     bResetSaldos.onclick = async () => {
+      if (!canEditShared()) { flash('Solo un editor puede reiniciar el plan'); return; }
       if (!await customConfirm('¿Reiniciar todos los saldos y el historial a $0? Se mantendrán tus metas creadas, nombres, nóminas y gastos fijos configurados.', true)) return;
       
       // Reiniciar saldos de todas las metas (incluyendo las personales)
@@ -4578,7 +4579,7 @@ function attachPlan(){
       flash('Saldos e historial reiniciados ✓');
     };
   }
-  $('bReset').onclick=async()=>{if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
+  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
   if (bInst) {
