@@ -861,6 +861,37 @@ function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
   return { dist: res, rem };
 }
 
+/* =========================================================
+   MOVIMIENTOS UNIFICADOS — helpers
+   ========================================================= */
+// Aporta monto directo a una meta. Muta saldo. Devuelve el sobrante si la meta se llena.
+// Deudas: aporta = abona (saldo es lo que falta por pagar); sobrante = lo que excede la deuda.
+function aplicarAporteDirecto(m, monto){
+  if(monto<=0) return 0;
+  if(m.tipo==='deuda'){
+    const aplicado=Math.min(monto, m.saldo);
+    m.saldo=Math.max(0, m.saldo-aplicado);
+    return monto-aplicado;
+  }
+  const obj=m.objetivo||0;
+  if(obj<=0){ m.saldo+=monto; return 0; }       // meta abierta: nunca sobra
+  const falta=Math.max(0, obj-m.saldo);
+  const aplicado=Math.min(monto, falta);
+  m.saldo+=aplicado;
+  const sobra=monto-aplicado;
+  if(sobra<=0.5){ m.saldo+=sobra; return 0; }    // residuo de redondeo: dentro
+  return sobra;
+}
+// Reverso exacto de un aporte directo (para deshacer ingresos).
+function revertirAporteDirecto(m, monto){
+  if(m.tipo==='deuda') m.saldo+=monto;
+  else m.saldo=Math.max(0, m.saldo-monto);
+}
+// ¿La meta destino es del terreno personal del perfil activo?
+function esDestinoPersonal(metaId){
+  const m=metaById(metaId);
+  return !!(m && (m.tipo==='personal' || m.dueno));
+}
 
 /* ---------- navegación ---------- */
 const RENDER=[renderInicio,renderMetas,renderMiMes,renderAprender,renderPlan];
