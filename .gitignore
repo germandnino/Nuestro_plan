@@ -33,6 +33,9 @@ plan_monetizacion.md
 # Superpowers folder
 docs/superpowers/
 
+# Local Claude Code config
+.claude/
+
 # Node dependencies
 node_modules/
 
