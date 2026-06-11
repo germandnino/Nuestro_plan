@@ -1546,7 +1546,7 @@ function drawStickyCTA(canEdit) {
     label = 'Sin ahorro para distribuir';
     disabled = 'disabled';
   } else {
-    label = `Confirmar aporte del mes`;
+    label = `Confirmar aporte de ${fmt(ahorro)}`;
     disabled = '';
   }
   return `<div class="mimes-cta" id="mimesCta">
