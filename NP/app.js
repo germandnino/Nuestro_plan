@@ -87,6 +87,20 @@ function getSVG(name, cls='', style='') {
   return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${cAttr}${sAttr}>${path}</svg>`;
 }
 function flash(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1900);}
+let _undoTimer=null;
+/* Toast con botón "Deshacer" que dura `ms`. onUndo() se ejecuta si el usuario alcanza a tocarlo. */
+function flashUndo(m,onUndo,ms=6000){
+  const prev=$('undo-toast');if(prev)prev.remove();
+  if(_undoTimer){clearTimeout(_undoTimer);_undoTimer=null;}
+  const el=document.createElement('div');
+  el.id='undo-toast';el.className='undo-toast';
+  el.innerHTML=`<span>${m}</span><button type="button" id="undo-toast-btn" class="undo-toast-btn">Deshacer</button>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('on'));
+  const dismiss=()=>{if(_undoTimer){clearTimeout(_undoTimer);_undoTimer=null;}el.classList.remove('on');setTimeout(()=>{if(el.parentNode)el.remove();},250);};
+  $('undo-toast-btn').onclick=()=>{dismiss();onUndo();};
+  _undoTimer=setTimeout(dismiss,ms);
+}
 function showCustomModal({ title, message, type = 'alert', placeholder = '', isDestructive = false }) {
   return new Promise((resolve) => {
     let overlay = $('custom-modal-overlay');
@@ -2294,7 +2308,29 @@ function attachMetaForm(editing){
     mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
   };
   const del=$('fDel');
-  if(del)del.onclick=async()=>{if(!await customConfirm('¿Eliminar esta meta?',true))return;state.metas=state.metas.filter(x=>x.id!==mForm.id);mForm=null;save();go(1);flash('Meta eliminada');};
+  if(del)del.onclick=async()=>{
+    const saldo=mForm.saldo||0;
+    let msg='¿Eliminar esta meta?';
+    if(saldo>0.5){
+      msg=mForm.tipo==='deuda'
+        ? `Esta deuda tiene un saldo pendiente de ${fmt(saldo)}. Al borrarla desaparecerá de tu patrimonio (tu patrimonio neto subirá sin haberla pagado). ¿Continuar?`
+        : `Esta meta tiene ${fmt(saldo)} acumulados. Al borrarla ese saldo se quitará de tu patrimonio sin dejar registro. ¿Continuar?`;
+    }
+    if(!await customConfirm(msg,true))return;
+    // Snapshot para deshacer; limpia gastos huérfanos de la meta.
+    const metaSnap=JSON.parse(JSON.stringify(mForm));
+    const gastosSnap=state.gastos.filter(g=>g.meta===metaSnap.id);
+    state.gastos=state.gastos.filter(g=>g.meta!==metaSnap.id);
+    state.metas=state.metas.filter(x=>x.id!==metaSnap.id);
+    mForm=null;save();go(1);
+    flashUndo('Meta eliminada',()=>{
+      // Restaura de forma idempotente (por si el sync ya la trajo de vuelta).
+      if(!state.metas.some(x=>x.id===metaSnap.id))state.metas.push(metaSnap);
+      const faltantes=gastosSnap.filter(g=>!state.gastos.some(x=>x.id===g.id));
+      if(faltantes.length)state.gastos=state.gastos.concat(faltantes);
+      save();go(1);flash('Eliminación deshecha ✓');
+    });
+  };
 }
 function openDetail(id){detailKey=id;renderDetail();
   ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));$('sd').classList.add('on');$('sd').scrollTop=0;
