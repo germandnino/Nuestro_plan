@@ -4194,11 +4194,7 @@ function renderMiMes(){
 
   if (openExtraFormOnLoad) {
     openExtraFormOnLoad = false;
-    if (isApplied) {
-      setTimeout(openAsistenteIngresoExtra, 100);
-    } else {
-      flash('El mes no ha sido iniciado. Distribuye el ahorro primero antes de registrar ingresos extras.');
-    }
+    setTimeout(openAsistenteIngresoExtra, 100);
   }
 }
 
