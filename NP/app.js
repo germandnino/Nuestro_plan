@@ -4552,14 +4552,23 @@ function attachPlan(){
 
   const bExp = $('bExp');
   if (bExp) {
-    bExp.onclick=()=>{$('bTxt').value=JSON.stringify(state);flash('Respaldo generado');};
+    // Privacidad: el respaldo no incluye el bolsillo de la pareja
+    // (vive en la nube bajo su cuenta y se repone al sincronizar).
+    bExp.onclick=()=>{
+      const copia=Object.assign({},state,{metas:state.metas.filter(m=>!(m.tipo==='personal'&&m.dueno!==state.config.perfil))});
+      $('bTxt').value=JSON.stringify(copia);flash('Respaldo generado');};
   }
   const bImp = $('bImp');
   if (bImp) {
     bImp.onclick=()=>{try{const o=JSON.parse($('bTxt').value);if(!o.metas)throw 0;
-      const perfil=c.perfil,miPersonal=JSON.parse(JSON.stringify(metaPersonal(perfil)));
+      const perfil=state.config.perfil;
+      // Un respaldo nunca pisa bolsillos: conserva los dos personales locales.
+      const personalesLocales=state.metas.filter(m=>m.tipo==='personal').map(x=>JSON.parse(JSON.stringify(x)));
       state=o;normalize();state.config.perfil=perfil;
-      const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===perfil);if(idx>=0)state.metas[idx]=miPersonal;
+      personalesLocales.forEach(pl=>{
+        const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===pl.dueno);
+        if(idx>=0)state.metas[idx]=pl;else state.metas.push(pl);
+      });
       save();go(0);flash('Respaldo restaurado ✓');}catch(e){flash('Respaldo inválido');}};
   }
   const bResetSaldos = $('bResetSaldos');
