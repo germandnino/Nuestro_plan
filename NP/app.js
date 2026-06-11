@@ -1072,10 +1072,10 @@ function showActionMenu(){
     document.body.appendChild(ov);
   }
   const items = [
-    { svg:'calendar', label:'Distribuir ahorros del mes', sub:'Reparte tu ahorro entre tus metas', act:()=>go(2) },
-    { svg:'target',   label:'Crear nueva meta',           sub:'Define un objetivo o una deuda',    act:()=>openMetaForm() },
-    { svg:'plus',     label:'Registrar ingreso extra',    sub:'Suma dinero adicional del mes',     act:()=>{ openExtraFormOnLoad = true; go(2); } },
-    { svg:'trending', label:'Ver historial',              sub:'Meses anteriores ya cerrados',      act:()=>openHistoryList() },
+    { svg:'plus',     label:'Añadir dinero',    sub:'Aporta al plan y decide a dónde va',  act:()=>{ openExtraFormOnLoad = true; go(2); } },
+    { svg:'trending', label:'Retirar dinero',   sub:'Saca o mueve dinero entre metas',     act:()=>openRetiroDinero() },
+    { svg:'target',   label:'Crear nueva meta', sub:'Define un objetivo o una deuda',      act:()=>openMetaForm() },
+    { svg:'calendar', label:'Ver historial',    sub:'Meses anteriores ya cerrados',        act:()=>openHistoryList() },
   ];
   const chev = '<svg class="sheet-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
   const rows = items.map((it,i)=>`
