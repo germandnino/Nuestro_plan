@@ -1012,7 +1012,7 @@ function openRetiroDinero(){
     const dval=selD.value;
     if(dval==='fuera'){
       o.saldo-=monto;
-      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan'});
+      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan',creadoPor:c.perfil});
       flash('Retiro registrado ✓');
     }else{
       const d=metaById(dval);
@@ -1021,8 +1021,8 @@ function openRetiroDinero(){
       if(d.tipo==='deuda') d.saldo=Math.max(0,d.saldo-monto); else d.saldo+=monto;
       const tId=uid();
       const cruzaTerreno=!o.dueno&&o.tipo!=='personal'&&(d.dueno||d.tipo==='personal');
-      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre))});
-      state.gastos.push({id:uid(),meta:d.id,fecha:today(),monto:monto,entrada:true,mov:'transfer-in',transferId:tId,nota:nota||('Transferencia desde '+o.nombre)});
+      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre)),creadoPor:c.perfil});
+      state.gastos.push({id:uid(),meta:d.id,fecha:today(),monto:monto,entrada:true,mov:'transfer-in',transferId:tId,nota:nota||('Transferencia desde '+o.nombre),creadoPor:c.perfil});
       flash('Transferencia realizada ✓');
     }
     save();ov.remove();rerender();
@@ -1037,7 +1037,10 @@ function go(t){
     selectedMonth = curMonth();
   }
   $('mainnav').classList.remove('hide');
-  document.querySelectorAll('.nt').forEach((b,i)=>b.classList.toggle('on',i===t));
+  document.querySelectorAll('.nt').forEach(b => {
+    const tVal = b.dataset.t;
+    b.classList.toggle('on', tVal !== undefined && +tVal === t);
+  });
   ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(id=>$(id).classList.remove('on'));
   $('s'+t).classList.add('on');
   RENDER[t]();
@@ -1046,7 +1049,18 @@ function go(t){
 function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;}
 let _rerenderTimer;
 function scheduleRerender(){clearTimeout(_rerenderTimer);_rerenderTimer=setTimeout(rerender,60);}
-$('mainnav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;const t=+b.dataset.t;if(t===2){showActionMenu();}else{go(t);}});
+$('mainnav').addEventListener('click', e => {
+  const b = e.target.closest('[data-t]');
+  if (b) {
+    const t = +b.dataset.t;
+    go(t);
+    return;
+  }
+  const act = e.target.closest('[data-action]');
+  if (act && act.dataset.action === 'menu') {
+    showActionMenu();
+  }
+});
 let actionSheetOpen = false;
 function closeActionMenu(){
   const ov = $('action-sheet-overlay');
@@ -1072,10 +1086,11 @@ function showActionMenu(){
     document.body.appendChild(ov);
   }
   const items = [
-    { svg:'plus',     label:'Añadir dinero',    sub:'Aporta al plan y decide a dónde va',  act:()=>{ openExtraFormOnLoad = true; go(2); } },
+    { svg:'plus',     label:'Añadir dinero',    sub:'Aporta al plan y decide a dónde va',  act:()=>openAsistenteIngresoExtra() },
     { svg:'trending', label:'Retirar dinero',   sub:'Saca o mueve dinero entre metas',     act:()=>openRetiroDinero() },
+    { svg:'calendar', label:'Ver Mi Mes',       sub:'Gráficos y distribución del mes',     act:()=>go(2) },
     { svg:'target',   label:'Crear nueva meta', sub:'Define un objetivo o una deuda',      act:()=>openMetaForm() },
-    { svg:'calendar', label:'Ver historial',    sub:'Meses anteriores ya cerrados',        act:()=>openHistoryList() },
+    { svg:'info',     label:'Ver historial',    sub:'Línea de tiempo de movimientos',      act:()=>openHistoryList() },
   ];
   const chev = '<svg class="sheet-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
   const rows = items.map((it,i)=>`
@@ -1176,9 +1191,9 @@ function renderInicio(){
     <div class="stitle">¿Qué quieres hacer hoy?</div>
     <div class="card" style="padding: 14px;">
       <div class="shortcuts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <button class="btn sm gold" id="btnGoMiMes" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('calendar')} Distribuir Ahorros</button>
+        <button class="btn sm gold" id="btnGoAddExtra" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; grid-column: span 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('plus')} Añadir Dinero</button>
+        <button class="btn sm ghost" id="btnGoMiMes" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('calendar')} Ver Mi Mes</button>
         <button class="btn sm ghost" id="btnGoAddMeta" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('target')} Nueva Meta/Deuda</button>
-        <button class="btn sm ghost" id="btnGoAddExtra" style="margin: 0; padding: 12px 6px; font-size: 13px; font-weight:700; border: 1.5px solid var(--green) !important; color: var(--green) !important; background: rgba(28,58,44,0.05) !important; grid-column: span 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">${getSVG('dollar')} Registrar Ingreso Extra</button>
       </div>
     </div>
   `;
@@ -1249,7 +1264,7 @@ function renderInicio(){
         t: _svgTip('target') + (_ind ? 'Metas individuales' : '¿Ya tienen metas individuales?'),
         d: _ind
           ? `Recuerda que puedes crear <b>metas individuales</b> que se fondean de tu bolsillo personal — para tus ahorros propios sin afectar el plan general.`
-          : `¿Sabían que cada uno puede tener <b>metas individuales</b> de su bolsillo personal? Úsalas para ahorros propios sin afectar el plan de pareja.`,
+          : `¿Sabían que cada uno ya tiene metas individuales de su bolsillo personal? Úsalas para ahorros propios sin afectar el plan de pareja.`,
         a: 'Ver metas',
         fn: () => go(1)
       },
@@ -1356,7 +1371,7 @@ function renderInicio(){
   // Asignar clics
   $('btnGoMiMes').onclick = () => go(2);
   $('btnGoAddMeta').onclick = () => openMetaForm(null);
-  $('btnGoAddExtra').onclick = () => { openExtraFormOnLoad = true; go(2); };
+  $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
   $('btnTipAction').onclick = tipActionFn;
 }
 function heroMeta(m){
@@ -2777,7 +2792,7 @@ function renderDetail(){
       m.saldo = Math.max(0, m.saldo - g.monto);
       if (per) per.saldo += g.monto;
     } else if (g.mov === 'retiro') {        // retiro a bolsillo: devolver a la meta y quitar del bolsillo
-      m.saldo += g.monto;
+m.saldo += g.monto;
       if (per) per.saldo = Math.max(0, per.saldo - g.monto);
     } else if (g.mov === 'pagoDesdeBolsillo') { // abono a deuda desde bolsillo
       m.saldo += g.monto;
@@ -2798,37 +2813,103 @@ function openHistoryList() {
 }
 
 function renderHistoryList() {
-  const c=state.config;
-  const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
+  const c = state.config;
   
+  const listIngresos = state.ingresos.map(ing => ({
+    type: 'ingreso',
+    id: ing.id,
+    nombre: ing.nombre,
+    monto: ing.monto,
+    fecha: ing.fecha || (ing.mes ? `${ing.mes}-01` : today()),
+    creadoPor: ing.creadoPor,
+    meta: ing.meta,
+    pctRetener: ing.pctRetener,
+    esAporteBase: ing.esAporteBase
+  }));
+
+  const listGastos = state.gastos.map(g => ({
+    type: 'gasto',
+    id: g.id,
+    nombre: g.nota || (g.mov === 'salida' ? 'Retiro' : 'Transferencia'),
+    monto: g.monto,
+    fecha: g.fecha || today(),
+    creadoPor: g.creadoPor,
+    mov: g.mov,
+    meta: g.meta,
+    transferId: g.transferId
+  }));
+  
+  const rawAll = [...listIngresos, ...listGastos].sort((a, b) => {
+    const cmp = b.fecha.localeCompare(a.fecha);
+    if (cmp !== 0) return cmp;
+    return b.id.localeCompare(a.id);
+  });
+  
+  const transactions = processTransactionsForDisplay(rawAll);
+
   let h = `<button class="bk" id="hListBack">‹ Volver</button>
     <header style="padding-top:6px">
-      <div class="ey">Registro Histórico</div>
-      <h1>Meses cerrados</h1>
+      <div class="ey">Registro de movimientos</div>
+      <h1>Historial completo</h1>
     </header>`;
     
-  if (sortedLog.length === 0) {
-    h += `<div class="card"><div class="empty">Aún no hay meses cerrados registrados.</div></div>`;
+  if (transactions.length === 0) {
+    h += `<div class="card"><div class="empty">Aún no hay movimientos registrados.</div></div>`;
   } else {
-    h += sortedLog.map(e => {
-      const ec = e.config || c;
-      const totalEspecialAhorro = especialesVisibles(e.especiales).reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0);
-      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
-      const p1Total = (ec.nominaP1 || 0) + e.p1;
-      const p2Total = (ec.nominaP2 || 0) + e.p2;
-      return `<div class="card tap tap-hist-item" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
-        <div style="flex:1">
-          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}</div>
-          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
+    h += `<div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:4px;">`;
+    h += transactions.map(t => {
+      let sign = '';
+      let color = '';
+      let destLabel = '';
+      
+      if (t.type === 'ingreso') {
+        sign = '+';
+        color = 'var(--green)';
+        const metaNom = t.meta === 'distribuir' ? 'Según el plan' : (t.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
+        destLabel = t.pctRetener > 0 ? `${t.pctRetener}% al bolsillo · ${metaNom}` : metaNom;
+        if (t.esAporteBase) destLabel += ' (Aporte base)';
+      } else if (t.type === 'gasto') {
+        sign = '-';
+        color = '#e06c75';
+        const m = metaById(t.meta);
+        destLabel = `Retiro de ${m ? m.nombre : 'Meta'}`;
+      } else if (t.type === 'transfer') {
+        sign = '';
+        color = 'var(--gold)';
+        destLabel = `Transferencia: ${t.fromMeta} → ${t.toMeta}`;
+      }
+      
+      let dateFormatted = '';
+      if (t.fecha) {
+        const parts = t.fecha.split('-');
+        if (parts.length === 3) {
+          dateFormatted = `${parts[2]}/${parts[1]}`;
+        } else if (parts.length === 2) {
+          dateFormatted = `${parts[1]}`;
+        } else {
+          dateFormatted = t.fecha;
+        }
+      }
+      
+      const creatorBadge = (c.modo === 'pareja' && t.creadoPor) ? `<span style="display:inline-block; background:rgba(246,241,230,0.06); color:var(--gs); font-size:9.5px; padding:1px 5px; border-radius:4px; margin-left:6px; vertical-align:middle;">${getCreatorName(t.creadoPor)}</span>` : '';
+      
+      return `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); gap:10px;">
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+              <span style="font-weight:700; color:var(--ink); font-size:13.5px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:180px;">${t.nombre}</span>
+              ${creatorBadge}
+            </div>
+            <div style="font-size:11px; color:var(--gs); margin-top:2px;">${dateFormatted} · ${destLabel}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <span class="num" style="font-size:14px; color:${color}; font-weight:700;">${sign}${fmt(t.monto)}</span>
+            ${canEditShared() ? `<button class="ldel delete-tx-btn" data-type="${t.type}" data-id="${t.id}" style="font-size:18px; padding:4px; opacity:0.6; cursor:pointer;">×</button>` : ''}
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
-          <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
-          <button class="ldel delete-hist-item-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>
-          <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
-        </div>
-      </div>`;
+      `;
     }).join('');
+    h += `</div>`;
   }
   
   $('rh').innerHTML = h;
@@ -2837,188 +2918,20 @@ function renderHistoryList() {
     go(2);
   };
   
-  $('rh').querySelectorAll('.tap-hist-item').forEach(el => el.onclick = (e) => {
-    if (e.target.closest('.delete-hist-item-btn')) return;
-    openHistoryDetail(el.dataset.hmes, 'list');
-  });
-  
-  $('rh').querySelectorAll('.delete-hist-item-btn').forEach(b => b.onclick = async (e) => {
-    e.stopPropagation();
-    if (!await customConfirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`, true)) return;
-    state.log = state.log.filter(x => x.mes !== b.dataset.logm);
-    save();
-    renderHistoryList();
-  });
-}
-
-function openHistoryDetail(mes, fromTab) {
-  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
-  $('sh').classList.add('on');
-  $('sh').scrollTop=0;
-  $('mainnav').classList.add('hide');
-  renderHistoryDetail(mes, fromTab);
-}
-
-function renderHistoryDetail(mes, fromTab) {
-  const entry = state.log.find(e => e.mes === mes);
-  if (!entry) {
-    if (fromTab === 'list') renderHistoryList(); else go(2);
-    return;
-  }
-  
-  const backFn = () => {
-    if (fromTab === 'list') renderHistoryList(); else go(2);
-  };
-  
-  const c = Object.assign({}, state.config, entry.config || {});
-  const r = entry.reparto;
-
-  let h = `<button class="bk" id="hDetailBack">‹ Volver</button>
-    <header style="padding-top:6px">
-      <div class="ey">Detalle de Cierre</div>
-      <h1>${fmtMes(entry.mes)}</h1>
-    </header>`;
-    
-  if (!r) {
-    const cb = entry.p1 + entry.p2;
-    h += `<div class="card">
-      <div class="k" style="margin-bottom:12px;">Resumen del mes</div>
-      <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px;">
-        <div style="display:flex;justify-content:space-between"><span>Extra ${c.nombreP1}:</span><b class="num">${fmt(entry.p1)}</b></div>
-        <div style="display:flex;justify-content:space-between"><span>Extra ${c.nombreP2}:</span><b class="num">${fmt(entry.p2)}</b></div>
-        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px;font-weight:700;">
-          <span>Total extra:</span><b class="num">${fmt(cb)}</b>
-        </div>
-      </div>
-      <div class="hint" style="margin-top:16px;line-height:1.45;display:flex;align-items:flex-start;gap:6px;">
-        ${getSVG('info', '', 'flex-shrink:0;opacity:0.7;margin-top:1px;')}
-        <span>Los detalles completos de reparto y gráficos no están disponibles para meses cerrados antes de la actualización de historial.</span>
-      </div>
-    </div>`;
-  } else {
-    const totalEntra = r.entra || (r.nom + r.comb);
-    const totalEspecial = especialesVisibles(entry.especiales).reduce((s, ep) => s + ep.monto, 0);
-    const totalEspecialAhorro = especialesVisibles(entry.especiales).reduce((s, ep) => s + ep.monto*(1-(ep.pctRetener||0)/100), 0);
-    const entra = Math.max(1, totalEntra + totalEspecial);
-    const ahorro = Math.max(0, r.ahorro + totalEspecialAhorro);
-
-    let histExtraBolsilloP1=0,histExtraBolsilloP2=0;
-    especialesVisibles(entry.especiales).forEach(ep=>{
-      const toBolsillo=ep.monto*(ep.pctRetener||0)/100;
-      if(toBolsillo>0.5){
-        if(ep.persona==='p1')histExtraBolsilloP1+=toBolsillo;
-        else if(ep.persona==='p2')histExtraBolsilloP2+=toBolsillo;
-        else{histExtraBolsilloP1+=toBolsillo/2;histExtraBolsilloP2+=toBolsillo/2;}
-      }
-    });
-    const pg = (r.gastosDia / entra * 100);
-    const ppp = (r.gustosPareja / entra * 100);
-    const pp1 = ((r.gustosP1+histExtraBolsilloP1) / entra * 100);
-    const pp2 = ((r.gustosP2+histExtraBolsilloP2) / entra * 100);
-    const pa = (ahorro / entra * 100);
-    
-    const recibe = Object.keys(r.dist || {}).map(id => ({
-      m: metaById(id) || { nombre: id, tipo: 'Desconocido' },
-      v: r.dist[id] || 0
-    })).filter(x => x.v > 0.5);
-    
-    h += `<div class="casc nofade">
-      ${c.soloAhorroDirecto ? `
-        <div class="inc-row"><span class="inc-name">Ahorro total</span><span class="inc-val num">${fmt(ahorro)}</span></div>
-        
-        <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
-          <div style="display:flex;justify-content:space-between"><span>Ahorro base fijo:</span><b style="color:var(--ink)">${fmt(r.base || 0)}</b></div>
-          ${r.comb > 0 ? `<div style="display:flex;justify-content:space-between"><span>Ahorro adicional/extra:</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>` : ''}
-          ${especialesVisibles(entry.especiales).length > 0 ? especialesVisibles(entry.especiales).map(ep => {
-            const pctR=ep.pctRetener||0;
-            const toSave=ep.monto*(1-pctR/100);
-            const toBolsillo=ep.monto-toSave;
-            const persNom=c.modo==='individual'?'':` (${ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos'})`;
-            return `<div style="display:flex;justify-content:space-between"><span>Adicional — ${ep.nombre}${persNom}:</span><b style="color:var(--green)">${fmt(ep.monto)}</b></div>${pctR>0?`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div><div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ bolsillo personal:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div>`:''}`;
-          }).join('') : ''}
-        </div>
-      ` : `
-        <div class="inc-row"><span class="inc-name">Ingresos totales</span><span class="inc-val num">${fmt(totalEntra + totalEspecial)}</span></div>
-
-        <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
-          <div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>
-          ${r.comb > 0 ? `<div style="display:flex;justify-content:space-between"><span>Variables:</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>` : ''}
-          ${especialesVisibles(entry.especiales).length > 0 ? especialesVisibles(entry.especiales).map(ep => {
-            const pctR=ep.pctRetener||0;
-            const toSave=ep.monto*(1-pctR/100);
-            const toBolsillo=ep.monto-toSave;
-            const persNom=c.modo==='individual'?'':` (${ep.persona==='p1'?c.nombreP1:ep.persona==='p2'?c.nombreP2:'Ambos'})`;
-            return `<div style="display:flex;justify-content:space-between"><span>Adicional — ${ep.nombre}${persNom}:</span><b style="color:var(--green)">${fmt(ep.monto)}</b></div>${pctR>0?`<div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ ${pctR}% bolsillo:</span><b style="color:var(--gs)">${fmt(toBolsillo)}</b></div><div style="display:flex;justify-content:space-between;padding-left:10px;font-size:11px"><span>↳ al plan:</span><b style="color:var(--gs)">${fmt(toSave)}</b></div>`:''}`;
-          }).join('') : ''}
-        </div>
-        
-        ${c.modo === 'individual' ? `
-          <div class="stack">
-            <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
-            <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
-            <span class="st-seg st-seg-a" style="flex:1"></span>
-          </div>
-          <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Mis gastos fijos</span><b>${fmt(r.gastosDia)}</b></div>
-          <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Dinero libre (bolsillo personal)</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
-          ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gs)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
-        ` : `
-          <div class="stack">
-            <span class="st-seg st-seg-g" style="width:${pg.toFixed(1)}%"></span>
-            <span class="st-seg st-seg-pp" style="width:${ppp.toFixed(1)}%"></span>
-            <span class="st-seg st-seg-p1" style="width:${pp1.toFixed(1)}%"></span>
-            <span class="st-seg st-seg-p2" style="width:${pp2.toFixed(1)}%"></span>
-            <span class="st-seg st-seg-a" style="flex:1"></span>
-          </div>
-          <div class="leg-row"><span class="dot dot-g"></span><span class="leg-n">Gastos del hogar</span><b>${fmt(r.gastosDia)}</b></div>
-          <div class="leg-row"><span class="dot dot-pp"></span><span class="leg-n">Citas y gustos en pareja</span><b>${fmt(r.gustosPareja)}</b></div>
-          <div class="leg-row"><span class="dot dot-p1"></span><span class="leg-n">Personal de ${c.nombreP1}</span><b>${fmt(r.gustosP1+histExtraBolsilloP1)}</b></div>
-          ${histExtraBolsilloP1>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gs)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP1)}</b></div>`:''}
-          <div class="leg-row"><span class="dot dot-p2"></span><span class="leg-n">Personal de ${c.nombreP2}</span><b>${fmt(r.gustosP2+histExtraBolsilloP2)}</b></div>
-          ${histExtraBolsilloP2>0?`<div style="display:flex;justify-content:space-between;padding:0 0 4px 20px;font-size:11.5px;color:var(--gs)"><span>↳ incluye de ingresos adicionales</span><b>${fmt(histExtraBolsilloP2)}</b></div>`:''}
-        `}
-        <div class="leg-row big"><span class="dot dot-a"></span><span class="leg-n">Ahorro e inversión</span><b>${fmt(ahorro)}</b></div>
-      `}
+  $('rh').querySelectorAll('.delete-tx-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const type = btn.dataset.type;
+      const id = btn.dataset.id;
+      if (!await customConfirm('¿Eliminar este movimiento y revertir los saldos?', true)) return;
       
-      ${(() => {
-        const especiales=especialesVisibles(entry.especiales);
-        if(especiales.length>0){
-          const unifiedDist={};
-          recibe.forEach(x=>{unifiedDist[x.m.id]={m:x.m,base:x.v,extra:0};});
-          especiales.forEach(ep=>{
-            const toSave=ep.monto*(1-(ep.pctRetener||0)/100);
-            if(toSave>0.5){
-              if(ep.meta==='distribuir'){
-                // Usa el snapshot real aplicado (ep.dist); recalcular aquí mentiría porque los saldos ya cambiaron.
-                const distEsp=ep.dist||distribuirAhorro(toSave,true);
-                metasCompartidas().forEach(m=>{if(!unifiedDist[m.id])unifiedDist[m.id]={m,base:0,extra:0};unifiedDist[m.id].extra+=distEsp[m.id]||0;});
-              }else{const md=metaById(ep.meta);if(md){if(!unifiedDist[ep.meta])unifiedDist[ep.meta]={m:md,base:0,extra:0};unifiedDist[ep.meta].extra+=toSave;}}
-            }
-          });
-          const uList=Object.values(unifiedDist).filter(x=>(x.base+x.extra)>0.5);
-          const totalAh=Math.max(1,ahorro);
-          let mh=uList.map(x=>{const tot=x.base+x.extra;return `<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(tot)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,tot/totalAh*100)).toFixed(1)}%"></i></div>${x.extra>0?`<div style="font-size:11px;color:var(--gs);margin-top:3px;padding-left:2px">↳ incluye +${fmt(x.extra)} de ingresos adicionales</div>`:''}</div>`;}).join('');
-          return mh?`<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${mh}</div>`:`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`;
-        }else{
-          return recibe.length>0?`<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${recibe.map(x=>`<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(x.v)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3,Math.min(100,x.v/Math.max(1,ahorro)*100)).toFixed(1)}%"></i></div></div>`).join('')}</div>`:`<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos a metas en este cierre.</div>`;
-        }
-      })()}
-    </div>`;
-  }
-  
-  h += `<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
-    <button class="btn danger" id="btnDelHistEntry">Eliminar registro</button>
-  </div>`;
-  
-  $('rh').innerHTML = h;
-  
-  $('hDetailBack').onclick = backFn;
-  
-  $('btnDelHistEntry').onclick = async () => {
-    if (!await customConfirm(`¿Eliminar el registro de ${fmtMes(entry.mes)} del historial? (Esto no modificará los saldos actuales).`, true)) return;
-    state.log = state.log.filter(e => e.mes !== entry.mes);
-    save();
-    backFn();
-  };
+      if (type === 'ingreso') {
+        revertirAporte(id);
+      } else {
+        revertirGasto(id);
+      }
+      renderHistoryList();
+    };
+  });
 }
 
 /* =========================================================
@@ -3220,6 +3133,23 @@ function drawActiveSavedDistributionList(entry) {
             unifiedDist[m.id].extra += distEsp[m.id];
           }
         });
+      } else if (ep.meta === 'distribuir-individual') {
+        const distEsp = ep.dist || distribuirAhorroIndividual(ep.duenoPriv || state.config.perfil, toSave, true).dist;
+        state.metas.forEach(m => {
+          if (m.dueno === ep.duenoPriv && (distEsp[m.id] || 0) > 0.5) {
+            if (!unifiedDist[m.id]) unifiedDist[m.id] = { m, base: 0, extra: 0 };
+            unifiedDist[m.id].extra += distEsp[m.id];
+          }
+        });
+        const allocatedSum = Object.values(distEsp).reduce((a, b) => a + b, 0);
+        const rem = Math.max(0, toSave - allocatedSum);
+        if (rem > 0.5) {
+          const pocket = metaPersonal(ep.duenoPriv || state.config.perfil);
+          if (pocket) {
+            if (!unifiedDist[pocket.id]) unifiedDist[pocket.id] = { m: pocket, base: 0, extra: 0 };
+            unifiedDist[pocket.id].extra += rem;
+          }
+        }
       } else {
         const md = metaById(ep.meta);
         if (md) {
@@ -3345,6 +3275,24 @@ async function desaplicarMes(mes) {
               }
             }
           });
+        } else if (ep.meta === 'distribuir-individual') {
+          const profile = ep.duenoPriv || state.config.perfil;
+          const dist = ep.dist || distribuirAhorroIndividual(profile, toSave, true).dist;
+          state.metas.forEach(m => {
+            if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
+              if (m.tipo === 'deuda') {
+                m.saldo += dist[m.id];
+              } else {
+                m.saldo = Math.max(0, m.saldo - dist[m.id]);
+              }
+            }
+          });
+          const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
+          const rem = Math.max(0, toSave - allocatedSum);
+          if (rem > 0.5) {
+            const pocket = metaPersonal(profile);
+            if (pocket) pocket.saldo = Math.max(0, pocket.saldo - rem);
+          }
         } else {
           const m = metaById(ep.meta);
           if (m) {
@@ -3435,7 +3383,7 @@ function aplicarCobertura(cob, mes){
     } else {
       m.saldo = Math.max(0, m.saldo - item.monto);
       const gId = uid();
-      state.gastos.push({id:gId, meta:m.id, fecha:today(), monto:item.monto, nota: 'Cobertura de déficit ' + fmtMes(mes)});
+      state.gastos.push({id:gId, meta:m.id, fecha:today(), monto:item.monto, nota: 'Cobertura de déficit ' + fmtMes(mes), creadoPor: state.config.perfil});
       item.gastoId = gId;
     }
   });
@@ -3570,7 +3518,7 @@ function openAsistenteDeficit(faltante){
   });
 }
 
-function openAsistenteIngresoExtra() {
+function openAsistenteIngresoExtra(preFill = null) {
   const c = state.config;
 
   const overlay = document.createElement('div');
@@ -3584,6 +3532,18 @@ function openAsistenteIngresoExtra() {
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
   const optionsHtml = og('Metas comunes', comp) + og('Mis metas (privadas)', indiv) + (bolsillo ? `<optgroup label="Personal"><option value="${bolsillo.id}">Mi bolsillo</option></optgroup>` : '');
 
+  const defaultConcepto = preFill ? preFill.concepto : '';
+  const defaultMonto = preFill && preFill.monto ? '$' + Number(preFill.monto).toLocaleString('es-CO') : '';
+
+  let selectOptionsHtml = '';
+  if (c.modo === 'pareja') {
+    selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes (según el plan)</option>';
+    selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas individuales (según el plan)</option>';
+  } else {
+    selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas (según el plan)</option>';
+  }
+  selectOptionsHtml += optionsHtml;
+
   overlay.innerHTML = `
     <div class="modal-card animate-in" style="max-width:400px;">
       <h3 class="modal-title" style="font-size:20px;">Añadir dinero al plan</h3>
@@ -3591,19 +3551,18 @@ function openAsistenteIngresoExtra() {
 
       <div>
         <label class="lbl">Concepto / Fuente</label>
-        <input class="sf" id="aeConcepto" placeholder="Ej: Venta de garaje, Bono extra, Freelance">
+        <input class="sf" id="aeConcepto" value="${defaultConcepto}" placeholder="Ej: Venta de garaje, Bono extra, Freelance">
       </div>
 
       <div>
         <label class="lbl">Monto total</label>
-        <input class="sf money" id="aeMonto" inputmode="numeric" placeholder="$0">
+        <input class="sf money" id="aeMonto" value="${defaultMonto}" inputmode="numeric" placeholder="$0">
       </div>
 
       <div>
         <label class="lbl">¿A dónde va?</label>
         <select class="sf" id="aeMetaDestino">
-          <option value="distribuir">Repartir entre metas comunes (según el plan)</option>
-          ${optionsHtml}
+          ${selectOptionsHtml}
         </select>
       </div>
 
@@ -3625,6 +3584,8 @@ function openAsistenteIngresoExtra() {
           </div>
         </div>
       </div>
+
+      <div id="aePreviewContainer" style="display:none; margin-top:10px; background:rgba(246,241,230,0.04); border:1px dashed var(--line); border-radius:12px; padding:10px 12px; font-size:12.5px; flex-direction:column; gap:6px;"></div>
 
       <div style="display:flex; gap:10px; margin-top:8px;">
         <button class="btn ghost sm" id="btnCancelAE" style="flex:1; margin:0;">Cancelar</button>
@@ -3660,11 +3621,257 @@ function openAsistenteIngresoExtra() {
     const open = retBox.style.display === 'none';
     retBox.style.display = open ? 'block' : 'none';
     if (!open) { range.value = 0; label.innerText = '0%'; }
+    updateModalPreview();
   };
 
   overlay.querySelector('#btnCancelAE').onclick = () => {
     overlay.remove();
   };
+
+  const aeMontoInput = overlay.querySelector('#aeMonto');
+  const aePctRange = overlay.querySelector('#aePctRange');
+  const aeMetaDestino = overlay.querySelector('#aeMetaDestino');
+  const aePersona = overlay.querySelector('#aePersona');
+
+  const updateModalPreview = () => {
+    const monto = parse(aeMontoInput.value);
+    const pctRetener = parseInt(aePctRange.value) || 0;
+    const metaDestino = aeMetaDestino.value;
+    const previewDiv = overlay.querySelector('#aePreviewContainer');
+    
+    if (!previewDiv) return;
+    
+    if (monto <= 0) {
+      previewDiv.style.display = 'none';
+      previewDiv.innerHTML = '';
+      return;
+    }
+    
+    const toPocket = monto * (pctRetener / 100);
+    const toSave = monto - toPocket;
+    
+    let html = '';
+    
+    // 1. Resumen de retención si aplica
+    if (toPocket > 0.5) {
+      const persona = aePersona.value;
+      let persLabel = '';
+      if (persona === 'ambos') persLabel = 'para Ambos (50/50)';
+      else if (persona === 'p1') persLabel = `para ${c.nombreP1}`;
+      else if (persona === 'p2') persLabel = `para ${c.nombreP2}`;
+      
+      html += `
+        <div style="display:flex; justify-content:space-between; align-items:center; color:var(--gs); margin-bottom:4px; font-size:12px; border-bottom: 1px solid rgba(246,241,230,.08); padding-bottom:4px;">
+          <span>Retenido para bolsillo ${persLabel}:</span>
+          <span style="font-weight:700; color:var(--gold);">${fmt(toPocket)} (${pctRetener}%)</span>
+        </div>
+      `;
+    }
+    
+    // 2. Destino de los Ahorros
+    if (toSave > 0.5) {
+      if (metaDestino === 'distribuir') {
+        const oldSobrante = _ultimoSobrante;
+        const dist = distribuirAhorro(toSave, true);
+        _ultimoSobrante = oldSobrante; // restaurar
+        
+        const comp = metasCompartidas().filter(m => !m.colocado);
+        const recibiendo = comp.map(m => ({ m, v: dist[m.id] || 0 })).filter(x => x.v > 0.5);
+        
+        html += `
+          <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Distribución estimada: <span style="color:var(--gold);">${fmt(toSave)}</span></div>
+          <div style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; padding-right:4px; margin-bottom:4px;">
+        `;
+        
+        if (recibiendo.length === 0) {
+          html += `<div style="color:var(--gs); font-size:11.5px; font-style:italic;">No hay metas que reciban dinero con esta distribución.</div>`;
+        } else {
+          recibiendo.forEach(x => {
+            const m = x.m;
+            const newSaldo = m.saldo + x.v;
+            const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
+            const pct = (x.v / toSave) * 100;
+            
+            html += `
+              <div style="margin-bottom: 2px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; font-size:12px; margin-bottom: 3px;">
+                  <span style="color:var(--ink); font-weight:600;">${m.nombre}${badge}</span>
+                  <span class="num" style="font-weight:700; color:var(--gs);">${fmt(x.v)} <span style="font-size:10px; color:rgba(28,58,44,0.7); font-weight:normal; margin-left:2px;">(→ ${fmtK(newSaldo)})</span></span>
+                </div>
+                <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
+                  <i style="display:block; height:100%; border-radius:4px; background:${m.color || 'var(--gb)'}; width:${pct.toFixed(1)}%;"></i>
+                </div>
+              </div>
+            `;
+          });
+        }
+        html += `</div>`;
+        
+        // Calcular si hay sobrellenado o si queda dinero sin asignar
+        const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
+        const unallocated = Math.max(0, toSave - allocatedSum);
+        
+        let totalOverfill = 0;
+        Object.keys(dist).forEach(mId => {
+          const m = metaById(mId);
+          if (m && m.objetivo > 0 && dist[mId] > 0) {
+            const falta = Math.max(0, m.objetivo - m.saldo);
+            if (dist[mId] > falta) {
+              totalOverfill += dist[mId] - falta;
+            }
+          }
+        });
+        
+        if (unallocated > 0.5) {
+          html += `
+            <div style="margin-top:6px; font-size:11.5px; color:var(--gold); background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
+              ⚠️ Todas las metas están llenas y no hay fondo de emergencia. Sobrarán <b>${fmt(unallocated)}</b> sin asignar.
+            </div>
+          `;
+        } else if (totalOverfill > 0.5) {
+          html += `
+            <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
+              💡 El plan de metas comunes está completo. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
+            </div>
+          `;
+        }
+      } else if (metaDestino === 'distribuir-individual') {
+        const { dist, rem } = distribuirAhorroIndividual(c.perfil, toSave, true);
+        
+        const indivs = metasIndividuales(c.perfil).filter(m => !m.colocado);
+        const recibiendo = indivs.map(m => ({ m, v: dist[m.id] || 0 })).filter(x => x.v > 0.5);
+        
+        html += `
+          <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Distribución estimada: <span style="color:var(--gold);">${fmt(toSave)}</span></div>
+          <div style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; padding-right:4px; margin-bottom:4px;">
+        `;
+        
+        if (recibiendo.length === 0) {
+          html += `<div style="color:var(--gs); font-size:11.5px; font-style:italic;">No hay metas individuales que reciban dinero con esta distribución.</div>`;
+        } else {
+          recibiendo.forEach(x => {
+            const m = x.m;
+            const newSaldo = m.saldo + x.v;
+            const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
+            const pct = (x.v / toSave) * 100;
+            
+            html += `
+              <div style="margin-bottom: 2px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; font-size:12px; margin-bottom: 3px;">
+                  <span style="color:var(--ink); font-weight:600;">${m.nombre}${badge}</span>
+                  <span class="num" style="font-weight:700; color:var(--gs);">${fmt(x.v)} <span style="font-size:10px; color:rgba(28,58,44,0.7); font-weight:normal; margin-left:2px;">(→ ${fmtK(newSaldo)})</span></span>
+                </div>
+                <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
+                  <i style="display:block; height:100%; border-radius:4px; background:${m.color || 'var(--gb)'}; width:${pct.toFixed(1)}%;"></i>
+                </div>
+              </div>
+            `;
+          });
+        }
+        html += `</div>`;
+        
+        if (rem > 0.5) {
+          html += `
+            <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
+              💡 Tus metas individuales están llenas. El excedente de <b>${fmt(rem)}</b> se guardará en tu bolsillo.
+            </div>
+          `;
+        }
+      } else {
+        const m = metaById(metaDestino);
+        if (m) {
+          const isDeuda = m.tipo === 'deuda';
+          const currentSaldo = m.saldo;
+          
+          let sobra = 0;
+          let aplicado = toSave;
+          if (m.objetivo > 0) {
+            const falta = Math.max(0, m.objetivo - currentSaldo);
+            if (toSave > falta) {
+              sobra = toSave - falta;
+              aplicado = falta;
+            }
+          } else if (isDeuda) {
+            const falta = Math.max(0, currentSaldo);
+            if (toSave > falta) {
+              sobra = toSave - falta;
+              aplicado = falta;
+            }
+          }
+          
+          const newSaldo = isDeuda ? Math.max(0, currentSaldo - aplicado) : (currentSaldo + aplicado);
+          const isFilled = (isDeuda && newSaldo <= 0.5) || (!isDeuda && m.objetivo > 0 && newSaldo >= m.objetivo);
+          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">${isDeuda ? '¡Saldada! 🎉' : '¡Llenada! 🎉'}</span>` : '';
+          
+          html += `
+            <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Aporte directo a la meta:</div>
+            <div style="margin-bottom: 4px;">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; font-size:12px; margin-bottom: 3px;">
+                <span style="color:var(--ink); font-weight:600;">${m.nombre}${badge}</span>
+                <span class="num" style="font-weight:700; color:var(--gs);">${fmt(aplicado)} <span style="font-size:10px; color:rgba(28,58,44,0.7); font-weight:normal; margin-left:2px;">(→ ${fmtK(newSaldo)})</span></span>
+              </div>
+          `;
+          
+          if (m.objetivo > 0) {
+            const pct = Math.min(100, (newSaldo / m.objetivo) * 100);
+            html += `
+              <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
+                <i style="display:block; height:100%; border-radius:4px; background:${m.color || 'var(--gb)'}; width:${pct.toFixed(1)}%;"></i>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--gs); margin-top:3px;">
+                <span>Progreso: ${pct.toFixed(1)}%</span>
+                <span>Objetivo: ${fmtK(m.objetivo)}</span>
+              </div>
+            `;
+          } else if (isDeuda && currentSaldo > 0) {
+            const pct = Math.min(100, (aplicado / currentSaldo) * 100);
+            html += `
+              <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
+                <i style="display:block; height:100%; border-radius:4px; background:${m.color || '#e06c75'}; width:${pct.toFixed(1)}%;"></i>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--gs); margin-top:3px;">
+                <span>Saldando: ${pct.toFixed(1)}%</span>
+                <span>Restante: ${fmtK(newSaldo)}</span>
+              </div>
+            `;
+          } else {
+            // Sin objetivo ni saldo de deuda (p.ej. inversión abierta)
+            html += `
+              <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
+                <i style="display:block; height:100%; border-radius:4px; background:${m.color || 'var(--gb)'}; width:100%;"></i>
+              </div>
+            `;
+          }
+          
+          html += `</div>`;
+          
+          if (sobra > 0.5) {
+            html += `
+              <div style="margin-top:6px; font-size:11.5px; color:var(--gold); background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
+                ⚠️ La meta se completará y quedará un excedente de <b>${fmt(sobra)}</b>. Al aplicar, podrás decidir su destino.
+              </div>
+            `;
+          }
+        }
+      }
+    } else {
+      html += `<div style="color:var(--gs); font-size:12px; font-style:italic; text-align:center;">El 100% del dinero se retiene en el bolsillo.</div>`;
+    }
+    
+    previewDiv.innerHTML = html;
+    previewDiv.style.display = 'flex';
+  };
+
+  aeMontoInput.addEventListener('input', updateModalPreview);
+  aePctRange.addEventListener('input', updateModalPreview);
+  aeMetaDestino.addEventListener('change', updateModalPreview);
+  aePersona.addEventListener('change', updateModalPreview);
+
+  if (preFill) {
+    updateModalPreview();
+  }
 
   overlay.querySelector('#btnApplyAE').onclick = () => {
     const concepto = overlay.querySelector('#aeConcepto').value.trim() || 'Ingreso adicional';
@@ -3678,7 +3885,7 @@ function openAsistenteIngresoExtra() {
       return;
     }
 
-    const esPriv = esDestinoPersonal(meta);
+    const esPriv = esDestinoPersonal(meta) || meta === 'distribuir-individual';
     const ep = {
       id: uid(),
       mes: selectedMonth || curMonth(),
@@ -3688,7 +3895,10 @@ function openAsistenteIngresoExtra() {
       persona: esPriv ? c.perfil : persona,
       pctRetener: esPriv ? 0 : pctRetener,
       privado: esPriv || undefined,
-      duenoPriv: esPriv ? c.perfil : undefined
+      duenoPriv: esPriv ? c.perfil : undefined,
+      fecha: today(),
+      creadoPor: c.perfil,
+      esAporteBase: preFill ? preFill.esAporteBase : undefined
     };
 
     aplicarIngresoInmediatoActivo(ep);
@@ -3699,19 +3909,11 @@ function openAsistenteIngresoExtra() {
 function aplicarIngresoInmediatoActivo(ep) {
   const c = state.config;
   const mes = ep.mes;
-  const entry = state.log.find(e => e.mes === mes);
-  if (!entry) {
-    especialesPendientes.push(ep);
-    save();
-    renderMiMes();
-    flash('Ingreso extra agregado ✓');
-    return;
-  }
   
   const pctR = ep.pctRetener || 0;
   const toSave = ep.monto * (1 - pctR / 100);
   
-  let distInmediato = null; // snapshot de la distribución, para revertir exacto sin re-ejecutar
+  let distInmediato = null;
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
       const dist = distribuirAhorro(toSave, true);
@@ -3725,14 +3927,31 @@ function aplicarIngresoInmediatoActivo(ep) {
           }
         }
       });
+    } else if (ep.meta === 'distribuir-individual') {
+      const profile = ep.duenoPriv || c.perfil;
+      const { dist, rem } = distribuirAhorroIndividual(profile, toSave, true);
+      distInmediato = Object.assign({}, dist);
+      state.metas.forEach(m => {
+        if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
+          if (m.tipo === 'deuda') {
+            m.saldo = Math.max(0, m.saldo - dist[m.id]);
+          } else {
+            m.saldo += dist[m.id];
+          }
+        }
+      });
+      if (rem > 0.5) {
+        const pocket = metaPersonal(profile);
+        if (pocket) pocket.saldo += rem;
+      }
     } else {
       const m = metaById(ep.meta);
       if (m) {
         const sobra = aplicarAporteDirecto(m, toSave);
         if (sobra > 0.5) {
-          ep._sobra = sobra; ep._metaLlena = m;   // se resuelve async tras registrar
+          ep._sobra = sobra; ep._metaLlena = m;
         }
-        ep.aplicadoDirecto = toSave - (ep._sobra || 0); // monto exacto aplicado, para revertir
+        ep.aplicadoDirecto = toSave - (ep._sobra || 0);
       }
     }
   }
@@ -3749,24 +3968,7 @@ function aplicarIngresoInmediatoActivo(ep) {
     }
   }
 
-  if (!entry.especiales) entry.especiales = [];
-  entry.especiales.push({
-    id: ep.id,
-    nombre: ep.nombre,
-    monto: ep.monto,
-    meta: ep.meta,
-    persona: ep.persona || 'ambos',
-    pctRetener: pctR,
-    dist: distInmediato,
-    metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'),
-    aplicadoInmediato: true,
-    fecha: today(),
-    privado: ep.privado,
-    duenoPriv: ep.duenoPriv,
-    aplicadoDirecto: ep.aplicadoDirecto
-  });
-
-  state.ingresos.unshift({
+  const newIngreso = {
     id: ep.id,
     mes: mes,
     nombre: ep.nombre,
@@ -3774,10 +3976,36 @@ function aplicarIngresoInmediatoActivo(ep) {
     meta: ep.meta,
     persona: ep.persona || 'ambos',
     pctRetener: pctR,
+    dist: distInmediato,
+    fecha: ep.fecha || today(),
+    creadoPor: ep.creadoPor || c.perfil,
     privado: ep.privado,
     duenoPriv: ep.duenoPriv,
-    aplicadoDirecto: ep.aplicadoDirecto
-  });
+    aplicadoDirecto: ep.aplicadoDirecto,
+    esAporteBase: ep.esAporteBase
+  };
+  
+  state.ingresos.unshift(newIngreso);
+
+  const entry = state.log.find(e => e.mes === mes);
+  if (entry) {
+    if (!entry.especiales) entry.especiales = [];
+    entry.especiales.push({
+      id: ep.id,
+      nombre: ep.nombre,
+      monto: ep.monto,
+      meta: ep.meta,
+      persona: ep.persona || 'ambos',
+      pctRetener: pctR,
+      dist: distInmediato,
+      metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (ep.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')),
+      aplicadoInmediato: true,
+      fecha: newIngreso.fecha,
+      privado: ep.privado,
+      duenoPriv: ep.duenoPriv,
+      aplicadoDirecto: ep.aplicadoDirecto
+    });
+  }
 
   const perBug03 = metaPersonal(c.perfil);
   if (perBug03) {
@@ -3787,28 +4015,37 @@ function aplicarIngresoInmediatoActivo(ep) {
 
   save();
   renderMiMes();
-  flash('Ingreso extra aplicado con éxito ✓');
+  flash('Aporte aplicado con éxito ✓');
 
   if (ep._sobra) {
     openModalSobrante(ep._sobra, ep._metaLlena).then(dec => {
-      if (dec.accion === 'pendiente') { registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre); }
-      else {
+      if (dec.accion === 'pendiente') {
+        registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
+      } else {
         const res = aplicarDecisionSobrante(dec, ep._sobra);
-        if (res.tipo === 'pendiente') registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
-        const reg = entry.especiales.find(x => x.id === ep.id);
-        if (reg && res.tipo !== 'pendiente') reg.sobranteRes = Object.assign({monto: ep._sobra}, res); // trazabilidad + reverso
+        if (res.tipo === 'pendiente') {
+          registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
+        } else {
+          const reg = state.ingresos.find(x => x.id === ep.id);
+          if (reg && res.tipo !== 'pendiente') {
+            reg.sobranteRes = Object.assign({ monto: ep._sobra }, res);
+          }
+          if (entry) {
+            const regE = entry.especiales.find(x => x.id === ep.id);
+            if (regE && res.tipo !== 'pendiente') {
+              regE.sobranteRes = Object.assign({ monto: ep._sobra }, res);
+            }
+          }
+        }
       }
-      save(); renderMiMes();
+      save();
+      renderMiMes();
     });
   }
 }
 
-function revertirIngresoAdicionalActivo(id) {
-  const mes = selectedMonth;
-  const entry = state.log.find(e => e.mes === mes);
-  if (!entry || !entry.especiales) return;
-  
-  const ep = entry.especiales.find(x => x.id === id);
+function revertirAporte(id) {
+  const ep = state.ingresos.find(x => x.id === id);
   if (!ep) return;
   
   const pctR = ep.pctRetener || 0;
@@ -3816,7 +4053,6 @@ function revertirIngresoAdicionalActivo(id) {
   
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
-      // Usa el reparto guardado al aplicar; fallback solo para entries antiguos sin snapshot.
       const dist = ep.dist || distribuirAhorro(toSave, true);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
@@ -3827,6 +4063,24 @@ function revertirIngresoAdicionalActivo(id) {
           }
         }
       });
+    } else if (ep.meta === 'distribuir-individual') {
+      const profile = ep.duenoPriv || state.config.perfil;
+      const dist = ep.dist || distribuirAhorroIndividual(profile, toSave, true).dist;
+      state.metas.forEach(m => {
+        if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
+          if (m.tipo === 'deuda') {
+            m.saldo += dist[m.id];
+          } else {
+            m.saldo = Math.max(0, m.saldo - dist[m.id]);
+          }
+        }
+      });
+      const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
+      const rem = Math.max(0, toSave - allocatedSum);
+      if (rem > 0.5) {
+        const pocket = metaPersonal(profile);
+        if (pocket) pocket.saldo = Math.max(0, pocket.saldo - rem);
+      }
     } else {
       const m = metaById(ep.meta);
       if (m) revertirAporteDirecto(m, ep.aplicadoDirecto != null ? ep.aplicadoDirecto : toSave);
@@ -3863,228 +4117,473 @@ function revertirIngresoAdicionalActivo(id) {
     }
   }
 
-  entry.especiales = entry.especiales.filter(x => x.id !== id);
+  // Compatibilidad hacia atrás: eliminar de entry.especiales
+  const entry = state.log.find(e => e.mes === ep.mes);
+  if (entry && entry.especiales) {
+    entry.especiales = entry.especiales.filter(x => x.id !== id);
+  }
+
   state.ingresos = state.ingresos.filter(ing => ing.id !== id);
 
   save();
-  renderMiMes();
-  flash('Ingreso extra eliminado y saldos revertidos ✓');
+  rerender();
+  flash('Ingreso eliminado y saldos revertidos ✓');
+}
+
+function revertirGasto(id) {
+  const g = state.gastos.find(x => x.id === id);
+  if (!g) return;
+
+  const m = metaById(g.meta);
+  const per = (g.fromPocket || g.toPocket) ? metaPersonal(m?.dueno || state.config.perfil) : null;
+
+  if (g.transferId) {
+    const tId = g.transferId;
+    const related = state.gastos.filter(x => x.transferId === tId);
+    related.forEach(x => {
+      const mx = metaById(x.meta);
+      if (mx) {
+        if (x.mov === 'transfer-out') {
+          mx.saldo += x.monto;
+        } else if (x.mov === 'transfer-in') {
+          if (mx.tipo === 'deuda') {
+            mx.saldo += x.monto;
+          } else {
+            mx.saldo = Math.max(0, mx.saldo - x.monto);
+          }
+        }
+      }
+    });
+    state.gastos = state.gastos.filter(x => x.transferId !== tId);
+  } else {
+    if (m) {
+      if (g.entrada) {
+        m.saldo = Math.max(0, m.saldo - g.monto);
+        if (per) per.saldo += g.monto;
+      } else if (g.mov === 'retiro') {
+        m.saldo += g.monto;
+        if (per) per.saldo = Math.max(0, per.saldo - g.monto);
+      } else if (g.mov === 'pagoDesdeBolsillo') {
+        m.saldo += g.monto;
+        if (per) per.saldo += g.monto;
+      } else {
+        m.saldo += g.monto;
+      }
+    }
+    state.gastos = state.gastos.filter(x => x.id !== id);
+  }
+
+  save();
+  rerender();
+  flash('Movimiento eliminado y saldos revertidos ✓');
+}
+
+function getCreatorName(creadoPor) {
+  const c = state.config;
+  if (creadoPor === 'p1') return c.nombreP1 || 'P1';
+  if (creadoPor === 'p2') return c.nombreP2 || 'P2';
+  return 'Usuario';
+}
+
+function getMonthlyDistributionData(mes) {
+  const c = state.config;
+  const distMap = {}; // key: metaId or pocketId, value: { name, amount, color, isPocket }
+  
+  const monthlyIngresos = state.ingresos.filter(ing => ing.mes === mes);
+  
+  monthlyIngresos.forEach(ing => {
+    const pctR = ing.pctRetener || 0;
+    const toPocket = ing.monto * (pctR / 100);
+    const toSave = ing.monto - toPocket;
+    
+    if (toPocket > 0.5) {
+      if (ing.persona === 'p1' || ing.persona === 'ambos') {
+        const pId = 'pocket_p1';
+        if (!distMap[pId]) {
+          distMap[pId] = { name: c.modo === 'pareja' ? `Bolsillo ${c.nombreP1}` : 'Mi bolsillo', amount: 0, color: '#c8a2c8', isPocket: true };
+        }
+        distMap[pId].amount += toPocket * (ing.persona === 'ambos' ? 0.5 : 1);
+      }
+      if (c.modo === 'pareja' && (ing.persona === 'p2' || ing.persona === 'ambos')) {
+        const pId = 'pocket_p2';
+        if (!distMap[pId]) {
+          distMap[pId] = { name: `Bolsillo ${c.nombreP2}`, amount: 0, color: '#e5a3ad', isPocket: true };
+        }
+        distMap[pId].amount += toPocket * (ing.persona === 'ambos' ? 0.5 : 1);
+      }
+    }
+    
+    if (toSave > 0.5) {
+      if (ing.meta === 'distribuir') {
+        const dist = ing.dist || distribuirAhorro(toSave, true);
+        Object.keys(dist).forEach(mId => {
+          const m = metaById(mId);
+          if (m) {
+            if (!distMap[mId]) {
+              distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+            }
+            distMap[mId].amount += dist[mId];
+          }
+        });
+      } else if (ing.meta === 'distribuir-individual') {
+        const dist = ing.dist || distribuirAhorroIndividual(ing.duenoPriv || c.perfil, toSave, true).dist;
+        Object.keys(dist).forEach(mId => {
+          const m = metaById(mId);
+          if (m) {
+            if (!distMap[mId]) {
+              distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+            }
+            distMap[mId].amount += dist[mId];
+          }
+        });
+        const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
+        const rem = Math.max(0, toSave - allocatedSum);
+        if (rem > 0.5) {
+          const pId = (ing.duenoPriv || c.perfil) === 'p2' ? 'pocket_p2' : 'pocket_p1';
+          if (!distMap[pId]) {
+            distMap[pId] = {
+              name: c.modo === 'pareja' ? `Bolsillo ${(ing.duenoPriv || c.perfil) === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Mi bolsillo',
+              amount: 0,
+              color: (ing.duenoPriv || c.perfil) === 'p2' ? '#e5a3ad' : '#c8a2c8',
+              isPocket: true
+            };
+          }
+          distMap[pId].amount += rem;
+        }
+      } else {
+        const m = metaById(ing.meta);
+        if (m) {
+          const mId = ing.meta;
+          if (!distMap[mId]) {
+            distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+          }
+          const amt = ing.aplicadoDirecto != null ? ing.aplicadoDirecto : toSave;
+          distMap[mId].amount += amt;
+        }
+      }
+    }
+    
+    if (ing.sobranteRes && (ing.sobranteRes.monto || 0) > 0) {
+      const sr = ing.sobranteRes;
+      if (sr.tipo === 'motor' && sr.dist) {
+        Object.keys(sr.dist).forEach(mId => {
+          const m = metaById(mId);
+          if (m) {
+            if (!distMap[mId]) {
+              distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+            }
+            distMap[mId].amount += sr.dist[mId];
+          }
+        });
+      } else if (sr.tipo === 'meta') {
+        const m2 = metaById(sr.metaId);
+        if (m2) {
+          const mId = sr.metaId;
+          if (!distMap[mId]) {
+            distMap[mId] = { name: m2.nombre, amount: 0, color: m2.color || '#4c936b', isPocket: false };
+          }
+          distMap[mId].amount += sr.monto;
+        }
+      } else if (sr.tipo === 'bolsillo') {
+        const pId = sr.perfil === 'p2' ? 'pocket_p2' : 'pocket_p1';
+        if (!distMap[pId]) {
+          distMap[pId] = {
+            name: c.modo === 'pareja' ? `Bolsillo ${sr.perfil === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Mi bolsillo',
+            amount: 0,
+            color: sr.perfil === 'p2' ? '#e5a3ad' : '#c8a2c8',
+            isPocket: true
+          };
+        }
+        distMap[pId].amount += sr.monto;
+      }
+    }
+  });
+
+  const entry = state.log.find(e => e.mes === mes);
+  if (entry && entry.aplicado && entry.reparto && entry.reparto.dist) {
+    Object.keys(entry.reparto.dist).forEach(mId => {
+      const m = metaById(mId);
+      if (m) {
+        if (!distMap[mId]) {
+          distMap[mId] = { name: m.nombre, amount: 0, color: m.color || '#4c936b', isPocket: false };
+        }
+        distMap[mId].amount += entry.reparto.dist[mId];
+      }
+    });
+  }
+  
+  return Object.values(distMap).filter(x => x.amount > 0.5);
+}
+
+function drawMonthlyDistributionDonut(mes) {
+  const data = getMonthlyDistributionData(mes);
+  const total = data.reduce((s, x) => s + x.amount, 0);
+  
+  if (total <= 0.5) {
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 16px; text-align:center; color:var(--gs);">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3; margin-bottom:10px;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <div style="font-weight:700; font-size:13.5px; margin-bottom:4px;">Sin ahorros en este mes</div>
+        <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero o confirma tu aporte de siempre para ver la distribución.</div>
+      </div>
+    `;
+  }
+  
+  const r = 35;
+  const C = 2 * Math.PI * r;
+  let accumulatedPercent = 0;
+  
+  const slicesHtml = data.map((slice) => {
+    const pct = slice.amount / total;
+    const dashArray = `${(pct * C).toFixed(3)} ${C.toFixed(3)}`;
+    const dashOffset = `${(-accumulatedPercent * C).toFixed(3)}`;
+    accumulatedPercent += pct;
+    
+    return `
+      <circle
+        cx="50" cy="50" r="${r}"
+        fill="none"
+        stroke="${slice.color}"
+        stroke-width="12"
+        stroke-dasharray="${dashArray}"
+        stroke-dashoffset="${dashOffset}"
+        transform="rotate(-90 50 50)"
+        style="transition: stroke-dashoffset 0.3s ease;"
+      />
+    `;
+  }).join('');
+  
+  const legendHtml = data.map(slice => {
+    const pct = (slice.amount / total * 100).toFixed(1);
+    return `
+      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink);">
+        <span style="width:10px; height:10px; border-radius:50%; background:${slice.color}; flex-shrink:0;"></span>
+        <span style="flex:1; min-width:0; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-weight:500;">${slice.name}</span>
+        <span style="font-weight:700; color:var(--gs);" class="num">${pct}% <span style="font-weight:normal; font-size:10px; opacity:0.6; margin-left:4px;">(${fmtK(slice.amount)})</span></span>
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div style="display:flex; flex-direction:column; gap:16px; align-items:center; justify-content:center; margin-top:6px;">
+      <div style="position:relative; width:160px; height:160px; flex-shrink:0;">
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <circle cx="50" cy="50" r="${r}" fill="none" stroke="rgba(246,241,230,0.06)" stroke-width="12" />
+          ${slicesHtml}
+        </svg>
+        <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
+          <span style="font-size:10px; font-weight:700; color:var(--gs); letter-spacing:0.05em; text-transform:uppercase;">Ahorrado</span>
+          <span style="font-size:18px; font-weight:800; color:var(--cream); margin-top:2px;" class="num">${fmtK(total)}</span>
+        </div>
+      </div>
+      <div style="width:100%; display:flex; flex-direction:column; gap:8px; background:rgba(246,241,230,0.02); border:1px solid var(--line); border-radius:12px; padding:12px 14px;">
+        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; border-bottom:1px solid rgba(246,241,230,0.05); padding-bottom:4px;">Distribución detallada</div>
+        ${legendHtml}
+      </div>
+    </div>
+  `;
+}
+
+function processTransactionsForDisplay(rawList) {
+  const processed = [];
+  const seenTransfers = new Set();
+  
+  rawList.forEach(t => {
+    if (t.type === 'gasto' && t.transferId) {
+      if (seenTransfers.has(t.transferId)) return;
+      seenTransfers.add(t.transferId);
+      
+      const gOut = state.gastos.find(x => x.transferId === t.transferId && x.mov === 'transfer-out');
+      const gIn = state.gastos.find(x => x.transferId === t.transferId && x.mov === 'transfer-in');
+      
+      if (gOut && gIn) {
+        const mOut = metaById(gOut.meta);
+        const mIn = metaById(gIn.meta);
+        const nameOut = mOut ? (mOut.tipo === 'personal' ? 'Mi bolsillo' : mOut.nombre) : 'Origen';
+        const nameIn = mIn ? (mIn.tipo === 'personal' ? 'Mi bolsillo' : mIn.nombre) : 'Destino';
+        
+        processed.push({
+          type: 'transfer',
+          id: gOut.id,
+          transferId: t.transferId,
+          nombre: t.nombre.startsWith('Transferencia') ? `Transferencia: ${nameOut} → ${nameIn}` : t.nombre,
+          monto: gOut.monto,
+          fecha: gOut.fecha,
+          creadoPor: gOut.creadoPor || gIn.creadoPor,
+          fromMeta: nameOut,
+          toMeta: nameIn
+        });
+      } else {
+        processed.push(t);
+      }
+    } else {
+      processed.push(t);
+    }
+  });
+  return processed;
+}
+
+function drawTransactionTimeline(transactions, canEdit) {
+  if (transactions.length === 0) {
+    return `<div style="text-align:center; padding:24px; color:var(--gs); font-size:12.5px; font-style:italic;">No hay movimientos registrados este mes.</div>`;
+  }
+  
+  const c = state.config;
+  const itemsHtml = transactions.map(t => {
+    let sign = '';
+    let color = '';
+    let destLabel = '';
+    
+    if (t.type === 'ingreso') {
+      sign = '+';
+      color = 'var(--green)';
+      const metaNom = t.meta === 'distribuir' ? 'Según el plan' : (t.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
+      destLabel = t.pctRetener > 0 ? `${t.pctRetener}% al bolsillo · ${metaNom}` : metaNom;
+      if (t.esAporteBase) destLabel += ' (Aporte base)';
+    } else if (t.type === 'gasto') {
+      sign = '-';
+      color = '#e06c75';
+      const m = metaById(t.meta);
+      destLabel = `Retiro de ${m ? m.nombre : 'Meta'}`;
+    } else if (t.type === 'transfer') {
+      sign = '';
+      color = 'var(--gold)';
+      destLabel = `Transferencia: ${t.fromMeta} → ${t.toMeta}`;
+    }
+    
+    let dateFormatted = '';
+    if (t.fecha) {
+      const parts = t.fecha.split('-');
+      if (parts.length === 3) {
+        dateFormatted = `${parts[2]}/${parts[1]}`;
+      } else if (parts.length === 2) {
+        dateFormatted = `${parts[1]}`;
+      } else {
+        dateFormatted = t.fecha;
+      }
+    }
+    
+    const creatorBadge = (c.modo === 'pareja' && t.creadoPor) ? `<span style="display:inline-block; background:rgba(246,241,230,0.06); color:var(--gs); font-size:9.5px; padding:1px 5px; border-radius:4px; margin-left:6px; vertical-align:middle;">${getCreatorName(t.creadoPor)}</span>` : '';
+    
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); gap:10px;">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+            <span style="font-weight:700; color:var(--ink); font-size:13.5px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:180px;">${t.nombre}</span>
+            ${creatorBadge}
+          </div>
+          <div style="font-size:11px; color:var(--gs); margin-top:2px;">${dateFormatted} · ${destLabel}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <span class="num" style="font-size:14px; color:${color}; font-weight:700;">${sign}${fmt(t.monto)}</span>
+          ${canEdit ? `<button class="ldel delete-tx-btn" data-type="${t.type}" data-id="${t.id}" style="font-size:18px; padding:4px; opacity:0.6; cursor:pointer;">×</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px 14px;">
+      <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px; border-bottom:1px solid rgba(246,241,230,0.05); padding-bottom:6px;">Movimientos del mes</div>
+      <div style="display:flex; flex-direction:column; max-height:300px; overflow-y:auto; padding-right:4px;">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
 }
 
 function renderMiMes(){
   const c=state.config;
   const mes=selectedMonth || curMonth();
-  const entry=state.log.find(e=>e.mes===mes);
-  const isApplied=!!(entry && entry.aplicado);
   const canEdit=canEditShared();
-  const dis = !canEdit ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
-  const canEditExtra = canEdit && isMonthOpen(mes);
-  const disExtra = !canEditExtra ? 'disabled style="opacity:0.65;pointer-events:none;"' : '';
   
-  const sortedLog = state.log.slice().sort((x, y) => y.mes.localeCompare(x.mes));
-  const showLimit = 2;
-  const showLogs = sortedLog.slice(0, showLimit);
-  let logH = '';
-  if (sortedLog.length === 0) {
-    logH = '<div class="card"><div class="empty">Aún no hay meses cerrados.</div></div>';
-  } else {
-    logH = showLogs.map(e => {
-      const ec = e.config || c;
-      const enRojo = e.reparto && e.reparto.ahorro < 0;
-      const totalEspecialAhorro = especialesVisibles(e.especiales).reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0);
-      const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
-      const p1Total = (ec.nominaP1 || 0) + e.p1;
-      const p2Total = (ec.nominaP2 || 0) + e.p2;
-      return `<div class="card tap tap-hist" data-hmes="${e.mes}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;padding:12px 16px;">
-        <div style="flex:1">
-          <div class="lm" style="font-weight:700;font-size:14.5px;">${fmtMes(e.mes)}${enRojo ? ' <span style="display:inline-block;vertical-align:middle;background:rgba(224,108,117,.15);color:#e06c75;border:1px solid rgba(224,108,117,.35);font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;margin-left:4px;">Mes cubierto</span>' : ''}</div>
-          <div class="ls" style="font-size:12px;color:var(--gs);margin-top:2px;">${ec.nombreP1} ${fmt(p1Total)} · ${ec.nombreP2} ${fmt(p2Total)}</div>
+  const entry = state.log.find(e => e.mes === mes);
+  const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
+  
+  const totalIn = state.ingresos.filter(ing => ing.mes === mes).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
+  const totalOut = state.gastos.filter(g => g.fecha.substring(0, 7) === mes && g.mov === 'salida').reduce((sum, g) => sum + g.monto, 0);
+  const netSaved = totalIn - totalOut;
+  
+  const hasAporteBase = state.ingresos.some(ing => ing.mes === mes && ing.esAporteBase);
+  let baseCardHtml = '';
+  if (!hasAporteBase && computeBase() > 0.5) {
+    baseCardHtml = `
+      <div class="card" style="border:1px solid var(--gold); background:rgba(192,138,45,0.03); padding:14px; border-radius:12px; display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-flex;">${getSVG('calendar', '', 'color:var(--gold);')}</span>
+          <div style="font-weight:700; color:var(--gold); font-size:14px;">Tu aporte de siempre: ${fmt(computeBase())}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          ${e.aplicado ? '<span class="tag ok" style="padding:1px 5px;font-size:9px;">✓</span>' : ''}
-          <span class="num" style="font-size:15px;font-weight:600;">${fmt(totalAhorro)}</span>
-          ${canEdit ? `<button class="ldel delete-hist-btn" data-logm="${e.mes}" style="font-size:20px;opacity:0.6;padding:4px 6px;">×</button>` : ''}
-          <span class="chev" style="color:var(--gs);opacity:0.5;font-size:18px;">›</span>
+        <div style="font-size:12.5px; color:rgba(246,241,230,.8); line-height:1.4;">
+          Aún no has registrado tu aporte mensual programado de este mes. Confírmalo ahora para repartirlo entre tus metas.
         </div>
-      </div>`;
-    }).join('');
-
-    if (sortedLog.length > showLimit) {
-      logH += `<button class="btn ghost sm" id="btnFullHistory" style="margin-top:8px;width:100%;">Ver historial completo (${sortedLog.length} meses) ›</button>`;
-    } else {
-      logH += `<button class="btn ghost sm" id="btnFullHistory" style="margin-top:8px;width:100%;">Abrir historial completo ›</button>`;
-    }
-  }
-
-  let contentHtml = '';
-  if (isApplied) {
-    contentHtml = `
-      <div class="active-month-box" style="display:flex; flex-direction:column; gap:14px;">
-        <div style="background:rgba(47,90,68,0.35); border:1.5px solid rgba(80,160,110,0.6); padding:12px 14px; border-radius:12px; display:flex; align-items:center; gap:8px;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#7ecfa0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-          <div style="font-weight:700; color:#c8f0d8; font-size:14.5px;">Presupuesto de ${fmtMes(mes)} en marcha</div>
-        </div>
-
-        <div class="card dark" style="padding:18px 16px;">
-          <div class="k">Presupuesto Ejecutado</div>
-          <div class="num big" style="font-size:24px; margin-top:2px;">${fmt(entry.reparto.entra)}</div>
-          <div class="muted sm" style="margin-top:2px;">Plan fijado al inicio del mes</div>
-          
-          <div class="stack" style="margin-top:14px; margin-bottom:14px; background:rgba(246,241,230,.06);">
-            ${drawLockedBudgetStack(entry)}
-          </div>
-          
-          <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px;">
-            ${drawLockedBudgetLegend(entry)}
-          </div>
-        </div>
-
-        <div class="card" style="border: 1px solid var(--gold); background: rgba(192, 138, 45, 0.03); padding: 14px; border-radius: 12px;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <span style="display:inline-flex; align-items:center;">${getSVG('dollar', '', 'color:var(--gold);')}</span>
-            <div style="font-weight:700; color:var(--gold); font-size:14px;">Añadir más dinero al plan</div>
-          </div>
-          <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.4; margin-bottom:12px;">
-            ¿Entró más dinero este mes? Regístralo y decide a dónde va: al motor, a una meta puntual o a bolsillo.
-          </div>
-          ${!isMonthOpen(mes) ? `<div style="font-size:11.5px; color:var(--gs); text-align:center; margin-bottom:8px; padding:6px 10px; background:rgba(255,255,255,0.04); border-radius:8px;">Este mes ya está cerrado — solo se pueden agregar ingresos extras al mes actual${new Date().getDate()<=5?' o el mes anterior (período de gracia)':''}.</div>` : ''}
-          <button class="btn sm gold" id="btnLaunchAE" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" ${disExtra}>${getSVG('plus')} Añadir dinero</button>
-        </div>
-
-        ${especialesVisibles(entry.especiales).length > 0 ? `
-          <div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px;">
-            <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px;">Movimientos del mes</div>
-            ${especialesVisibles(entry.especiales).map((ep) => {
-              const pctR = ep.pctRetener || 0;
-              const metaNom = ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada');
-              return `
-                <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;">
-                  <div>
-                    <div style="font-weight:700; color:var(--ink);">${ep.nombre}</div>
-                    <div style="font-size:11px; color:var(--gs); margin-top:2px;">${pctR > 0 ? `${pctR}% al bolsillo · ` : ''}${metaNom}</div>
-                  </div>
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="num" style="font-size:14px; color:var(--gs); font-weight:700;">+${fmt(ep.monto)}</span>
-                    ${canEdit ? `<button class="ldel revert-extra-btn" data-eid="${ep.id}" style="font-size:18px;">×</button>` : ''}
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        ` : ''}
-
-        <div class="card" style="padding:14px;">
-          <div class="k" style="margin-bottom:10px;">Distribución del Ahorro Realizado</div>
-          ${drawActiveSavedDistributionList(entry)}
-        </div>
-
-        ${canEdit ? `<button class="btn ghost sm" id="btnUnlockMonth" style="margin-top:8px; border-color:#e06c75; color:#e06c75; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;">${getSVG('unlock')} Desaplicar / Reajustar presupuesto</button>` : ''}
-      </div>
-    `;
-  } else {
-    let budgetFormHtml = '';
-    let budgetHint = '';
-    
-    if (c.soloAhorroDirecto) {
-      budgetHint = 'Ajusta tu ahorro fijo mensual para este mes. Este monto se distribuirá entre tus metas según tu estrategia.';
-      budgetFormHtml = `
-        <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
-          <div>
-            <label class="lbl">Ahorro fijo mensual</label>
-            <input class="sf money budget-input" id="ahorroDirecto_input" inputmode="numeric" value="${c.ahorroDirecto ? fmt(c.ahorroDirecto) : ''}">
-          </div>
-        </div>
-      `;
-    } else {
-      budgetHint = 'Ajusta tus ingresos y gastos fijos para este mes. El dinero sobrante se destinará automáticamente a tu ahorro base para las metas.';
-      budgetFormHtml = `
-        <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            <div style="grid-column: span ${c.modo === 'individual' ? 2 : 1};">
-              <label class="lbl">Ingresos ${c.nombreP1}</label>
-              <input class="sf money budget-input" id="nominaP1_input" inputmode="numeric" value="${c.nominaP1 ? fmt(c.nominaP1) : ''}">
-            </div>
-            ${c.modo === 'pareja' ? `
-            <div>
-              <label class="lbl">Ingresos ${c.nombreP2}</label>
-              <input class="sf money budget-input" id="nominaP2_input" inputmode="numeric" value="${c.nominaP2 ? fmt(c.nominaP2) : ''}">
-            </div>
-            ` : ''}
-            
-            <div style="grid-column: span ${c.modo === 'individual' ? 2 : 1};">
-              <label class="lbl">Gastos fijos hogar</label>
-              <input class="sf money budget-input" id="gastos_input" inputmode="numeric" value="${c.gastos ? fmt(c.gastos) : ''}">
-            </div>
-            ${c.modo === 'pareja' ? `
-            <div>
-              <label class="lbl">Para los dos</label>
-              <div class="lbl-sub">Citas, salidas y planes juntos</div>
-              <input class="sf money budget-input" id="planPareja_input" inputmode="numeric" value="${c.planPareja ? fmt(c.planPareja) : ''}">
-            </div>
-            ` : ''}
-            
-            <div style="grid-column: span ${c.modo === 'individual' ? 2 : 1};">
-              <label class="lbl">${c.modo === 'individual' ? 'Tu dinero personal' : `Personal de ${c.nombreP1}`}</label>
-              <div class="lbl-sub">${c.modo === 'individual' ? 'Para tus gustos del día a día' : 'A su gusto, sin rendir cuentas'}</div>
-              <input class="sf money budget-input" id="libreP1_input" inputmode="numeric" value="${c.libreP1 ? fmt(c.libreP1) : ''}">
-            </div>
-            ${c.modo === 'pareja' ? `
-            <div>
-              <label class="lbl">Personal de ${c.nombreP2}</label>
-              <div class="lbl-sub">A su gusto, sin rendir cuentas</div>
-              <input class="sf money budget-input" id="libreP2_input" inputmode="numeric" value="${c.libreP2 ? fmt(c.libreP2) : ''}">
-            </div>
-            ` : ''}
-          </div>
-        </div>
-      `;
-    }
-
-    const incomeOpenClass = miMesIncomeOpen() ? 'open' : '';
-    contentHtml = `
-      <div class="planning-box" style="display:flex; flex-direction:column; gap:14px;">
-
-        <div class="card" style="border:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:10px;">
-          <span style="display:inline-flex;">${getSVG('calendar','', 'color:var(--gold);')}</span>
-          <div style="flex:1;">
-            <div style="font-weight:700;font-size:14px;">Tu aporte mensual de siempre</div>
-            <div style="font-size:11.5px;color:var(--gs);">Confírmalo abajo o ajusta el monto. Luego puedes añadir más movimientos cuando quieras.</div>
-          </div>
-        </div>
-
-        <div class="income-collapse ${incomeOpenClass}" id="incomeCollapse">
-          <button type="button" class="ic-head" id="incomeToggle">
-            <div style="flex:1; min-width:0;">
-              <div class="ic-title">Ingresos y gastos fijos</div>
-              <div class="income-summary" id="incomeSummary">${drawIncomeSummaryLine()}</div>
-            </div>
-            <span class="ic-chev">${getSVG('chevronDown', '', 'width:14px;height:14px;')}</span>
-          </button>
-          <div class="ic-body">
-            <div class="hint" style="margin-bottom:10px;">${budgetHint}</div>
-            ${budgetFormHtml}
-          </div>
-        </div>
-
-        <div id="planningDistPreviewContainer">
-          ${drawDistribucionPreview()}
-        </div>
-
-        <div id="planningStackContainer">
-          ${drawFixedBudgetCard()}
-        </div>
-
-        <div id="planningWarningsContainer">
-          ${drawWarningsChip()}
-        </div>
-
-        ${!canEdit ? `<div class="deriv" style="margin-top:4px;background:rgba(122,34,34,0.06);border-color:rgba(122,34,34,0.2);color:#7a2222;display:flex;align-items:center;gap:6px;">${getSVG('alert', '', 'stroke:#7a2222;')} <div><b>Rol: Lector</b>. Solo los editores pueden planificar e iniciar el mes.</div></div>` : ''}
+        <button class="btn sm gold" id="btnConfirmBaseAporte" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+          ${getSVG('check')} Confirmar aporte de siempre
+        </button>
       </div>
     `;
   }
+  
+  const listIngresos = state.ingresos.filter(ing => ing.mes === mes).map(ing => ({
+    type: 'ingreso',
+    id: ing.id,
+    nombre: ing.nombre,
+    monto: ing.monto,
+    fecha: ing.fecha || `${mes}-01`,
+    creadoPor: ing.creadoPor,
+    meta: ing.meta,
+    pctRetener: ing.pctRetener,
+    esAporteBase: ing.esAporteBase
+  }));
+
+  const listGastos = state.gastos.filter(g => g.fecha.substring(0, 7) === mes).map(g => ({
+    type: 'gasto',
+    id: g.id,
+    nombre: g.nota || (g.mov === 'salida' ? 'Retiro' : 'Transferencia'),
+    monto: g.monto,
+    fecha: g.fecha,
+    creadoPor: g.creadoPor,
+    mov: g.mov,
+    meta: g.meta,
+    transferId: g.transferId
+  }));
+  
+  const rawAll = [...listIngresos, ...listGastos].sort((a, b) => {
+    const cmp = b.fecha.localeCompare(a.fecha);
+    if (cmp !== 0) return cmp;
+    return b.id.localeCompare(a.id);
+  });
+  
+  const transactions = processTransactionsForDisplay(rawAll);
+  
+  const metricsHtml = `
+    <div class="card" style="padding:16px; display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; text-align:center;">
+      <div>
+        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Ingresos</div>
+        <div style="font-size:15px; font-weight:700; color:var(--green); margin-top:4px;" class="num">+${fmtK(totalIn)}</div>
+      </div>
+      <div style="border-left:1px solid var(--line); border-right:1px solid var(--line);">
+        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Retiros</div>
+        <div style="font-size:15px; font-weight:700; color:#e06c75; margin-top:4px;" class="num">-${fmtK(totalOut)}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Neto</div>
+        <div style="font-size:15px; font-weight:700; color:${netSaved >= 0 ? 'var(--gold)' : '#e06c75'}; margin-top:4px;" class="num">${netSaved >= 0 ? '+' : ''}${fmtK(netSaved)}</div>
+      </div>
+    </div>
+  `;
+  
+  const donutHtml = `
+    <div class="card" style="padding:16px;">
+      <div class="k" style="margin-bottom:10px; text-align:center;">Distribución del Ahorro Realizado</div>
+      ${drawMonthlyDistributionDonut(mes)}
+    </div>
+  `;
+  
+  const timelineHtml = drawTransactionTimeline(transactions, canEdit);
 
   $('r2').innerHTML=`
     <header>
@@ -4099,14 +4598,15 @@ function renderMiMes(){
       <div style="font-size:13px;"><b style="color:var(--gold)">${fmt(sobrantesPendientes().reduce((s,i)=>s+i.monto,0))}</b> sin asignar</div>
       <button class="btn sm gold" id="btnAsignarPendiente" style="margin:0;">Asignar</button>
     </div>`:''}
-    ${contentHtml}
-    <div style="margin-top:14px"><div class="k" style="margin-bottom:6px">Historial de Meses</div>${logH}</div>
-    ${!isApplied ? '<div class="mimes-cta-spacer"></div>' : ''}
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      ${metricsHtml}
+      ${baseCardHtml}
+      ${donutHtml}
+      ${timelineHtml}
+    </div>
+    <div style="margin-bottom:30px"></div>
   `;
-  if (!isApplied) {
-    $('r2').insertAdjacentHTML('beforeend', drawStickyCTA(canEdit));
-  }
-
+  
   function updateMesDisplay(){
     const textVal = fmtMes(selectedMonth)||selectedMonth;
     const capitalized = textVal.charAt(0).toUpperCase() + textVal.slice(1);
@@ -4115,6 +4615,7 @@ function renderMiMes(){
       d.innerHTML = `<span>${capitalized}</span><span style="color:rgba(246,241,230,0.5); display:inline-flex; align-items:center; margin-top:4px; font-weight:normal;">${getSVG('chevronDown', '', 'width:12px; height:12px;')}</span>`;
     }
   }
+  
   const mTrigger = $('mMesDisplay');
   if (mTrigger) {
     mTrigger.onclick = async () => {
@@ -4126,6 +4627,7 @@ function renderMiMes(){
       }
     };
   }
+  
   const btnPrev = $('btnPrevMonth');
   if (btnPrev) {
     btnPrev.onclick = () => {
@@ -4134,68 +4636,54 @@ function renderMiMes(){
       renderMiMes();
     };
   }
+  
   const btnNext = $('btnNextMonth');
   if (btnNext) {
+    if (selectedMonth === curMonth()) {
+      btnNext.disabled = true;
+      btnNext.style.opacity = 0.3;
+      btnNext.style.pointerEvents = 'none';
+    } else {
+      btnNext.disabled = false;
+      btnNext.style.opacity = 1;
+      btnNext.style.pointerEvents = 'auto';
+    }
     btnNext.onclick = () => {
-      selectedMonth = shiftMonth(selectedMonth, 1);
-      updateMesDisplay();
-      renderMiMes();
+      if (selectedMonth !== curMonth()) {
+        selectedMonth = shiftMonth(selectedMonth, 1);
+        updateMesDisplay();
+        renderMiMes();
+      }
     };
   }
+  
   updateMesDisplay();
 
-  if (isApplied) {
-    if ($('btnLaunchAE')) $('btnLaunchAE').onclick = () => openAsistenteIngresoExtra();
-    if ($('btnUnlockMonth')) $('btnUnlockMonth').onclick = () => desaplicarMes(mes);
-    $('r2').querySelectorAll('.revert-extra-btn').forEach(btn => {
-      btn.onclick = () => revertirIngresoAdicionalActivo(btn.dataset.eid);
-    });
-  } else {
-    const inputs = $('r2').querySelectorAll('.budget-input');
-    inputs.forEach(inp => {
-      inp.addEventListener('input', updatePlanningSummary);
-    });
-    if ($('btnApplyPreSave')) $('btnApplyPreSave').onclick = aplicar;
-
-    // Toggle colapsable de ingresos (persiste estado)
-    const incomeToggle = $('incomeToggle');
-    if (incomeToggle) {
-      incomeToggle.onclick = () => {
-        const box = $('incomeCollapse');
-        const nowOpen = !box.classList.contains('open');
-        box.classList.toggle('open', nowOpen);
-        setMiMesIncomeOpen(nowOpen);
-      };
-    }
-
-    // Toggle chip de advertencias
-    const warnChip = $('btnWarnChip');
-    if (warnChip) {
-      warnChip.onclick = () => {
-        const panel = $('warnPanel');
-        if (panel) panel.classList.toggle('open');
-      };
-    }
-
-    // Offset del CTA sticky por encima de la barra de navegación
-    positionMimesCta();
+  const btnConfirmBase = $('btnConfirmBaseAporte');
+  if (btnConfirmBase) {
+    btnConfirmBase.onclick = () => {
+      openAsistenteIngresoExtra({
+        concepto: 'Aporte mensual programado',
+        monto: computeBase(),
+        esAporteBase: true
+      });
+    };
   }
 
-  $('r2').querySelectorAll('.tap-hist').forEach(el => el.onclick = (e) => {
-    if (e.target.closest('.delete-hist-btn')) return;
-    openHistoryDetail(el.dataset.hmes, 'cerrar');
+  $('r2').querySelectorAll('.delete-tx-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const type = btn.dataset.type;
+      const id = btn.dataset.id;
+      if (!await customConfirm('¿Eliminar este movimiento y revertir los saldos?', true)) return;
+      
+      if (type === 'ingreso') {
+        revertirAporte(id);
+      } else {
+        revertirGasto(id);
+      }
+    };
   });
-  $('r2').querySelectorAll('.delete-hist-btn').forEach(b => b.onclick = async (e) => {
-    e.stopPropagation();
-    if (!await customConfirm(`¿Eliminar el registro de ${fmtMes(b.dataset.logm)} del historial? (Esto no modificará los saldos actuales).`, true)) return;
-    state.log = state.log.filter(x => x.mes !== b.dataset.logm);
-    save();
-    renderMiMes();
-  });
-  const btnFull = $('btnFullHistory');
-  if (btnFull) {
-    btnFull.onclick = () => openHistoryList();
-  }
+
   const btnPend=$('btnAsignarPendiente');
   if(btnPend) btnPend.onclick=async()=>{
     const p=sobrantesPendientes()[0];
@@ -4305,7 +4793,7 @@ async function aplicar(){
     pctRetener: ep.pctRetener||0,
     ingresoId: espApplyMeta[i].ingId,
     dist: espApplyMeta[i].distSnap,
-    metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')
+    metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (ep.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'))
   }));
   
   const perfil=c.perfil,per=metaPersonal(perfil);
