@@ -3101,6 +3101,150 @@ async function desaplicarMes(mes) {
   save();
   renderMiMes();
   flash('Mes reabierto. Presupuesto liberado para edición ✓');
+/* =========================================================
+   COBERTURA DE DÉFICIT (mes en rojo)
+   ========================================================= */
+function deficitFuentes(){
+  return {
+    imprevistos: emergenciaPrincipal(),
+    bolsillo: metaPersonal(state.config.perfil),
+    deudas: state.metas.filter(m => m.tipo === 'deuda' && !m.dueno)
+  };
+}
+
+// cob: [{fuente:'imprevistos'|'bolsillo'|'deuda', metaId, monto, gastoId?}]
+// Imprevistos/bolsillo: resta saldo y deja gasto trazable. Deuda: crece (origen de fondos).
+function aplicarCobertura(cob, mes){
+  cob.forEach(item => {
+    const m = metaById(item.metaId);
+    if (!m) return;
+    if (item.fuente === 'deuda') {
+      m.saldo += item.monto;
+    } else {
+      m.saldo = Math.max(0, m.saldo - item.monto);
+      const gId = uid();
+      state.gastos.push({id:gId, meta:m.id, fecha:today(), monto:item.monto, nota: 'Cobertura de déficit ' + fmtMes(mes)});
+      item.gastoId = gId;
+    }
+  });
+  return cob;
+}
+
+function revertirCobertura(cob){
+  (cob || []).forEach(item => {
+    const m = metaById(item.metaId);
+    if (!m) return;
+    if (item.fuente === 'deuda') {
+      m.saldo = Math.max(0, m.saldo - item.monto);
+    } else {
+      m.saldo += item.monto;
+    }
+    if (item.gastoId) state.gastos = state.gastos.filter(g => g.id !== item.gastoId);
+  });
+}
+
+// Modal: devuelve Promise<cob|null>. null = canceló (el mes no se aplica).
+function openAsistenteDeficit(faltante){
+  return new Promise(resolve => {
+    const f = deficitFuentes();
+    const imp = f.imprevistos, bol = f.bolsillo;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'modalDeficit';
+    overlay.style.display = 'flex';
+    const deudaOpts = f.deudas.map(d => `<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
+    overlay.innerHTML = `
+      <div class="modal-card animate-in" style="max-width:400px;">
+        <h3 class="modal-title" style="font-size:20px;">Mes en rojo</h3>
+        <div class="hint" style="font-size:12.5px;line-height:1.4;margin:0;">Este mes faltaron <b style="color:#e06c75">${fmt(faltante)}</b>. Registra de dónde salió la plata en la vida real y el mes quedará en el historial como cubierto.</div>
+        ${imp ? `<div>
+          <label class="lbl">Fondo de imprevistos <span style="font-weight:400;color:var(--gs)">(disponible ${fmt(imp.saldo)})</span></label>
+          <input class="sf money" id="dfImp" inputmode="numeric" placeholder="$0">
+        </div>` : ''}
+        ${bol ? `<div>
+          <label class="lbl">Mi bolsillo <span style="font-weight:400;color:var(--gs)">(disponible ${fmt(bol.saldo)})</span></label>
+          <input class="sf money" id="dfBol" inputmode="numeric" placeholder="$0">
+        </div>` : ''}
+        <div>
+          <label class="lbl">Tarjeta / deuda</label>
+          <select class="sf" id="dfDeudaSel">
+            <option value="">No usar deuda</option>
+            ${deudaOpts}
+            <option value="__nueva__">Nueva deuda (tarjeta de crédito)</option>
+          </select>
+          <input class="sf money" id="dfDeuda" inputmode="numeric" placeholder="$0" style="margin-top:8px;display:none;">
+        </div>
+        <div id="dfResumen" class="hint" style="margin:4px 0 0;font-size:12px;"></div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button class="btn ghost sm" id="dfCancel" style="flex:1;margin:0;">Cancelar</button>
+          <button class="btn sm gold" id="dfOk" style="flex:1;margin:0;" disabled>Cubrir y aplicar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const q = sel => overlay.querySelector(sel);
+
+    // Formateo de moneda idéntico al de aeMonto.
+    overlay.querySelectorAll('input.money').forEach(inp => {
+      inp.addEventListener('input', e => {
+        const d = e.target.value.replace(/\D/g,'');
+        e.target.value = d ? '$' + Number(d).toLocaleString('es-CO') : '';
+        recalc();
+      });
+      inp.addEventListener('focus', e => {
+        const val = parse(e.target.value);
+        e.target.value = val ? String(val) : '';
+        e.target.select();
+      });
+      inp.addEventListener('blur', e => {
+        const d = e.target.value.replace(/\D/g,'');
+        e.target.value = d ? '$' + Number(d).toLocaleString('es-CO') : '';
+      });
+    });
+
+    q('#dfDeudaSel').onchange = () => {
+      q('#dfDeuda').style.display = q('#dfDeudaSel').value ? 'block' : 'none';
+      recalc();
+    };
+
+    function vals(){
+      return {
+        vImp: imp ? parse(q('#dfImp').value) : 0,
+        vBol: bol ? parse(q('#dfBol').value) : 0,
+        vDeu: q('#dfDeudaSel').value ? parse(q('#dfDeuda').value) : 0
+      };
+    }
+    function recalc(){
+      const {vImp, vBol, vDeu} = vals();
+      const falta = faltante - (vImp + vBol + vDeu);
+      let msg = '', ok = false;
+      if (imp && vImp > imp.saldo) msg = 'El fondo de imprevistos no tiene tanto.';
+      else if (bol && vBol > bol.saldo) msg = 'Tu bolsillo no tiene tanto.';
+      else if (Math.abs(falta) <= 0.5) { msg = 'Cobertura completa ✓'; ok = true; }
+      else if (falta > 0) msg = 'Faltan ' + fmt(falta) + ' por cubrir.';
+      else msg = 'Te pasaste por ' + fmt(-falta) + '. Ajusta los montos.';
+      q('#dfResumen').textContent = msg;
+      q('#dfOk').disabled = !ok;
+    }
+
+    q('#dfCancel').onclick = () => { overlay.remove(); resolve(null); };
+    q('#dfOk').onclick = () => {
+      const {vImp, vBol, vDeu} = vals();
+      const cob = [];
+      if (vImp > 0.5) cob.push({fuente:'imprevistos', metaId:imp.id, monto:vImp});
+      if (vBol > 0.5) cob.push({fuente:'bolsillo', metaId:bol.id, monto:vBol});
+      if (vDeu > 0.5) {
+        let dId = q('#dfDeudaSel').value;
+        if (dId === '__nueva__') {
+          dId = uid();
+          state.metas.push({id:dId, nombre:'Tarjeta de crédito', tipo:'deuda', saldo:0, objetivo:0, aporteFijo:0, aportePct:0, pagoMinimo:0, prioridad:state.metas.length, creado:today(), aportes:[]});
+        }
+        cob.push({fuente:'deuda', metaId:dId, monto:vDeu});
+      }
+      overlay.remove();
+      resolve(cob);
+    };
+    recalc();
+  });
 }
 
 function openAsistenteIngresoExtra() {
