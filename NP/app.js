@@ -960,7 +960,7 @@ function renderInicio(){
       </div>`;
   const patHtml = `
     <div class="card dark" style="border-left: 4px solid ${patColor};">
-      <div class="k">${esPareja ? 'Patrimonio de la pareja' : 'Mis ahorros e inversiones'}${totalDeudas > 0 ? ' <span style="text-transform:none; font-weight:400; opacity:.7;">(menos deudas)</span>' : ''}</div>
+      <div class="k">${esPareja ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}${totalDeudas > 0 ? ' <span style="text-transform:none; font-weight:400; opacity:.7;">(menos deudas)</span>' : ''}</div>
       <div class="num big" style="color:var(--cream);">${sign}${fmt(patrimonioNeto)}</div>
       ${desgloseHtml}
     </div>
@@ -1015,7 +1015,7 @@ function renderInicio(){
       },
       {
         t: _svgTip('shield') + ' El poder del hábito',
-        d: `No importa el monto: ahorrar <b>$50.000 al mes</b> con constancia supera ahorrar $500.000 una sola vez. Lo que construye el patrimonio es la regularidad, no el tamaño del aporte.`,
+        d: `No importa el monto: ahorrar <b>$50.000 al mes</b> con constancia supera ahorrar $500.000 una sola vez. Lo que construye tu ahorro es la regularidad, no el tamaño del aporte.`,
         a: 'Crear mi primera meta',
         fn: () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); }
       },
@@ -1118,7 +1118,7 @@ function renderInicio(){
       },
       {
         t: _svgTip('shield') + ' Protege lo que has construido',
-        d: `Con patrimonio creciendo, considera un seguro de vida o de salud si no ${_ind?'tienes':'tienen'} uno. Proteger el ingreso es tan importante como hacer crecer el ahorro.`,
+        d: `Con tus ahorros creciendo, considera un seguro de vida o de salud si no ${_ind?'tienes':'tienen'} uno. Proteger el ingreso es tan importante como hacer crecer el ahorro.`,
         a: 'Ver inversiones',
         fn: () => go(3)
       },
@@ -5192,7 +5192,7 @@ function renderOb(){
           <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(246,241,230,0.08);flex-shrink:0;">${getSVG('home', '', 'color:var(--cream);')}</div>
           <div style="flex:1;">
             <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Inicio</div>
-            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Tu patrimonio neto (ahorros acumulados menos deudas) y atajos rápidos para tu día a día.</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Tus ahorros acumulados (menos deudas) y atajos rápidos para tu día a día.</div>
           </div>
         </div>
         
