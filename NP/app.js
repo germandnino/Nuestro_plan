@@ -1135,12 +1135,13 @@ function drawSavingsDonut() {
   const perfil = state.config.perfil;
   const metasConSaldo = state.metas.filter(m => {
     if (m.tipo === 'deuda') return false;
-    if (m.dueno && m.dueno !== perfil && m.tipo !== 'personal') return false;
+    // Privacidad: nada del otro perfil (ni su bolsillo ni sus metas individuales).
+    if (m.dueno && m.dueno !== perfil) return false;
     return true;
   }).map(m => {
     let nombre = m.nombre;
     if (m.tipo === 'personal') {
-      nombre = m.dueno === perfil ? 'Mi bolsillo' : `Bolsillo de ${perfilNombre(m.dueno)}`;
+      nombre = 'Mi bolsillo';
     } else if (m.dueno) {
       nombre = `${m.nombre} (Individual)`;
     }
