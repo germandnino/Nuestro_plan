@@ -959,6 +959,11 @@ function registrarSobrantePendiente(monto, origenNombre){
 }
 function sobrantesPendientes(){return state.ingresos.filter(i=>i.sinAsignar);}
 
+// Especiales visibles para el perfil activo: oculta movimientos privados de la pareja.
+function especialesVisibles(arr){
+  return (arr||[]).filter(ep=>!ep.privado||ep.duenoPriv===state.config.perfil);
+}
+
 /* ---------- navegación ---------- */
 const RENDER=[renderInicio,renderMetas,renderMiMes,renderAprender,renderPlan];
 function go(t){
@@ -2799,7 +2804,7 @@ function renderHistoryList() {
   } else {
     h += sortedLog.map(e => {
       const ec = e.config || c;
-      const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
+      const totalEspecialAhorro = especialesVisibles(e.especiales).reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0);
       const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
       const p1Total = (ec.nominaP1 || 0) + e.p1;
       const p2Total = (ec.nominaP2 || 0) + e.p2;
@@ -2884,13 +2889,13 @@ function renderHistoryDetail(mes, fromTab) {
     </div>`;
   } else {
     const totalEntra = r.entra || (r.nom + r.comb);
-    const totalEspecial = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto, 0) : 0;
-    const totalEspecialAhorro = entry.especiales ? entry.especiales.reduce((s, ep) => s + ep.monto*(1-(ep.pctRetener||0)/100), 0) : 0;
+    const totalEspecial = especialesVisibles(entry.especiales).reduce((s, ep) => s + ep.monto, 0);
+    const totalEspecialAhorro = especialesVisibles(entry.especiales).reduce((s, ep) => s + ep.monto*(1-(ep.pctRetener||0)/100), 0);
     const entra = Math.max(1, totalEntra + totalEspecial);
     const ahorro = Math.max(0, r.ahorro + totalEspecialAhorro);
-    
+
     let histExtraBolsilloP1=0,histExtraBolsilloP2=0;
-    (entry.especiales||[]).forEach(ep=>{
+    especialesVisibles(entry.especiales).forEach(ep=>{
       const toBolsillo=ep.monto*(ep.pctRetener||0)/100;
       if(toBolsillo>0.5){
         if(ep.persona==='p1')histExtraBolsilloP1+=toBolsillo;
@@ -2916,7 +2921,7 @@ function renderHistoryDetail(mes, fromTab) {
         <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
           <div style="display:flex;justify-content:space-between"><span>Ahorro base fijo:</span><b style="color:var(--ink)">${fmt(r.base || 0)}</b></div>
           ${r.comb > 0 ? `<div style="display:flex;justify-content:space-between"><span>Ahorro adicional/extra:</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>` : ''}
-          ${entry.especiales && entry.especiales.length > 0 ? entry.especiales.map(ep => {
+          ${especialesVisibles(entry.especiales).length > 0 ? especialesVisibles(entry.especiales).map(ep => {
             const pctR=ep.pctRetener||0;
             const toSave=ep.monto*(1-pctR/100);
             const toBolsillo=ep.monto-toSave;
@@ -2926,11 +2931,11 @@ function renderHistoryDetail(mes, fromTab) {
         </div>
       ` : `
         <div class="inc-row"><span class="inc-name">Ingresos totales</span><span class="inc-val num">${fmt(totalEntra + totalEspecial)}</span></div>
-        
+
         <div style="margin-top:2px;margin-bottom:12px;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--gs)">
           <div style="display:flex;justify-content:space-between"><span>Fijos (nóminas):</span><b style="color:var(--ink)">${fmt(r.nom)}</b></div>
           ${r.comb > 0 ? `<div style="display:flex;justify-content:space-between"><span>Variables:</span><b style="color:var(--ink)">${fmt(r.comb)}</b></div>` : ''}
-          ${entry.especiales && entry.especiales.length > 0 ? entry.especiales.map(ep => {
+          ${especialesVisibles(entry.especiales).length > 0 ? especialesVisibles(entry.especiales).map(ep => {
             const pctR=ep.pctRetener||0;
             const toSave=ep.monto*(1-pctR/100);
             const toBolsillo=ep.monto-toSave;
@@ -2967,7 +2972,7 @@ function renderHistoryDetail(mes, fromTab) {
       `}
       
       ${(() => {
-        const especiales=entry.especiales||[];
+        const especiales=especialesVisibles(entry.especiales);
         if(especiales.length>0){
           const unifiedDist={};
           recibe.forEach(x=>{unifiedDist[x.m.id]={m:x.m,base:x.v,extra:0};});
@@ -3195,30 +3200,28 @@ function drawActiveSavedDistributionList(entry) {
     });
   }
   
-  if (entry.especiales) {
-    entry.especiales.forEach(ep => {
-      const toSave = ep.monto * (1 - (ep.pctRetener || 0) / 100);
-      if (toSave > 0.5) {
-        if (ep.meta === 'distribuir') {
-          // Usa el snapshot real aplicado (ep.dist); recalcular aquí mentiría porque los saldos ya cambiaron.
-          const distEsp = ep.dist || distribuirAhorro(toSave, true);
-          state.metas.forEach(m => {
-            if (m.tipo !== 'personal' && !m.dueno && (distEsp[m.id] || 0) > 0.5) {
-              if (!unifiedDist[m.id]) unifiedDist[m.id] = { m, base: 0, extra: 0 };
-              unifiedDist[m.id].extra += distEsp[m.id];
-            }
-          });
-        } else {
-          const md = metaById(ep.meta);
-          if (md) {
-            if (!unifiedDist[ep.meta]) unifiedDist[ep.meta] = { m: md, base: 0, extra: 0 };
-            unifiedDist[ep.meta].extra += toSave;
+  especialesVisibles(entry.especiales).forEach(ep => {
+    const toSave = ep.monto * (1 - (ep.pctRetener || 0) / 100);
+    if (toSave > 0.5) {
+      if (ep.meta === 'distribuir') {
+        // Usa el snapshot real aplicado (ep.dist); recalcular aquí mentiría porque los saldos ya cambiaron.
+        const distEsp = ep.dist || distribuirAhorro(toSave, true);
+        state.metas.forEach(m => {
+          if (m.tipo !== 'personal' && !m.dueno && (distEsp[m.id] || 0) > 0.5) {
+            if (!unifiedDist[m.id]) unifiedDist[m.id] = { m, base: 0, extra: 0 };
+            unifiedDist[m.id].extra += distEsp[m.id];
           }
+        });
+      } else {
+        const md = metaById(ep.meta);
+        if (md) {
+          if (!unifiedDist[ep.meta]) unifiedDist[ep.meta] = { m: md, base: 0, extra: 0 };
+          unifiedDist[ep.meta].extra += toSave;
         }
       }
-    });
-  }
-  
+    }
+  });
+
   const list = Object.values(unifiedDist).filter(x => (x.base + x.extra) > 0.5);
   if (list.length === 0) {
     return `<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos este mes.</div>`;
@@ -3880,7 +3883,7 @@ function renderMiMes(){
     logH = showLogs.map(e => {
       const ec = e.config || c;
       const enRojo = e.reparto && e.reparto.ahorro < 0;
-      const totalEspecialAhorro = e.especiales ? e.especiales.reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0) : 0;
+      const totalEspecialAhorro = especialesVisibles(e.especiales).reduce((s, ep) => s + ep.monto * (1 - (ep.pctRetener||0)/100), 0);
       const totalAhorro = e.reparto ? (e.reparto.ahorro + totalEspecialAhorro) : (e.p1 + e.p2);
       const p1Total = (ec.nominaP1 || 0) + e.p1;
       const p2Total = (ec.nominaP2 || 0) + e.p2;
@@ -3943,10 +3946,10 @@ function renderMiMes(){
           <button class="btn sm gold" id="btnLaunchAE" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" ${disExtra}>${getSVG('plus')} Registrar Ingreso Extra</button>
         </div>
 
-        ${entry.especiales && entry.especiales.length > 0 ? `
+        ${especialesVisibles(entry.especiales).length > 0 ? `
           <div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px;">
             <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px;">Ingresos extras aplicados</div>
-            ${entry.especiales.map((ep) => {
+            ${especialesVisibles(entry.especiales).map((ep) => {
               const pctR = ep.pctRetener || 0;
               const metaNom = ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada');
               return `
