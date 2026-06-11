@@ -521,9 +521,10 @@ function syncSubscribe(planId) {
     });
 
   if (unsubscribeBolsillos) unsubscribeBolsillos();
-  unsubscribeBolsillos = db.collection('planes').doc(planId).collection('bolsillos')
-    .onSnapshot(snapshot => {
-      snapshot.forEach(doc => {
+  if (currentUser) {
+    unsubscribeBolsillos = db.collection('planes').doc(planId).collection('bolsillos').doc(currentUser.uid)
+      .onSnapshot(doc => {
+        if (!doc.exists) return;
         const remoteBolsillo = doc.data().meta;
         if (remoteBolsillo && remoteBolsillo.dueno) {
           const idx = state.metas.findIndex(m => m.tipo === 'personal' && m.dueno === remoteBolsillo.dueno);
@@ -533,10 +534,12 @@ function syncSubscribe(planId) {
             state.metas[idx].nombre = remoteBolsillo.nombre || state.metas[idx].nombre;
           }
         }
+        saveLocalOnly();
+        scheduleRerender();
+      }, e => {
+        console.warn("Error subscribing to pocket:", e.message);
       });
-      saveLocalOnly();
-      scheduleRerender();
-    });
+  }
 }
 
 async function syncSaveBolsillo(planId, uid, bolsilloMeta) {
