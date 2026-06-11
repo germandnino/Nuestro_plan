@@ -3385,7 +3385,7 @@ async function desaplicarMes(mes) {
     // Borra por id (preciso); cae a nombre solo en entries antiguos sin ingresoId.
     const ids = entry.especiales.map(ep => ep.ingresoId).filter(Boolean);
     const names = entry.especiales.filter(ep => !ep.ingresoId).map(ep => ep.nombre);
-    state.ingresos = state.ingresos.filter(ing => ing.mes !== mes || (!ids.includes(ing.id) && !names.includes(ing.nombre)));
+    state.ingresos = state.ingresos.filter(ing => ing.sinAsignar || ing.mes !== mes || (!ids.includes(ing.id) && !names.includes(ing.nombre)));
   }
   
   state.log = state.log.filter(e => e.mes !== mes);
