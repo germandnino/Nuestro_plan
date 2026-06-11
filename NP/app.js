@@ -1322,7 +1322,10 @@ function drawStickyCTA(canEdit) {
   if (!canEdit) {
     label = 'Distribuir Ahorro en mis Metas';
     disabled = 'disabled style="opacity:0.65;pointer-events:none;"';
-  } else if (ahorro <= 0) {
+  } else if (ahorro < 0) {
+    label = 'Cubrir mes en rojo';
+    disabled = '';
+  } else if (ahorro === 0) {
     label = 'Sin ahorro para distribuir';
     disabled = 'disabled';
   } else {
@@ -2998,7 +3001,10 @@ function updatePlanningSummary() {
     if (!canEdit) {
       btn.disabled = true;
       btn.textContent = 'Distribuir Ahorro en mis Metas';
-    } else if (ahorro <= 0) {
+    } else if (ahorro < 0) {
+      btn.disabled = false;
+      btn.textContent = 'Cubrir mes en rojo';
+    } else if (ahorro === 0) {
       btn.disabled = true;
       btn.textContent = 'Sin ahorro para distribuir';
     } else {
