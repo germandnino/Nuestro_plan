@@ -1536,7 +1536,7 @@ function drawStickyCTA(canEdit) {
   const ahorro = r.ahorro || 0;
   let label, disabled, cls = 'btn gold';
   if (!canEdit) {
-    label = 'Distribuir Ahorro en mis Metas';
+    label = 'Confirmar aporte del mes';
     disabled = 'disabled style="opacity:0.65;pointer-events:none;"';
   } else if (ahorro < 0) {
     label = `Cubrir mes en rojo · ${fmt(-ahorro)}`;
@@ -1546,7 +1546,7 @@ function drawStickyCTA(canEdit) {
     label = 'Sin ahorro para distribuir';
     disabled = 'disabled';
   } else {
-    label = `Distribuir ${fmt(ahorro)} en mis Metas`;
+    label = `Confirmar aporte del mes`;
     disabled = '';
   }
   return `<div class="mimes-cta" id="mimesCta">
@@ -4022,18 +4022,18 @@ function renderMiMes(){
         <div class="card" style="border: 1px solid var(--gold); background: rgba(192, 138, 45, 0.03); padding: 14px; border-radius: 12px;">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
             <span style="display:inline-flex; align-items:center;">${getSVG('dollar', '', 'color:var(--gold);')}</span>
-            <div style="font-weight:700; color:var(--gold); font-size:14px;">Asistente de Ingreso Extra (80/20)</div>
+            <div style="font-weight:700; color:var(--gold); font-size:14px;">Añadir más dinero al plan</div>
           </div>
           <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.4; margin-bottom:12px;">
-            ¿Recibiste ingresos adicionales este mes? Repártelos de forma inteligente: 80% directo a tus metas o deudas y 20% para tu bolsillo de disfrute personal.
+            ¿Entró más dinero este mes? Regístralo y decide a dónde va: al motor, a una meta puntual o a bolsillo.
           </div>
           ${!isMonthOpen(mes) ? `<div style="font-size:11.5px; color:var(--gs); text-align:center; margin-bottom:8px; padding:6px 10px; background:rgba(255,255,255,0.04); border-radius:8px;">Este mes ya está cerrado — solo se pueden agregar ingresos extras al mes actual${new Date().getDate()<=5?' o el mes anterior (período de gracia)':''}.</div>` : ''}
-          <button class="btn sm gold" id="btnLaunchAE" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" ${disExtra}>${getSVG('plus')} Registrar Ingreso Extra</button>
+          <button class="btn sm gold" id="btnLaunchAE" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" ${disExtra}>${getSVG('plus')} Añadir dinero</button>
         </div>
 
         ${especialesVisibles(entry.especiales).length > 0 ? `
           <div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px;">
-            <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px;">Ingresos extras aplicados</div>
+            <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px;">Movimientos del mes</div>
             ${especialesVisibles(entry.especiales).map((ep) => {
               const pctR = ep.pctRetener || 0;
               const metaNom = ep.meta === 'distribuir' ? 'Según el plan' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada');
@@ -4124,6 +4124,14 @@ function renderMiMes(){
     contentHtml = `
       <div class="planning-box" style="display:flex; flex-direction:column; gap:14px;">
 
+        <div class="card" style="border:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:10px;">
+          <span style="display:inline-flex;">${getSVG('calendar','', 'color:var(--gold);')}</span>
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:14px;">Tu aporte mensual de siempre</div>
+            <div style="font-size:11.5px;color:var(--gs);">Confírmalo abajo o ajusta el monto. Luego puedes añadir más movimientos cuando quieras.</div>
+          </div>
+        </div>
+
         <div class="income-collapse ${incomeOpenClass}" id="incomeCollapse">
           <button type="button" class="ic-head" id="incomeToggle">
             <div style="flex:1; min-width:0;">
@@ -4157,7 +4165,7 @@ function renderMiMes(){
 
   $('r2').innerHTML=`
     <header>
-      <div class="ey">Distribuir Ahorro del Mes</div>
+      <div class="ey">Movimientos del mes</div>
       <div style="display:flex; align-items:center; gap:12px; margin-top:2px;">
         <button id="btnPrevMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">‹</button>
         <h1 id="mMesDisplay" style="font-size:26px; margin:0; cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--cream);"></h1>
