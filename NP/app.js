@@ -894,6 +894,62 @@ function esDestinoPersonal(metaId){
   const m=metaById(metaId);
   return !!(m && m.dueno===state.config.perfil);
 }
+// Pregunta qué hacer con el sobrante cuando un aporte directo llena la meta.
+// Resuelve {accion:'motor'|'meta'|'bolsillo'|'pendiente', metaId?}.
+function openModalSobrante(monto, metaLlena){
+  return new Promise(resolve=>{
+    const c=state.config;
+    const otras=metasVisiblesEnFondos().filter(m=>m.id!==metaLlena.id && m.tipo!=='personal');
+    const opts=otras.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('');
+    const ov=document.createElement('div');
+    ov.className='modal-overlay'; ov.style.display='flex';
+    ov.innerHTML=`
+      <div class="modal-card animate-in" style="max-width:400px;">
+        <h3 class="modal-title" style="font-size:18px;">¡${metaLlena.nombre} quedó completa!</h3>
+        <div class="hint" style="margin:0;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+          <button class="btn sm" id="sobMotor" style="margin:0;">Repartir con el motor (según tu plan)</button>
+          <div style="display:flex; gap:8px;">
+            <select class="sf" id="sobMetaSel" style="flex:1; margin:0;">${opts}</select>
+            <button class="btn sm" id="sobMeta" style="margin:0; flex-shrink:0;">Enviar</button>
+          </div>
+          <button class="btn ghost sm" id="sobBolsillo" style="margin:0;">A mi bolsillo personal</button>
+          <button class="btn ghost sm" id="sobPendiente" style="margin:0;">Dejarlo pendiente (decido luego)</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const done=r=>{ov.remove();resolve(r);};
+    ov.querySelector('#sobMotor').onclick=()=>done({accion:'motor'});
+    ov.querySelector('#sobMeta').onclick=()=>done({accion:'meta',metaId:ov.querySelector('#sobMetaSel').value});
+    ov.querySelector('#sobBolsillo').onclick=()=>done({accion:'bolsillo'});
+    ov.querySelector('#sobPendiente').onclick=()=>done({accion:'pendiente'});
+    if(otras.length===0){ov.querySelector('#sobMeta').disabled=true;ov.querySelector('#sobMetaSel').disabled=true;}
+  });
+}
+// Ejecuta la decisión del modal. Muta saldos. Devuelve descriptor para el registro del ingreso.
+function aplicarDecisionSobrante(dec, monto){
+  const c=state.config;
+  if(dec.accion==='motor'){
+    const dist=distribuirAhorro(monto,true);
+    state.metas.forEach(m=>{
+      if(m.tipo!=='personal'&&!m.dueno&&(dist[m.id]||0)>0.5){
+        if(m.tipo==='deuda') m.saldo=Math.max(0,m.saldo-dist[m.id]); else m.saldo+=dist[m.id];
+      }
+    });
+    return {tipo:'motor',dist:Object.assign({},dist)};
+  }
+  if(dec.accion==='meta'){
+    const m=metaById(dec.metaId);
+    if(m){aplicarAporteDirecto(m,monto);return {tipo:'meta',metaId:dec.metaId};}
+    return {tipo:'pendiente'};
+  }
+  if(dec.accion==='bolsillo'){
+    const per=metaPersonal(c.perfil);
+    if(per){per.saldo+=monto;return {tipo:'bolsillo',perfil:c.perfil};}
+    return {tipo:'pendiente'};
+  }
+  return {tipo:'pendiente'};
+}
 
 /* ---------- navegación ---------- */
 const RENDER=[renderInicio,renderMetas,renderMiMes,renderAprender,renderPlan];
