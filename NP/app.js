@@ -1146,7 +1146,7 @@ function renderInicio(){
         t: _svgTip('trending') + ' Sube el porcentaje de ahorro',
         d: `Sin deudas es el mejor momento para aumentar el porcentaje de ahorro. Incluso un <b>2% más</b> del ingreso tiene un impacto enorme a largo plazo gracias al interés compuesto.`,
         a: 'Configurar plan',
-        fn: () => go(4)
+        fn: () => go(2)
       },
       {
         t: _svgTip('trending') + ' Revisa y ajusta tus metas',
@@ -2507,7 +2507,7 @@ function renderDetail(){
   if(m.tipo!=='personal'){
     const gs=gastosDe(m.id).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha));
     ghist=gs.length?gs.map(g=>`<div class="lrow"><div><div class="lm">${g.nota||(isDeuda ? 'Abono a deuda' : 'Salida')}</div><div class="ls">${fmtFecha(g.fecha)}</div></div>
-      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px">−${fmt(g.monto)}</span>${canEdit ? `<button class="ldel" data-gdel="${g.id}">×</button>` : ''}</div></div>`).join(''):`<div class="empty">Sin ${isDeuda ? 'pagos' : 'salidas'} registrados.</div>`;
+      <div style="display:flex;align-items:center;gap:8px"><span class="num" style="font-size:16px;color:${g.entrada?'#0f8f2c':'inherit'}">${g.entrada?'+':'−'}${fmt(g.monto)}</span>${canEdit ? `<button class="ldel" data-gdel="${g.id}">×</button>` : ''}</div></div>`).join(''):`<div class="empty">Sin ${isDeuda ? 'pagos' : 'movimientos'} registrados.</div>`;
     
     if (canEdit) {
       body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
@@ -2521,9 +2521,9 @@ function renderDetail(){
           <label class="lbl" style="margin-top:10px">Nota<input class="sf" id="dNota" placeholder="${isDeuda ? 'Ej: Pago de cuota, Abono extra' : '¿En qué fue?'}" style="margin-top:4px"></label>
           <button class="btn sm" id="dGasto">${isDeuda ? 'Registrar Pago' : 'Registrar salida'}</button>
         </div>
-        <div style="margin-top:16px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Salidas'}</div>${ghist}</div></div>`;
+        <div style="margin-top:16px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Movimientos'}</div>${ghist}</div></div>`;
     } else {
-      body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Salidas'}</div>${ghist}</div>`;
+      body+=`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div class="k">${isDeuda ? 'Historial de Pagos' : 'Movimientos'}</div>${ghist}</div>`;
     }
   }
   const canEditMeta = m.tipo!=='personal' && canEdit;
@@ -2565,7 +2565,7 @@ function renderDetail(){
       } else {
         m.saldo += amt;
       }
-      state.gastos.push({id:uid(),meta:m.id,fecha:today(),monto:amt,nota:isDeuda ? 'Abono manual desde bolsillo' : 'Abono manual'});
+      state.gastos.push({id:uid(),meta:m.id,fecha:today(),monto:amt,fromPocket:true,entrada:!isDeuda,mov:isDeuda?'pagoDesdeBolsillo':'abono',nota:isDeuda ? 'Abono manual desde bolsillo' : 'Abono manual'});
       save();
       renderDetail();
       flash(isDeuda ? `Abonados ${fmt(amt)} a la deuda ✓` : `Transferidos ${fmt(amt)} a la meta ✓`);
@@ -2583,7 +2583,7 @@ function renderDetail(){
 
       m.saldo -= amt;
       per.saldo += amt;
-      state.gastos.push({id:uid(),meta:m.id,fecha:today(),monto:amt,nota:'Retiro manual a bolsillo'});
+      state.gastos.push({id:uid(),meta:m.id,fecha:today(),monto:amt,mov:'retiro',toPocket:true,nota:'Retiro manual a bolsillo'});
       save();
       renderDetail();
       flash(`Transferidos ${fmt(amt)} a tu bolsillo ✓`);
@@ -2610,10 +2610,18 @@ function renderDetail(){
     state.gastos.push({id:uid(),meta:m.id,fecha:f,monto:mo,nota:nt||(isDeuda ? 'Pago de cuota' : 'Salida')});
     save();renderDetail();flash(isDeuda ? 'Pago registrado' : 'Salida registrada');};
   $('rd').querySelectorAll('[data-gdel]').forEach(b=>b.onclick=()=>{const g=state.gastos.find(x=>x.id===b.dataset.gdel);if(g){
-    if (isDeuda) {
-      m.saldo+=g.monto;
-    } else {
-      m.saldo+=g.monto;
+    const per = (g.fromPocket||g.toPocket) ? metaPersonal(m.dueno||state.config.perfil) : null;
+    if (g.entrada) {                       // abono a meta desde bolsillo: revertir entrada y devolver al bolsillo
+      m.saldo = Math.max(0, m.saldo - g.monto);
+      if (per) per.saldo += g.monto;
+    } else if (g.mov === 'retiro') {        // retiro a bolsillo: devolver a la meta y quitar del bolsillo
+      m.saldo += g.monto;
+      if (per) per.saldo = Math.max(0, per.saldo - g.monto);
+    } else if (g.mov === 'pagoDesdeBolsillo') { // abono a deuda desde bolsillo
+      m.saldo += g.monto;
+      if (per) per.saldo += g.monto;
+    } else {                                // salida / cobertura / pago manual
+      m.saldo += g.monto;
     }
     state.gastos=state.gastos.filter(x=>x.id!==g.id);save();renderDetail();}});
 }
