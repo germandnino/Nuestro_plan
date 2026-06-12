@@ -1942,6 +1942,15 @@ function renderMetas(){
     };
   });
 
+  $('r1').querySelectorAll('.metacard[data-mid]').forEach(cardEl => {
+    cardEl.onclick = (e) => {
+      if (e.target.closest('.drag-handle, .inline-pct-container, [data-editmid], [data-pctmid]')) return;
+      const id = cardEl.dataset.mid;
+      if (_expandedMetas.has(id)) _expandedMetas.delete(id); else _expandedMetas.add(id);
+      rerender();
+    };
+  });
+
   $('r1').querySelectorAll('.btn-card-edit').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
