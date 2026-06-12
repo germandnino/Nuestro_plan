@@ -1657,6 +1657,39 @@ function drawSeccionesPorBucket(dueno, card){
   return html;
 }
 
+// Historial de Logros: sueños cumplidos archivados, visibles al perfil (privacidad de individuales).
+function drawLogros(){
+  const perfil = state.config.perfil;
+  const isIndiv = state.config.modo==='individual';
+  const items = (state.logros||[]).filter(l=>!l.dueno || l.dueno===perfil)
+                  .sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||''));
+  if(items.length===0){
+    return `<div class="card" style="text-align:center;padding:28px 18px;">
+      <div style="font-size:34px;margin-bottom:8px">🏆</div>
+      <div class="empty" style="margin-bottom:6px">Aún no hay logros.</div>
+      <div class="hint">Cuando cumplas un sueño y gastes el dinero, quedará guardado aquí como un logro.</div>
+    </div><div style="height:24px"></div>`;
+  }
+  const total = items.reduce((s,l)=>s+(l.monto||0),0);
+  const rows = items.map(l=>`
+    <div class="card" style="display:flex;align-items:center;gap:12px;padding:13px 15px;">
+      <div style="font-size:22px;flex-shrink:0">🎉</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:var(--ink);font-size:14.5px">${esc(l.nombre)}${l.dueno?' <span class="pill">Individual</span>':''}</div>
+        <div class="hint" style="margin:0">Cumplido en ${fmtMes((l.fecha||'').slice(0,7))||l.fecha||''}</div>
+      </div>
+      <div style="font-family:var(--serif);font-variant-numeric:tabular-nums;font-weight:600;color:var(--green);flex-shrink:0">${fmt(l.monto)}</div>
+    </div>`).join('');
+  return `
+    <div class="card dark" style="text-align:center;padding:18px">
+      <div style="font-size:30px;margin-bottom:4px">🏆</div>
+      <div class="k" style="color:var(--cream);margin:0">${isIndiv?'Lo que has logrado':'Lo que han logrado juntos'}</div>
+      <div style="font-size:13px;color:rgba(246,241,230,.78);margin-top:4px">${items.length} sueño${items.length!==1?'s':''} cumplido${items.length!==1?'s':''} · ${fmt(total)}</div>
+    </div>
+    ${rows}
+    <div style="height:24px"></div>`;
+}
+
 // Meses con datos para los KPI: se alimentan de los movimientos registrados (state.ingresos).
 function mesesConDatosUI(){
   const set = {};
@@ -1854,6 +1887,7 @@ function renderMetas(){
     <div class="seg dark-seg" style="margin-bottom:16px;">
       <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Resumen</button>
       <button id="btnTabAhorros" class="${curMetasSubTab===1?'on':''}">Mis metas</button>
+      <button id="btnTabLogros" class="${curMetasSubTab===2?'on':''}">Logros</button>
     </div>
   `;
   
@@ -2001,6 +2035,8 @@ function renderMetas(){
       ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector (Solo Lectura)</div>' : ''}
       <div style="height:24px;flex-shrink:0;"></div>
     `;
+  } else if (curMetasSubTab === 2) {
+    contentHtml = drawLogros();
   }
 
   let h = `<header>
@@ -2018,6 +2054,8 @@ function renderMetas(){
   const tabAhorros = $('btnTabAhorros');
   if (tabDist) tabDist.onclick = () => { curMetasSubTab = 0; rerender(); };
   if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
+  const tabLogros = $('btnTabLogros');
+  if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 2; rerender(); };
 
   // Attach change listener to inline percentage inputs (solo los de meta; los de la
   // barra de propósitos llevan data-bucket y se enganchan aparte).
