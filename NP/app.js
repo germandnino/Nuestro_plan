@@ -649,20 +649,30 @@ function pesosBuckets(dueno){
   return w;
 }
 // Reparte `monto` entre las metas elegibles del bucket por su aportePct (normalizado dentro
-// del bucket), topando en la falta de cada meta. Muta `res`. Devuelve el sobrante del bucket.
+// del bucket), topando en la falta de cada meta. El sobrante de una meta llena se reabsorbe
+// entre las hermanas con cupo (varias pasadas), para que la plata no se fugue del bucket
+// mientras quede capacidad. Solo si TODO el bucket queda lleno burbujea el excedente.
+// Muta `res`. Devuelve el sobrante del bucket (lo que ninguna meta pudo absorber).
 function repartirEnBucket(tipo,dueno,monto,res){
   let rem=monto;
-  const elig=metasElegiblesBucket(tipo,dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-  if(elig.length===0)return rem;
-  const sumPct=elig.reduce((s,m)=>s+(m.aportePct||0),0);
-  elig.forEach(m=>{
-    const pct = sumPct>0 ? (m.aportePct||0)/sumPct*100 : 100/elig.length;
-    let add=monto*pct/100;
-    const falta=getMetaFalta(m,res);
-    add=Math.min(add,falta,rem);
-    if(res[m.id]===undefined)res[m.id]=0;
-    res[m.id]+=add; rem-=add;
-  });
+  const todas=metasElegiblesBucket(tipo,dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+  if(todas.length===0)return rem;
+  while(rem>0.5){
+    const conCupo=todas.filter(m=>getMetaFalta(m,res)>0.5);
+    if(conCupo.length===0)break;
+    const sumPct=conCupo.reduce((s,m)=>s+(m.aportePct||0),0);
+    const base=rem;
+    let repartido=0;
+    conCupo.forEach(m=>{
+      const pct = sumPct>0 ? (m.aportePct||0)/sumPct*100 : 100/conCupo.length;
+      let add=base*pct/100;
+      const falta=getMetaFalta(m,res);
+      add=Math.min(add,falta,rem);
+      if(res[m.id]===undefined)res[m.id]=0;
+      res[m.id]+=add; rem-=add; repartido+=add;
+    });
+    if(repartido<=0.5)break; // seguridad: nada colocable este ciclo, evita loop infinito
+  }
   return rem;
 }
 function getMetaFalta(m, resAlloc) {
