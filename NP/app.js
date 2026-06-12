@@ -54,6 +54,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
+const APP_VERSION='1.0.0'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -5100,7 +5101,8 @@ ${nombresHtml}
 ${installHtml}
  
 ${respaldoHtml}
-${logoutHtml}`;
+${logoutHtml}
+<div style="text-align:center; margin:22px 0 8px; font-size:11.5px; color:rgba(246,241,230,.4); letter-spacing:.02em;">Nuestro Plan · v${APP_VERSION}</div>`;
   attachPlan();
 }
 function attachPlan(){
