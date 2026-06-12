@@ -35,7 +35,6 @@ function metasPersonales(){
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let mForm=null; // estado del formulario de meta en edición
-let especialesPendientes=[]; // ingresos especiales pendientes de aplicar este cierre
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
 let obMetaCreatedId = null; // id de la meta creada en onboarding, para reemplazarla (no duplicar) al navegar atrás/adelante
@@ -333,7 +332,6 @@ function monthsUntil(ym){const[y,mo]=ym.split('-').map(Number);const n=new Date(
 function monthsBetweenYM(fromYMD, toYM){if(!fromYMD||!toYM)return null;const[fy,fm]=fromYMD.split('-').map(Number);const[ty,tm]=toYM.split('-').map(Number);return Math.max(0,(ty-fy)*12+(tm-fm));}
 function addMonths(n){const d=new Date();d.setMonth(d.getMonth()+Math.max(0,Math.round(n)));return MONTHS[d.getMonth()]+' '+d.getFullYear();}
 function perfilNombre(p){return p==='p1'?state.config.nombreP1:state.config.nombreP2;}
-function libreOf(p){return p==='p1'?state.config.libreP1:state.config.libreP2;}
 function shiftMonth(ym, delta) {
   let [y, m] = ym.split('-').map(Number);
   let d = new Date(y, m - 1 + delta, 1);
@@ -387,9 +385,6 @@ function normalize(){
     if(typeof m.aporteFijo!=='number')m.aporteFijo=0;
     if(typeof m.aportePct!=='number')m.aportePct=0;
     if(typeof m.objetivo!=='number')m.objetivo=0;
-    if(m.tipo==='deuda') {
-      if(typeof m.pagoMinimo!=='number')m.pagoMinimo=0;
-    }
   });
   state.log=Array.isArray(state.log)?state.log:[];
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
@@ -603,7 +598,6 @@ function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inv
 
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
 function gastosFijosTotal(){return state.config.gastos||0;}
-function aportesFijosTotal(){return metasCompartidas().filter(m=>m.tipo!=='imprevistos').reduce((s,m)=>s+(m.aporteFijo||0),0);}
 /* Colchón de emergencia sugerido: 3 meses de gastos fijos; si el usuario solo declara
    ahorro mensual (sin gastos fijos), ~6 meses de ese ahorro como punto de partida editable.
    Devuelve 0 cuando no hay datos para inferirlo. */
@@ -633,11 +627,10 @@ function chequearDistribucionAhorro() {
 }
 function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
 function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
-function avgVar(){if(!state.log.length)return 0;return state.log.reduce((s,e)=>s+e.p1+e.p2,0)/state.log.length;}
 function computeTotal(){
   const p = state.config.perfil;
   const mp = metaPersonal(p);
-  return metasCompartidas().filter(m=>m.tipo!=='deuda').reduce((s,m)=>s+m.saldo,0) + (mp?mp.saldo:0) + metasIndividuales(p).filter(m=>m.tipo!=='deuda').reduce((s,m)=>s+m.saldo,0);
+  return metasCompartidas().reduce((s,m)=>s+m.saldo,0) + (mp?mp.saldo:0) + metasIndividuales(p).reduce((s,m)=>s+m.saldo,0);
 }
 function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
 function emergenciaPrincipal(){return emergencias()[0]||null;}
@@ -646,9 +639,6 @@ function emergenciaPrincipal(){return emergencias()[0]||null;}
 function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir'&&!m.colocado)||state.metas.find(m=>m.tipo==='invertir');}
 function getMetaFalta(m, resAlloc) {
   const currentAlloc = resAlloc[m.id] || 0;
-  if (m.tipo === 'deuda') {
-    return Math.max(0, m.saldo - currentAlloc);
-  }
   if (m.objetivo > 0) {
     return Math.max(0, m.objetivo - (m.saldo + currentAlloc));
   }
@@ -657,19 +647,9 @@ function getMetaFalta(m, resAlloc) {
 function getMetaPrioritaria(){
   const comp=metasCompartidas();
   const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-  return sorted.find(m=>{
-    if (m.tipo === 'deuda') return m.saldo > 0;
-    return m.objetivo>0&&m.saldo<m.objetivo;
-  })||null;
+  return sorted.find(m=>m.objetivo>0&&m.saldo<m.objetivo)||null;
 }
 
-function premioSplitFactor(p,e){
-  const c=state.config;
-  if(c.modo==='individual')return p==='p1'?1:0;
-  if(c.modoPremio==='igual')return 0.5;
-  if(c.modoPremio==='proporcional'){if(!e)return 0.5;const sum=e.p1+e.p2;if(sum===0)return 0.5;return p==='p1'?e.p1/sum:e.p2/sum;}
-  return p==='p1'?c.pctPremioP1/100:(100-c.pctPremioP1)/100;
-}
 
 /* Registro del último sobrante repartido por colocarSobrante (para avisar al usuario). */
 let _ultimoSobrante = [];
@@ -718,7 +698,7 @@ function colocarSobrante(rem, res){
 }
 
 /* Reparto del ahorro entre metas compartidas.
-   Orden: (1) deudas y aportes fijos en $ (prioridad máxima),
+   Orden: (1) prioritaria primero si es secuencial,
           (2) prioritaria primero si es secuencial (recibe el remanente tras fijos),
           (3) cada meta toma su % del resto (post-fijos y post-prioritaria),
           (4) lo que sobre -> inversión abierta. */
@@ -824,11 +804,11 @@ function eligiblesPct(meta) {
   const c = state.config;
   if (meta.dueno) {
     return metasIndividuales(meta.dueno).filter(m =>
-      m.tipo !== 'deuda' && m.tipo !== 'personal' && !m.colocado);
+      m.tipo !== 'personal' && !m.colocado);
   }
   const isPrio = (m) => getMetaPrioritaria()?.id === m.id;
   return metasCompartidas().filter(m => {
-    if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
+    if (m.tipo === 'personal' || m.colocado) return false;
     if (c.estrategia === 'secuencial' && isPrio(m)) return false;
     return true;
   });
@@ -875,14 +855,8 @@ function autoAdjustIndividualPercentages(perfil, editedId, newPct) {
    MOVIMIENTOS UNIFICADOS — helpers
    ========================================================= */
 // Aporta monto directo a una meta. Muta saldo. Devuelve el sobrante si la meta se llena.
-// Deudas: aporta = abona (saldo es lo que falta por pagar); sobrante = lo que excede la deuda.
 function aplicarAporteDirecto(m, monto){
   if(monto<=0) return 0;
-  if(m.tipo==='deuda'){
-    const aplicado=Math.min(monto, m.saldo);
-    m.saldo=Math.max(0, m.saldo-aplicado);
-    return monto-aplicado;
-  }
   const obj=m.objetivo||0;
   if(obj<=0){ m.saldo+=monto; return 0; }       // meta abierta: nunca sobra
   const falta=Math.max(0, obj-m.saldo);
@@ -895,8 +869,7 @@ function aplicarAporteDirecto(m, monto){
 // Reverso exacto de un aporte directo (para deshacer ingresos).
 function revertirAporteDirecto(m, monto){
   if(monto<=0) return;
-  if(m.tipo==='deuda') m.saldo+=monto;
-  else m.saldo=Math.max(0, m.saldo-monto);
+  m.saldo=Math.max(0, m.saldo-monto);
 }
 // ¿La meta destino es del terreno personal del perfil activo?
 // Cubre bolsillo (tipo personal) y metas individuales: ambas llevan dueno.
@@ -943,7 +916,7 @@ function aplicarDecisionSobrante(dec, monto){
     const dist=distribuirAhorro(monto,true);
     state.metas.forEach(m=>{
       if(m.tipo!=='personal'&&!m.dueno&&(dist[m.id]||0)>0.5){
-        if(m.tipo==='deuda') m.saldo=Math.max(0,m.saldo-dist[m.id]); else m.saldo+=dist[m.id];
+        m.saldo+=dist[m.id];
       }
     });
     return {tipo:'motor',dist:Object.assign({},dist)};
@@ -951,11 +924,6 @@ function aplicarDecisionSobrante(dec, monto){
   if(dec.accion==='meta'){
     const m=metaById(dec.metaId);
     if(m){aplicarAporteDirecto(m,monto);return {tipo:'meta',metaId:dec.metaId};}
-    return {tipo:'pendiente'};
-  }
-  if(dec.accion==='bolsillo'){
-    const per=metaPersonal(c.perfil);
-    if(per){per.saldo+=monto;return {tipo:'bolsillo',perfil:c.perfil};}
     return {tipo:'pendiente'};
   }
   return {tipo:'pendiente'};
@@ -977,8 +945,8 @@ function openRetiroDinero(){
   if(!canEditShared()){flash('No tienes permisos para esto');return;}
   const c=state.config;
   const conSaldo=m=>m&&(m.saldo||0)>0;
-  const origenes=metasCompartidas().filter(m=>m.tipo!=='deuda'&&conSaldo(m))
-    .concat(metasIndividuales(c.perfil).filter(m=>m.tipo!=='deuda'&&conSaldo(m)));
+  const origenes=metasCompartidas().filter(conSaldo)
+    .concat(metasIndividuales(c.perfil).filter(conSaldo));
   if(origenes.length===0){flash('No hay metas con saldo para retirar');return;}
   const ov=document.createElement('div');
   ov.className='modal-overlay'; ov.style.display='flex';
@@ -999,8 +967,8 @@ function openRetiroDinero(){
   const selO=ov.querySelector('#rtOrigen'), selD=ov.querySelector('#rtDestino');
   const fillDestinos=()=>{
     const oid=selO.value;
-    const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado&&m.tipo!=='deuda');
-    const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado&&m.tipo!=='deuda');
+    const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado);
+    const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado);
     const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
     selD.innerHTML=`<option value="fuera">Fuera del plan (gasto real)</option>`
       +og('Metas comunes',comp)+og('Mis metas (privadas)',indiv);
@@ -1024,7 +992,7 @@ function openRetiroDinero(){
       const d=metaById(dval);
       if(!d){flash('Destino inválido');return;}
       o.saldo-=monto;
-      if(d.tipo==='deuda') d.saldo=Math.max(0,d.saldo-monto); else d.saldo+=monto;
+      d.saldo+=monto;
       const tId=uid();
       const cruzaTerreno=!o.dueno&&o.tipo!=='personal'&&(d.dueno||d.tipo==='personal');
       state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre)),creadoPor:c.perfil});
@@ -1095,7 +1063,7 @@ function showActionMenu(){
     { svg:'plus',     label:'Añadir dinero',    sub:'Aporta al plan y decide a dónde va',  act:()=>openAsistenteIngresoExtra() },
     { svg:'trending', label:'Retirar dinero',   sub:'Saca o mueve dinero entre metas',     act:()=>openRetiroDinero() },
     { svg:'calendar', label:'Ver Mi Mes',       sub:'Gráficos y distribución del mes',     act:()=>go(2) },
-    { svg:'target',   label:'Crear nueva meta', sub:'Define un objetivo o una deuda',      act:()=>openMetaForm() },
+    { svg:'target',   label:'Crear nueva meta', sub:'Define tu próximo objetivo',      act:()=>openMetaForm() },
   ];
   const chev = '<svg class="sheet-chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
   const rows = items.map((it,i)=>`
@@ -1150,10 +1118,10 @@ function renderInicio(){
   const perfil=c.perfil;
   const esPareja = c.modo !== 'individual';
   // Compartido: lo de la pareja (sin dueño). Idéntico en ambos teléfonos.
-  const ahorrosCompartidos = state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
+  const ahorrosCompartidos = state.metas.filter(m => m.tipo !== 'personal' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
   // Mi parte: bolsillo personal + metas individuales propias. Privada.
   const miBolsillo = (metaPersonal(perfil)?.saldo||0)
-    + state.metas.filter(m => m.tipo !== 'deuda' && m.tipo !== 'personal' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
+    + state.metas.filter(m => m.tipo !== 'personal' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
 
   // Pareja: el número grande es SOLO lo compartido (mismo en ambos teléfonos).
   // Individual: una sola persona, se suma todo.
@@ -1168,9 +1136,9 @@ function renderInicio(){
 
   // 1. Patrimonio Neto Card
   const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
-  // ¿Hay metas de ahorro creadas? (compartidas no-deuda o individuales propias)
-  const hayMetasAhorro = metasCompartidas().some(m => m.tipo !== 'deuda')
-    || metasIndividuales(perfil).some(m => m.tipo !== 'deuda');
+  // ¿Hay metas de ahorro creadas?
+  const hayMetasAhorro = metasCompartidas().length > 0
+    || metasIndividuales(perfil).length > 0;
   const desgloseHtml = esPareja
     ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
@@ -1215,7 +1183,7 @@ function renderInicio(){
   const _ind = c.modo === 'individual';
   const _svgTip = (icon) => getSVG(icon, '', 'vertical-align:middle;margin-right:6px;color:var(--gold);');
 
-  const metasActivas = metasCompartidas().filter(m => m.tipo !== 'deuda');
+  const metasActivas = metasCompartidas();
   const currentLog = state.log.find(e => e.mes === curMonth());
 
   let tipPool = [];
@@ -1351,7 +1319,6 @@ function heroMeta(m){
 function drawSavingsDonut() {
   const perfil = state.config.perfil;
   const metasConSaldo = state.metas.filter(m => {
-    if (m.tipo === 'deuda') return false;
     if (m.tipo === 'personal') return false;
     // Privacidad: nada del otro perfil (ni su bolsillo ni sus metas individuales).
     if (m.dueno && m.dueno !== perfil) return false;
@@ -1444,204 +1411,17 @@ function drawSavingsDonut() {
   </div>`;
 }
 
-function drawDistribucionPreview() {
-  const r = computeReparto(0, 0);
-  if (r.ahorro <= 0) return '';
-  const dist = r.dist || {};
-  const entries = Object.keys(dist).map(id => ({ m: metaById(id), monto: dist[id] })).filter(x => x.m && x.monto > 0.5);
-  if (entries.length === 0) {
-    return `<div class="card dark" style="padding:14px 16px; margin-top:12px;">
-      <div class="k" style="margin-bottom:4px;">Distribución estimada</div>
-      <div class="muted sm">Ninguna meta tiene asignación de %. Ve a Metas → Ahorros para configurar la distribución.</div>
-    </div>`;
-  }
-  const rows = entries.map(x => {
-    return `<div class="lrow">
-      <div>
-        <div class="lm">${x.m.nombre}</div>
-        <div class="ls">${tipoLabel(x.m.tipo)}</div>
-      </div>
-      <span class="num" style="font-size:16px; color:var(--gb);">${fmt(x.monto)}</span>
-    </div>`;
-  }).join('');
-  return `<div class="card dark" style="padding:14px 16px; margin-top:12px;">
-    <div class="k" style="margin-bottom:10px;">Distribución estimada · <span style="color:var(--gold)">${fmt(r.ahorro)}</span></div>
-    ${rows}
-  </div>`;
-}
-
-const MIMES_INCOME_KEY = 'np_miMes_incomeOpen';
-
-function miMesIncomeOpen() {
-  const c = state.config;
-  const stored = localStorage.getItem(MIMES_INCOME_KEY);
-  if (stored === '1') return true;
-  if (stored === '0') return false;
-  // Sin preferencia guardada: expandido si aún no hay ingresos seteados.
-  const sinDatos = !c.nominaP1 && !c.nominaP2 && !c.ahorroDirecto;
-  return sinDatos;
-}
-
-function setMiMesIncomeOpen(open) {
-  localStorage.setItem(MIMES_INCOME_KEY, open ? '1' : '0');
-}
-
-function drawIncomeSummaryLine() {
-  const c = state.config;
-  const sep = '<span class="is-sep">·</span>';
-  if (c.soloAhorroDirecto) {
-    return `Ahorro fijo ${fmt(c.ahorroDirecto || 0)}`;
-  }
-  const totalIng = c.modo === 'individual' ? (c.nominaP1 || 0) : ((c.nominaP1 || 0) + (c.nominaP2 || 0));
-  const base = computeBase();
-  return `Ingresos ${fmt(totalIng)}${sep}Gastos ${fmt(c.gastos || 0)}${sep}Ahorro base ${fmt(base)}`;
-}
-
-function drawWarningsChip() {
-  const warnings = getDistribucionAdvertencia();
-  if (warnings.length === 0) return '';
-  const panel = warnings.map(w => `<div style="background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.3); padding:10px 12px; border-radius:8px; font-size:12.5px; color:rgba(246,241,230,.9); line-height:1.4; margin-bottom:8px;">${w}</div>`).join('');
-  const label = warnings.length === 1 ? '1 aviso' : `${warnings.length} avisos`;
-  return `
-    <button type="button" class="warn-chip" id="btnWarnChip">⚠ ${label}</button>
-    <div class="warn-panel" id="warnPanel">${panel}</div>
-  `;
-}
-
-function drawStickyCTA(canEdit) {
-  const r = computeReparto(0, 0);
-  const ahorro = r.ahorro || 0;
-  let label, disabled, cls = 'btn gold';
-  if (!canEdit) {
-    label = 'Confirmar aporte del mes';
-    disabled = 'disabled style="opacity:0.65;pointer-events:none;"';
-  } else if (ahorro < 0) {
-    label = `Cubrir mes en rojo · ${fmt(-ahorro)}`;
-    disabled = '';
-    cls = 'btn danger';
-  } else if (ahorro === 0) {
-    label = 'Sin ahorro para distribuir';
-    disabled = 'disabled';
-  } else {
-    label = `Confirmar aporte de ${fmt(ahorro)}`;
-    disabled = '';
-  }
-  return `<div class="mimes-cta" id="mimesCta">
-    <button class="${cls}" id="btnApplyPreSave" ${disabled}>${label}</button>
-  </div>`;
-}
-
-function drawFixedBudgetCard() {
-  const c = state.config;
-  const isIndiv = c.modo === 'individual';
-  if (c.soloAhorroDirecto) {
-    return `<div class="card dark" style="padding:18px 16px;">
-      <div class="k">Ahorro Fijo Mensual</div>
-      <div class="num big" style="font-size:24px; margin-top:2px;">${fmt(c.ahorroDirecto)}</div>
-      <div class="muted sm" style="margin-top:2px;">${isIndiv ? 'Monto base destinado a mis metas' : 'Monto base destinado a las metas compartidas'}</div>
-    </div>`;
-  }
-  const totalIngresos = isIndiv ? c.nominaP1 : (c.nominaP1 + c.nominaP2);
-  if (totalIngresos <= 0) return '';
-
-  const pGas = (c.gastos / totalIngresos) * 100;
-  const pL1 = (c.libreP1 / totalIngresos) * 100;
-  const baseAhorro = computeBase();
-  const pBase = (baseAhorro / totalIngresos) * 100;
-
-  let stackHtml = '';
-  let itemsHtml = '';
-
-  if (isIndiv) {
-    stackHtml = `
-      <span class="st-seg" style="width:${pGas.toFixed(1)}%; background:#8a7f70;"></span>
-      <span class="st-seg st-seg-p1" style="width:${pL1.toFixed(1)}%"></span>
-      <span class="st-seg" style="flex:1; background:#3d8c64;"></span>
-    `;
-    itemsHtml = `
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#8a7f70; flex-shrink:0;"></span>Mis gastos fijos</div>
-        <b style="color:var(--cream);">${fmt(c.gastos)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Tu dinero personal</div>
-        <b style="color:var(--cream);">${fmt(c.libreP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
-      </div>
-    `;
-  } else {
-    const pPP = (c.planPareja / totalIngresos) * 100;
-    const pL2 = (c.libreP2 / totalIngresos) * 100;
-    stackHtml = `
-      <span class="st-seg" style="width:${pGas.toFixed(1)}%; background:#8a7f70;"></span>
-      <span class="st-seg st-seg-pp" style="width:${pPP.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-p1" style="width:${pL1.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-p2" style="width:${pL2.toFixed(1)}%"></span>
-      <span class="st-seg" style="flex:1; background:#3d8c64;"></span>
-    `;
-    itemsHtml = `
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#8a7f70; flex-shrink:0;"></span>Gastos del hogar</div>
-        <b style="color:var(--cream);">${fmt(c.gastos)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Para los dos</div>
-        <b style="color:var(--cream);">${fmt(c.planPareja)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pPP)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP1}</div>
-        <b style="color:var(--cream);">${fmt(c.libreP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP2}</div>
-        <b style="color:var(--cream);">${fmt(c.libreP2)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL2)}%)</span></b>
-      </div>
-    `;
-  }
-
-  return `<div class="card dark" style="padding:18px 16px;">
-    <div class="k">Presupuesto Fijo Mensual</div>
-    <div class="num big" style="font-size:24px; margin-top:2px;">${fmt(totalIngresos)}</div>
-    <div class="muted sm" style="margin-top:2px;">${isIndiv ? `Nómina de ${c.nombreP1}` : `Nóminas de ${c.nombreP1} y ${c.nombreP2}`}</div>
-    
-    <div class="stack" style="margin-top:14px; margin-bottom:14px; background:rgba(246,241,230,.06);">
-      ${stackHtml}
-    </div>
-    
-    <div style="display:flex; flex-direction:column; gap:6.5px; font-size:12.5px;">
-      ${itemsHtml}
-      <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(246,241,230,.12); padding-top:7px; margin-top:2px;">
-        <div style="display:flex; align-items:center; gap:6px; font-weight:700; color:rgba(246,241,230,.9)"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#3d8c64; flex-shrink:0;"></span>Ahorro base</div>
-        <b style="color:var(--gb); font-family:var(--sans); font-size:14px;">${fmt(baseAhorro)} <span style="font-size:10px; color:rgba(246,241,230,.5); font-weight:normal; margin-left:3px;">(${Math.round(pBase)}%)</span></b>
-      </div>
-    </div>
-  </div>`;
-}
-
-function ahorroDeMes(e){
-  if (e.reparto && typeof e.reparto.ahorro === 'number') {
-    return e.reparto.ahorro + especialesVisibles(e.especiales).reduce((s, ep) => s + ep.monto, 0);
-  }
-  const base = computeBase();
-  const comb = (e.p1 || 0) + (e.p2 || 0);
-  return base + comb * (1 - state.config.pctPremio / 100);
-}
-
-// Meses con datos para los KPI. El "confirmar mes" ya no existe: los indicadores
-// se alimentan de los movimientos registrados (state.ingresos), uniendo además
-// los meses cerrados del modelo legacy (state.log) para no perder histórico viejo.
+// Meses con datos para los KPI: se alimentan de los movimientos registrados (state.ingresos).
 function mesesConDatosUI(){
   const set = {};
   especialesVisibles(state.ingresos).forEach(i => { if (i.mes && !i.sinAsignar) set[i.mes] = true; });
-  (state.log || []).forEach(e => { if (e.mes) set[e.mes] = true; });
   return Object.keys(set).sort();
 }
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
-// ya contados en su ingreso de origen); si el mes no tiene movimientos, cae al cierre legacy.
+// ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
-  const ing = especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar));
-  if (ing.length) return ing.reduce((s, i) => s + i.monto, 0);
-  const e = (state.log || []).find(x => x.mes === mes);
-  return e ? ahorroDeMes(e) : 0;
+  return especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
+    .reduce((s, i) => s + i.monto, 0);
 }
 
 function drawStatsBI(){
@@ -1768,13 +1548,10 @@ function calcularTiempoRestante(m) {
 }
 
 // Aporte mensual estimado a una meta según el ahorro distribuido por la estrategia actual.
-// Cae al aporteFijo si la distribución no le asigna nada.
 function aporteMensualEstimado(m){
-  const est = Math.max(0, computeBase() + avgVar() * (1 - state.config.pctPremio / 100));
+  const est = Math.max(0, computeBase());
   const dist = distribuirAhorro(est);
-  let aporteMes = dist[m.id] || 0;
-  if (aporteMes <= 0 && m.aporteFijo > 0) aporteMes = m.aporteFijo;
-  return aporteMes;
+  return dist[m.id] || 0;
 }
 
 function metaSub(m){
@@ -1827,17 +1604,15 @@ function renderMetas(){
   // Empty-state CTA: el botón global del nav existe, pero un estado vacío sin acción
   // es un callejón. Aquí enseñamos dónde crear. tipo = defaultTipo para openMetaForm.
   const emptyMetaCTA = (tipo, msg) => {
-    const isDebt = tipo === 'deuda';
-    const accent = isDebt ? '#e06c75' : 'var(--green)';
-    const bg = isDebt ? 'rgba(224,108,117,0.08)' : 'rgba(28,58,44,0.06)';
-    const label = isDebt ? 'Registrar una deuda' : 'Crear primera meta';
+    const accent = 'var(--green)';
+    const bg = 'rgba(28,58,44,0.06)';
+    const label = 'Crear primera meta';
     return `<div class="card" style="text-align:center;padding:22px 16px;">
       <div class="empty" style="${canEdit?'margin-bottom:14px;':'margin:0;'}">${msg}</div>
       ${canEdit ? `<button class="btn" data-addmeta="${tipo}" style="margin:0;border:1.5px solid ${accent};color:${accent};background:${bg};display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px;padding:12px 18px;">${getSVG('target')} ${label}</button>` : ''}
     </div>`;
   };
 
-  if (curMetasSubTab === 2) curMetasSubTab = 1;
   let subTabsHtml = `
     <div class="seg dark-seg" style="margin-bottom:16px;">
       <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Distribución</button>
@@ -1943,7 +1718,7 @@ function renderMetas(){
     }
 
     let listHtml = '';
-    const nonDebtShared = metasCompartidas().filter(m => m.tipo !== 'deuda').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+    const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
     const showShared = (isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'goals')) || (!isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'shared'));
     if (showShared) {
       if (nonDebtShared.length > 0) {
@@ -1968,7 +1743,7 @@ function renderMetas(){
     let indivHtml = '';
     const showIndiv = !isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'individual');
     if (showIndiv) {
-      const indivs = metasIndividuales(state.config.perfil).filter(m => m.tipo !== 'deuda');
+      const indivs = metasIndividuales(state.config.perfil);
       if (indivs.length > 0) {
         indivHtml += `<div class="stitle">Mis metas individuales (Privadas)</div>`;
         indivs.forEach(m => indivHtml += card(m));
@@ -1985,7 +1760,7 @@ function renderMetas(){
     // Filtro "Todas" sin ninguna meta creada:
     // sin esto el usuario nuevo ve la vista vacía sin acción.
     let allEmptyCTA = '';
-    const indivCount = isIndiv ? 0 : metasIndividuales(state.config.perfil).filter(m => m.tipo !== 'deuda').length;
+    const indivCount = isIndiv ? 0 : metasIndividuales(state.config.perfil).length;
     if (curAhorrosFilter === 'all' && nonDebtShared.length === 0 && indivCount === 0) {
       allEmptyCTA = emptyMetaCTA('sueno', isIndiv
         ? 'Aún no tienes metas de ahorro. Crea la primera para empezar a repartir tu ahorro mensual.'
@@ -2002,76 +1777,11 @@ function renderMetas(){
       ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector (Solo Lectura)</div>' : ''}
       <div style="height:24px;flex-shrink:0;"></div>
     `;
-  } else if (curMetasSubTab === 2) {
-    const card=(m)=>{
-      const obj=m.objetivo||0;
-      const pagado = Math.max(0, obj - m.saldo);
-      const pct = obj ? Math.min(100, (pagado / obj) * 100) : 0;
-      const isPersonal = m.tipo === 'personal';
-      const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;padding:4px 0;display:inline-flex;align-items:center;color:var(--gs);touch-action:none;user-select:none;margin-right:8px">${getSVG('drag', '', 'opacity:0.6;')}</span>`;
-
-      return `<div class="card tap" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
-        ${dragHandle}
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span class="k" style="margin:0">${m.nombre}</span>
-            <span class="pill" style="background:rgba(224,108,117,0.15);color:#e06c75;border:1px solid rgba(224,108,117,0.3);">Deuda</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:baseline;">
-            <div class="num med">${fmt(m.saldo)}</div>
-            ${obj > 0 ? `<div style="font-size:11px;color:var(--gs);">Original: ${fmt(obj)}</div>` : ''}
-          </div>
-          ${obj > 0 ? `<div class="bar light" style="margin:8px 0 4px;background:rgba(224,108,117,0.12);"><i style="width:${pct.toFixed(1)}%;background:#e06c75;"></i></div>` : ''}
-          <div class="muted" style="font-size:12px">${metaSub(m)}</div>
-        </div>
-        ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar deuda" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:8px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:18px;height:18px;pointer-events:none;')}</button>` : ''}
-        <span class="chev">›</span></div>`;
-    };
-
-    const debtsShared = metasCompartidas().filter(m => m.tipo === 'deuda').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-    const totalDebts = debtsShared.reduce((s,m)=>s+m.saldo,0) + (isIndiv ? 0 : metasIndividuales(state.config.perfil).filter(m => m.tipo === 'deuda').reduce((s,m)=>s+m.saldo,0));
-    
-    let listHtml = `<div id="sharedMetasContainer">`;
-    debtsShared.forEach(m=>listHtml+=card(m));
-    listHtml+='</div>';
-
-    let indivHtml = '';
-    if (!isIndiv) {
-      const indivs = metasIndividuales(state.config.perfil).filter(m => m.tipo === 'deuda');
-      if (indivs.length > 0) {
-        indivHtml += `<div class="stitle">Mis deudas individuales (Privadas)</div>`;
-        indivs.forEach(m => indivHtml += card(m));
-      }
-    }
-
-    const summaryCard = `
-      <div class="card dark" style="background:#5a1d1d; border-left: 4px solid #e06c75; margin-bottom:12px;">
-        <div class="k" style="color:#e06c75">Total Deudas Pendientes</div>
-        <div class="num big" style="color:var(--cream);">${fmt(totalDebts)}</div>
-        <div class="hint" style="margin-top:6px;color:rgba(246,241,230,.75)">Pagar deudas de alto interés de forma proactiva es la mejor inversión que pueden hacer hoy.</div>
-      </div>
-    `;
-
-    contentHtml = `
-      ${summaryCard}
-      <div class="stitle" style="display:flex;align-items:center;gap:6px">
-        ${isIndiv ? 'Mis deudas' : 'Deudas compartidas'}
-        <span id="helpPrioBtn" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(246,241,230,.15);color:var(--cream);font-size:9.5px;font-weight:bold;cursor:pointer;user-select:none">?</span>
-      </div>
-      <div id="prioHint" class="hint" style="display:none;background:rgba(192,138,45,.08);border:1px solid rgba(192,138,45,.2);border-radius:10px;padding:10px 12px;margin:2px 0 10px;color:rgba(246,241,230,.8);line-height:1.45">
-        El orden define qué deudas abona con prioridad el motor de cascada/secuencial. Arrastra las barras de agarre para ordenar.
-      </div>
-      ${listHtml}
-      ${indivHtml}
-      ${debtsShared.length === 0 && (isIndiv || indivHtml === '') ? `<div class="card" style="text-align:center;padding:22px 16px;"><div class="empty" style="display:flex;align-items:center;justify-content:center;gap:8px;${canEdit?'margin-bottom:14px;':''}">¡Sin deudas activas! Excelente salud financiera. ${getSVG('party')}</div>${canEdit?`<button class="btn" data-addmeta="deuda" style="margin:0;border:1.5px solid #e06c75;color:#e06c75;background:rgba(224,108,117,0.08);display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:13px;padding:11px 16px;">${getSVG('target')} Registrar una deuda</button>`:''}</div>` : ''}
-      ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector (Solo Lectura)</div>' : ''}
-      <div style="height:24px;flex-shrink:0;"></div>
-    `;
   }
 
   let h = `<header>
     <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
-    <h1>Metas y Deudas</h1>
+    <h1>Metas</h1>
   </header>`;
 
   $('r1').innerHTML = `
@@ -2132,7 +1842,7 @@ function renderMetas(){
     };
   });
 
-  // empty-state CTA -> abrir formulario de nueva meta/deuda
+  // empty-state CTA -> abrir formulario de nueva meta
   $('r1').querySelectorAll('[data-addmeta]').forEach(btn => {
     btn.onclick = () => openMetaForm(null, btn.dataset.addmeta);
   });
@@ -2362,22 +2072,9 @@ function updateDeriv(){
   const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
   const saldo=$('fSaldo')?parse($('fSaldo').value):0;
 
-  let pctMes = 0;
-  const est=Math.max(0,computeBase()+avgVar()*(1-c.pctPremio/100));
-  if (mForm.dueno) {
-    const avgV_total = avgVar();
-    const prem = avgV_total * c.pctPremio / 100;
-    const pf = premioSplitFactor(p, state.log.length ? {
-      p1: state.log.reduce((s,e)=>s+e.p1,0)/state.log.length,
-      p2: state.log.reduce((s,e)=>s+e.p2,0)/state.log.length
-    } : null);
-    const libre = p === 'p1' ? c.libreP1 : c.libreP2;
-    const estPocket = c.soloAhorroDirecto ? (prem * pf) : (libre + prem * pf);
-
-    pctMes = estPocket * pct / 100;
-  } else {
-    pctMes=est*pct/100;
-  }
+  // Metas individuales se fondean con aportes directos: sin estimación de motor.
+  const est=Math.max(0,computeBase());
+  const pctMes = mForm.dueno ? 0 : est*pct/100;
 
   const aporteMes=pctMes;
   const apTxt=()=>pct>0 ? '~'+fmt(pctMes)+' ('+pct+'% del ahorro)' : '';
@@ -2522,9 +2219,7 @@ function attachMetaForm(editing){
     const saldo=mForm.saldo||0;
     let msg='¿Eliminar esta meta?';
     if(saldo>0.5){
-      msg=mForm.tipo==='deuda'
-        ? `Esta deuda tiene un saldo pendiente de ${fmt(saldo)}. Al borrarla desaparecerá de tu patrimonio (tu patrimonio neto subirá sin haberla pagado). ¿Continuar?`
-        : `Esta meta tiene ${fmt(saldo)} acumulados. Al borrarla ese saldo se quitará de tu patrimonio sin dejar registro. ¿Continuar?`;
+      msg=`Esta meta tiene ${fmt(saldo)} acumulados. Al borrarla ese saldo se quitará de tu patrimonio sin dejar registro. ¿Continuar?`;
     }
     if(!await customConfirm(msg,true))return;
     // Snapshot para deshacer; limpia gastos huérfanos de la meta.
@@ -2546,9 +2241,6 @@ function attachMetaForm(editing){
 
 function gastosDe(id){return state.gastos.filter(g=>g.meta===id);}
 function obtenerRecomendacionInversion(m) {
-  if (m.tipo === 'deuda') {
-    return `<strong>Prioridad de Pago:</strong> Tienes esta deuda pendiente. Pagar una deuda que cobra intereses (como tarjetas de crédito o créditos de consumo) equivale a obtener una inversión con rentabilidad garantizada equivalente a su tasa de interés, libre de impuestos y de riesgo. Se recomienda abonar todo lo posible aquí antes de comenzar a ahorrar o invertir a largo plazo.`;
-  }
   if (m.colocado) {
     const mr = horizonteMeses(m);
     let ideal = 'el instrumento que ya elegiste';
@@ -2589,7 +2281,6 @@ function obtenerRecomendacionInversion(m) {
 // Clave: usar el total evita que el plazo se acorte a medida que llenas la meta
 // (si no, un CDT a 1 año pasaría a "corto plazo" al ir aportando, lo cual es absurdo).
 function horizonteMeses(m){
-  if (m.tipo === 'deuda') return null;
   if (m.fecha) {
     // Duración PLANEADA original (creación -> fecha objetivo), fija. Así no se reclasifica
     // a corto plazo con el paso del tiempo: la plata en un CDT a 1 año sigue siendo "medio".
@@ -2606,8 +2297,6 @@ function horizonteMeses(m){
 }
 
 function clasificarHorizonte(m){
-  if (m.tipo === 'deuda')
-    return {nivel:'deuda', etiqueta:'Deuda', instrumento:'Pagar primero', color:'#c0532d'};
   if (m.colocado)
     return {nivel:'colocado', etiqueta:'Ya colocado', instrumento:'Registrado para control', color:'var(--gs)'};
   if (m.tipo === 'imprevistos' || m.tipo === 'personal')
@@ -2643,593 +2332,6 @@ function obtenerRecomendacionInversionCard(m) {
   `;
 }
 
-/* =========================================================
-   CERRAR MES (cascada)
-   ========================================================= */
-function computeReparto(g,a){
-  const c=state.config,base=computeBase(),comb=g+a;
-  const prem=comb*c.pctPremio/100;
-  const ahorroVar=comb*(1-c.pctPremio/100);
-  const ahorro=base+ahorroVar;
-  const gastosDia=c.soloAhorroDirecto ? 0 : gastosFijosTotal();
-  const pf1=premioSplitFactor('p1',{p1:g,p2:a});
-  const pf2=1-pf1;
-  const gustosPareja=c.soloAhorroDirecto ? 0 : c.planPareja;
-  const gustosP1=c.soloAhorroDirecto ? (prem*pf1) : (c.libreP1+prem*pf1);
-  const gustosP2=c.soloAhorroDirecto ? (prem*pf2) : (c.libreP2+prem*pf2);
-  const gustos=gustosPareja+gustosP1+gustosP2;
-  const dist=distribuirAhorro(ahorro);
-  const sobrante=_ultimoSobrante.slice();
-  return {base,comb,prem,ahorro,gastosDia,gustos,gustosPareja,gustosP1,gustosP2,dist,sobrante,nom:c.soloAhorroDirecto ? 0 : (c.nominaP1+c.nominaP2),entra:c.soloAhorroDirecto ? (base+comb) : (c.nominaP1+c.nominaP2+comb)};
-}
-function getDistribucionAdvertencia() {
-  const c = state.config;
-  const warnings = [];
-  const sharedGoals = metasCompartidas();
-  
-  if (c.estrategia !== 'cascada') {
-    const pctSum = sharedGoals.filter(m => (m.aportePct||0) > 0 && (c.estrategia === 'simultaneo' || m.tipo !== 'imprevistos')).reduce((s, m) => s + m.aportePct, 0);
-    if (pctSum < 100) {
-      const deudas = sharedGoals.filter(m => m.tipo === 'deuda' && m.saldo > 0);
-      const sugerencia = deudas.length > 0 
-        ? "Sugerencia: aumenta la asignación para amortizar tus deudas más rápido." 
-        : "Sugerencia: asigna el 100% para que no quede dinero libre sin rumbo.";
-      warnings.push(`<strong>Metas Comunes:</strong> Solo tienes distribuido el <strong>${pctSum}%</strong> del ahorro común. El ${100 - pctSum}% restante se reparte solo: primero completa el colchón de tu fondo de emergencia (si le falta) y el resto va a tu inversión abierta. ${sugerencia}`);
-    } else if (pctSum > 100) {
-      warnings.push(`<strong>Metas Comunes:</strong> Tus metas comunes asignadas suman el <strong>${pctSum}%</strong> (supera el 100%). Ajusta la distribución.`);
-    }
-    // Red de seguridad: metas que reciben $0 por no tener fijo ni %. En secuencial se exime la
-    // prioritaria (recibe el remanente automáticamente); la inversión abierta es sumidero del sobrante.
-    const prioSec = c.estrategia === 'secuencial' ? getMetaPrioritaria() : null;
-    const prioSecId = prioSec ? prioSec.id : null;
-    const sinAporte = sharedGoals.filter(m =>
-      m.tipo !== 'invertir' && !m.colocado && m.id !== prioSecId &&
-      !((m.aporteFijo || 0) > 0) && !((m.aportePct || 0) > 0)
-    );
-    if (sinAporte.length > 0) {
-      const nombres = sinAporte.map(m => `"${esc(m.nombre)}"`).join(', ');
-      const plural = sinAporte.length > 1;
-      warnings.push(`<strong>Metas sin aporte:</strong> ${nombres} ${plural ? 'no tienen' : 'no tiene'} aporte fijo ni %, así que ${plural ? 'recibirán' : 'recibirá'} $0 este mes${c.estrategia === 'secuencial' ? ' (salvo lo que sobre tras la meta prioritaria)' : ''}. Asígnale${plural ? 's' : ''} un fijo o un % en Metas → Ahorros.`);
-    }
-    // Sin meta de inversión abierta, una meta sin objetivo termina actuando como sumidero del excedente.
-    if (!inversionAbierta()) {
-      const sumidero = sharedGoals
-        .filter(m => m.tipo !== 'deuda' && !m.colocado && (m.objetivo || 0) <= 0)
-        .sort((a, b) => (a.prioridad || 0) - (b.prioridad || 0))[0];
-      if (sumidero) {
-        warnings.push(`<strong>Sin meta de inversión:</strong> el excedente del mes (lo que sobre tras llenar tus metas con objetivo) se acumulará en "${esc(sumidero.nombre)}", que no tiene objetivo y actúa como sumidero. Si prefieres un destino dedicado para el sobrante, crea una meta de inversión.`);
-      }
-    }
-  } else {
-    // Cascada: una meta no-inversión sin objetivo devuelve falta=Infinity y absorbe TODO el
-    // ahorro, dejando sin nada a las metas de menor prioridad. Avisar para que definan objetivo.
-    const sinObjetivo = sharedGoals.filter(m =>
-      m.tipo !== 'invertir' && m.tipo !== 'deuda' && !m.colocado && (m.objetivo || 0) <= 0
-    );
-    if (sinObjetivo.length > 0) {
-      const nombres = sinObjetivo.map(m => `"${esc(m.nombre)}"`).join(', ');
-      const plural = sinObjetivo.length > 1;
-      warnings.push(`<strong>Cascada sin meta definida:</strong> ${nombres} ${plural ? 'no tienen' : 'no tiene'} un objetivo de ahorro. En cascada, una meta sin objetivo absorbe <strong>todo</strong> el ahorro disponible (base y extras) y las metas de menor prioridad nunca reciben nada. Defínele un objetivo para que la cascada baje correctamente.`);
-    }
-  }
-
-  // Individual warnings
-  const perfil = c.perfil;
-  const indivGoals = metasIndividuales(perfil);
-  if (indivGoals.length > 0) {
-    const indivPctSum = indivGoals.reduce((s, m) => s + (m.aportePct||0), 0);
-    if (indivPctSum < 100) {
-      warnings.push(`<strong>Metas Individuales:</strong> Solo tienes distribuido el <strong>${indivPctSum}%</strong> de tu bolsillo. El ${100 - indivPctSum}% restante quedará libre en tu bolsillo personal.`);
-    } else if (indivPctSum > 100) {
-      warnings.push(`<strong>Metas Individuales:</strong> Tus metas individuales suman el <strong>${indivPctSum}%</strong> (supera el 100%). Ajusta los porcentajes.`);
-    }
-  }
-
-  // Sobrante cayendo en una inversión "ya colocada" por falta de otra activa.
-  const inv = inversionAbierta();
-  if (inv && inv.colocado) {
-    warnings.push(`<strong>Inversión ya colocada:</strong> "${esc(inv.nombre)}" está marcada como ya invertida, pero es tu único destino de inversión, así que el sobrante del mes entrará ahí. Verifica que ese instrumento admita nuevos aportes (un CDT, por ejemplo, no): si no, crea otra meta de inversión activa o mueve ese dinero a mano.`);
-  }
-
-  return warnings;
-}
-
-function drawLockedBudgetStack(entry) {
-  const c = Object.assign({}, state.config, entry.config || {});
-  const r = entry.reparto;
-  const isIndiv = c.modo === 'individual';
-  const total = r.entra;
-  if (!total) return '';
-  
-  const pGas = (r.gastosDia / total) * 100;
-  
-  if (isIndiv) {
-    const pL1 = (r.gustosP1 / total) * 100;
-    return `
-      <span class="st-seg" style="width:${pGas.toFixed(1)}%; background:#8a7f70;"></span>
-      <span class="st-seg st-seg-p1" style="width:${pL1.toFixed(1)}%"></span>
-      <span class="st-seg" style="flex:1; background:#3d8c64;"></span>
-    `;
-  } else {
-    const pPP = (r.gustosPareja / total) * 100;
-    const pL1 = (r.gustosP1 / total) * 100;
-    const pL2 = (r.gustosP2 / total) * 100;
-    return `
-      <span class="st-seg" style="width:${pGas.toFixed(1)}%; background:#8a7f70;"></span>
-      <span class="st-seg st-seg-pp" style="width:${pPP.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-p1" style="width:${pL1.toFixed(1)}%"></span>
-      <span class="st-seg st-seg-p2" style="width:${pL2.toFixed(1)}%"></span>
-      <span class="st-seg" style="flex:1; background:#3d8c64;"></span>
-    `;
-  }
-}
-
-function drawLockedBudgetLegend(entry) {
-  const c = Object.assign({}, state.config, entry.config || {});
-  const r = entry.reparto;
-  const isIndiv = c.modo === 'individual';
-  const total = r.entra;
-  if (!total) return '';
-  
-  const pGas = (r.gastosDia / total) * 100;
-  
-  if (isIndiv) {
-    const pL1 = (r.gustosP1 / total) * 100;
-    return `
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#8a7f70;"></span>Mis gastos fijos</div>
-        <b>${fmt(r.gastosDia)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Tu dinero personal</div>
-        <b>${fmt(r.gustosP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#3d8c64;"></span>Ahorro e inversión</div>
-        <b>${fmt(r.ahorro)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(100 - pGas - pL1)}%)</span></b>
-      </div>
-    `;
-  } else {
-    const pPP = (r.gustosPareja / total) * 100;
-    const pL1 = (r.gustosP1 / total) * 100;
-    const pL2 = (r.gustosP2 / total) * 100;
-    return `
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#8a7f70;"></span>Gastos del hogar</div>
-        <b>${fmt(r.gastosDia)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pGas)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-pp" style="width:7px; height:7px; border-radius:50%;"></span>Para los dos</div>
-        <b>${fmt(r.gustosPareja)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pPP)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p1" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP1}</div>
-        <b>${fmt(r.gustosP1)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL1)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot dot-p2" style="width:7px; height:7px; border-radius:50%;"></span>Personal de ${c.nombreP2}</div>
-        <b>${fmt(r.gustosP2)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(pL2)}%)</span></b>
-      </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; color:rgba(246,241,230,.85)">
-        <div style="display:flex; align-items:center; gap:6px;"><span class="dot" style="width:7px; height:7px; border-radius:50%; background:#3d8c64;"></span>Ahorro e inversión</div>
-        <b>${fmt(r.ahorro)} <span style="font-size:10px; color:rgba(246,241,230,.45); font-weight:normal; margin-left:3px;">(${Math.round(100 - pGas - pPP - pL1 - pL2)}%)</span></b>
-      </div>
-    `;
-  }
-}
-
-function drawActiveSavedDistributionList(entry) {
-  const unifiedDist = {};
-  
-  if (entry.reparto && entry.reparto.dist) {
-    Object.keys(entry.reparto.dist).forEach(id => {
-      const m = metaById(id);
-      if (m) {
-        unifiedDist[id] = { m, base: entry.reparto.dist[id], extra: 0 };
-      }
-    });
-  }
-  
-  especialesVisibles(entry.especiales).forEach(ep => {
-    const toSave = ep.monto * (1 - (ep.pctRetener || 0) / 100);
-    if (toSave > 0.5) {
-      if (ep.meta === 'distribuir') {
-        // Usa el snapshot real aplicado (ep.dist); recalcular aquí mentiría porque los saldos ya cambiaron.
-        const distEsp = ep.dist || distribuirAhorro(toSave, true);
-        state.metas.forEach(m => {
-          if (m.tipo !== 'personal' && !m.dueno && (distEsp[m.id] || 0) > 0.5) {
-            if (!unifiedDist[m.id]) unifiedDist[m.id] = { m, base: 0, extra: 0 };
-            unifiedDist[m.id].extra += distEsp[m.id];
-          }
-        });
-      } else if (ep.meta === 'distribuir-individual') {
-        const distEsp = ep.dist || distribuirAhorroIndividual(ep.duenoPriv || state.config.perfil, toSave, true).dist;
-        state.metas.forEach(m => {
-          if (m.dueno === ep.duenoPriv && (distEsp[m.id] || 0) > 0.5) {
-            if (!unifiedDist[m.id]) unifiedDist[m.id] = { m, base: 0, extra: 0 };
-            unifiedDist[m.id].extra += distEsp[m.id];
-          }
-        });
-        const allocatedSum = Object.values(distEsp).reduce((a, b) => a + b, 0);
-        const rem = Math.max(0, toSave - allocatedSum);
-        if (rem > 0.5) {
-          const pocket = metaPersonal(ep.duenoPriv || state.config.perfil);
-          if (pocket) {
-            if (!unifiedDist[pocket.id]) unifiedDist[pocket.id] = { m: pocket, base: 0, extra: 0 };
-            unifiedDist[pocket.id].extra += rem;
-          }
-        }
-      } else {
-        const md = metaById(ep.meta);
-        if (md) {
-          if (!unifiedDist[ep.meta]) unifiedDist[ep.meta] = { m: md, base: 0, extra: 0 };
-          unifiedDist[ep.meta].extra += toSave;
-        }
-      }
-    }
-  });
-
-  const list = Object.values(unifiedDist).filter(x => (x.base + x.extra) > 0.5);
-  if (list.length === 0) {
-    return `<div class="leg-row" style="font-size:12px;color:var(--gs);margin-top:6px">No hubo ahorros distribuidos este mes.</div>`;
-  }
-
-  const totalAh = Math.max(1, list.reduce((s, x) => s + x.base + x.extra, 0));
-  const mh = list.map(x => {
-    const tot = x.base + x.extra;
-    return `<div class="meta-lvl"><div class="lvl-row"><span class="lvl-name">${x.m.nombre} <span class="lvl-tag">· ${tipoLabel(x.m.tipo)}</span></span><span class="lvl-val num">${fmt(tot)}</span></div><div class="lvl-bar"><i style="width:${Math.max(3, Math.min(100, tot / totalAh * 100)).toFixed(1)}%"></i></div>${x.extra > 0 ? `<div style="font-size:11px;color:var(--gs);margin-top:3px;padding-left:2px">↳ incluye +${fmt(x.extra)} de ingresos adicionales</div>` : ''}</div>`;
-  }).join('');
-  return `<div class="meta-block"><div class="mt-title">A dónde fue el ahorro</div>${mh}</div>`;
-}
-
-function updatePlanningSummary() {
-  const c = state.config;
-  if ($('ahorroDirecto_input')) c.ahorroDirecto = parse($('ahorroDirecto_input').value);
-  if ($('nominaP1_input')) c.nominaP1 = parse($('nominaP1_input').value);
-  if ($('nominaP2_input')) c.nominaP2 = parse($('nominaP2_input').value);
-  if ($('gastos_input')) c.gastos = parse($('gastos_input').value);
-  if ($('planPareja_input')) c.planPareja = parse($('planPareja_input').value);
-  if ($('libreP1_input')) c.libreP1 = parse($('libreP1_input').value);
-  if ($('libreP2_input')) c.libreP2 = parse($('libreP2_input').value);
-  
-  save();
-  
-  const container = $('planningStackContainer');
-  if (container) {
-    container.innerHTML = drawFixedBudgetCard();
-  }
-  
-  const warnContainer = $('planningWarningsContainer');
-  if (warnContainer) {
-    warnContainer.innerHTML = drawWarningsChip();
-    const warnChip = $('btnWarnChip');
-    if (warnChip) {
-      warnChip.onclick = () => {
-        const panel = $('warnPanel');
-        if (panel) panel.classList.toggle('open');
-      };
-    }
-  }
-
-  const distPreviewContainer = $('planningDistPreviewContainer');
-  if (distPreviewContainer) {
-    distPreviewContainer.innerHTML = drawDistribucionPreview();
-  }
-
-  // Refrescar línea resumen de ingresos (visible cuando el form está colapsado)
-  const summaryEl = $('incomeSummary');
-  if (summaryEl) {
-    summaryEl.innerHTML = drawIncomeSummaryLine();
-  }
-
-  // Refrescar label + estado del CTA sticky
-  const r = computeReparto(0, 0);
-  const ahorro = r.ahorro || 0;
-  const btn = $('btnApplyPreSave');
-  if (btn) {
-    const canEdit = canEditShared();
-    if (!canEdit) {
-      btn.disabled = true;
-      btn.className = 'btn gold';
-      btn.textContent = 'Confirmar aporte del mes';
-    } else if (ahorro < 0) {
-      btn.disabled = false;
-      btn.className = 'btn danger';
-      btn.textContent = `Cubrir mes en rojo · ${fmt(-ahorro)}`;
-    } else if (ahorro === 0) {
-      btn.disabled = true;
-      btn.className = 'btn gold';
-      btn.textContent = 'Sin ahorro para distribuir';
-    } else {
-      btn.disabled = false;
-      btn.className = 'btn gold';
-      btn.textContent = `Confirmar aporte de ${fmt(ahorro)}`;
-    }
-  }
-}
-
-async function desaplicarMes(mes) {
-  const entry = state.log.find(e => e.mes === mes);
-  if (!entry) return;
-  if (!await customConfirm(`¿Estás seguro de reabrir el mes de ${fmtMes(mes)}? Esto revertirá los saldos de ahorro y pagos de deuda realizados al aplicar este mes.`, true)) return;
-  
-  if (entry.reparto && entry.reparto.dist) {
-    Object.keys(entry.reparto.dist).forEach(id => {
-      const m = metaById(id);
-      if (m) {
-        if (m.tipo === 'deuda') {
-          m.saldo += entry.reparto.dist[id];
-        } else {
-          m.saldo = Math.max(0, m.saldo - entry.reparto.dist[id]);
-        }
-      }
-    });
-  }
-  if (entry.cobertura) revertirCobertura(entry.cobertura);
-  
-  if (entry.especiales) {
-    entry.especiales.forEach(ep => {
-      const pctR = ep.pctRetener || 0;
-      const toSave = ep.monto * (1 - pctR / 100);
-      if (toSave > 0.5) {
-        if (ep.meta === 'distribuir') {
-          // Usa el reparto guardado al aplicar; el fallback (re-ejecutar) solo cubre entries antiguos sin snapshot.
-          const dist = ep.dist || distribuirAhorro(toSave, true);
-          state.metas.forEach(m => {
-            if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
-              if (m.tipo === 'deuda') {
-                m.saldo += dist[m.id];
-              } else {
-                m.saldo = Math.max(0, m.saldo - dist[m.id]);
-              }
-            }
-          });
-        } else if (ep.meta === 'distribuir-individual') {
-          const profile = ep.duenoPriv || state.config.perfil;
-          const dist = ep.dist || distribuirAhorroIndividual(profile, toSave, true).dist;
-          state.metas.forEach(m => {
-            if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
-              if (m.tipo === 'deuda') {
-                m.saldo += dist[m.id];
-              } else {
-                m.saldo = Math.max(0, m.saldo - dist[m.id]);
-              }
-            }
-          });
-          const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
-          const rem = Math.max(0, toSave - allocatedSum);
-          if (rem > 0.5) {
-            const pocket = metaPersonal(profile);
-            if (pocket) pocket.saldo = Math.max(0, pocket.saldo - rem);
-          }
-        } else {
-          const m = metaById(ep.meta);
-          if (m) {
-            if (m.tipo === 'deuda') {
-              m.saldo += toSave;
-            } else {
-              m.saldo = Math.max(0, m.saldo - toSave);
-            }
-          }
-        }
-      }
-
-      const perfil = state.config.perfil;
-      const per = metaPersonal(perfil);
-      const toPocket = ep.monto - toSave;
-      if (toPocket > 0.5 && per) {
-        let share = 0;
-        if (ep.persona === perfil) share = toPocket;
-        else if (ep.persona === 'ambos') share = toPocket * 0.5;
-        if (share > 0) {
-          per.saldo = Math.max(0, per.saldo - share);
-        }
-      }
-    });
-  }
-  
-  const perfil = state.config.perfil;
-  const per = metaPersonal(perfil);
-  if (per) {
-    const ya = per.aportes.find(x => x.mes === mes);
-    if (ya) {
-      const { dist, rem } = distribuirAhorroIndividual(perfil, ya.monto);
-      Object.keys(dist).forEach(id => {
-        const m = metaById(id);
-        if (m) {
-          if (m.tipo === 'deuda') {
-            m.saldo += dist[id];
-          } else {
-            m.saldo = Math.max(0, m.saldo - dist[id]);
-          }
-        }
-      });
-      per.saldo = Math.max(0, per.saldo - rem);
-      per.aportes = per.aportes.filter(x => x.mes !== mes);
-    }
-  }
-  
-  if (entry.especiales) {
-    // Borra por id (preciso); cae a nombre solo en entries antiguos sin ingresoId.
-    const ids = entry.especiales.map(ep => ep.ingresoId).filter(Boolean);
-    const names = entry.especiales.filter(ep => !ep.ingresoId).map(ep => ep.nombre);
-    state.ingresos = state.ingresos.filter(ing => ing.sinAsignar || ing.mes !== mes || (!ids.includes(ing.id) && !names.includes(ing.nombre)));
-  }
-  
-  state.log = state.log.filter(e => e.mes !== mes);
-  save();
-  renderMiMes();
-  flash('Mes reabierto. Presupuesto liberado para edición ✓');
-}
-
-/* =========================================================
-   COBERTURA DE DÉFICIT (mes en rojo)
-   ========================================================= */
-function deficitFuentes(){
-  const perfil = state.config.perfil;
-  // Fuentes: cualquier meta/bolsillo con saldo, propia o compartida.
-  // Privacidad: se excluyen las del otro perfil.
-  const fuentes = state.metas.filter(m =>
-    m.tipo !== 'deuda' && (!m.dueno || m.dueno === perfil) && m.saldo > 0.5
-  );
-  const deudas = state.metas.filter(m => m.tipo === 'deuda' && (!m.dueno || m.dueno === perfil));
-  return { fuentes, deudas };
-}
-function deficitFuenteNombre(m){
-  if (m.tipo === 'personal') {
-    const c = state.config;
-    return c.modo === 'pareja' ? 'Individual ' + (m.dueno === 'p2' ? c.nombreP2 : c.nombreP1) : 'Individual';
-  }
-  if (m.dueno) return m.nombre + ' (individual)';
-  return m.nombre;
-}
-
-// cob: [{fuente:'meta'|'deuda', metaId, monto, gastoId?}]
-// meta: resta saldo y deja gasto trazable. Deuda: crece (origen de fondos).
-function aplicarCobertura(cob, mes){
-  cob.forEach(item => {
-    const m = metaById(item.metaId);
-    if (!m) return;
-    if (item.fuente === 'deuda') {
-      m.saldo += item.monto;
-    } else {
-      m.saldo = Math.max(0, m.saldo - item.monto);
-      const gId = uid();
-      state.gastos.push({id:gId, meta:m.id, fecha:today(), monto:item.monto, nota: 'Cobertura de déficit ' + fmtMes(mes), creadoPor: state.config.perfil});
-      item.gastoId = gId;
-    }
-  });
-  return cob;
-}
-
-function revertirCobertura(cob){
-  (cob || []).forEach(item => {
-    const m = metaById(item.metaId);
-    if (!m) return;
-    if (item.fuente === 'deuda') {
-      m.saldo = Math.max(0, m.saldo - item.monto);
-    } else {
-      m.saldo += item.monto;
-    }
-    if (item.gastoId) state.gastos = state.gastos.filter(g => g.id !== item.gastoId);
-  });
-}
-
-// Modal: devuelve Promise<cob|null>. null = canceló (el mes no se aplica).
-function openAsistenteDeficit(faltante){
-  return new Promise(resolve => {
-    const f = deficitFuentes();
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.id = 'modalDeficit';
-    overlay.style.display = 'flex';
-    const deudaOpts = f.deudas.map(d => `<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
-    const fuentesHtml = f.fuentes.length
-      ? f.fuentes.map(m => `<div>
-          <label class="lbl">${esc(deficitFuenteNombre(m))} <span style="font-weight:400;color:var(--gs)">(disponible ${fmt(m.saldo)})</span></label>
-          <input class="sf money df-src" data-metaid="${m.id}" inputmode="numeric" placeholder="$0">
-        </div>`).join('')
-      : `<div class="hint" style="font-size:12px;margin:0;">No tienes metas ni bolsillo con saldo. Cubre el faltante con una tarjeta o deuda.</div>`;
-    overlay.innerHTML = `
-      <div class="modal-card animate-in" style="max-width:400px;">
-        <h3 class="modal-title" style="font-size:20px;">Mes en rojo</h3>
-        <div class="hint" style="font-size:12.5px;line-height:1.4;margin:0;">Este mes faltaron <b style="color:#e06c75">${fmt(faltante)}</b>. Elige de qué meta, bolsillo o deuda salió la plata en la vida real y el mes quedará en el historial como cubierto.</div>
-        <div style="display:flex;flex-direction:column;gap:10px;max-height:42vh;overflow-y:auto;margin-top:4px;">
-          ${fuentesHtml}
-        </div>
-        <div>
-          <label class="lbl">Tarjeta / deuda</label>
-          <select class="sf" id="dfDeudaSel">
-            <option value="">No usar deuda</option>
-            ${deudaOpts}
-            <option value="__nueva__">Nueva deuda (tarjeta de crédito)</option>
-          </select>
-          <input class="sf money" id="dfDeuda" inputmode="numeric" placeholder="$0" style="margin-top:8px;display:none;">
-        </div>
-        <div id="dfResumen" class="hint" style="margin:4px 0 0;font-size:12px;"></div>
-        <div style="display:flex;gap:10px;margin-top:8px;">
-          <button class="btn ghost sm" id="dfCancel" style="flex:1;margin:0;">Cancelar</button>
-          <button class="btn sm" id="dfOk" style="flex:1;margin:0;" disabled>Cubrir y aplicar</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const q = sel => overlay.querySelector(sel);
-
-    // Mapa metaId -> saldo disponible, para validar cada fila.
-    const srcSaldo = {}; f.fuentes.forEach(m => srcSaldo[m.id] = m.saldo);
-
-    // Formateo de moneda idéntico al de aeMonto.
-    overlay.querySelectorAll('input.money').forEach(inp => {
-      inp.addEventListener('input', e => {
-        const d = e.target.value.replace(/\D/g,'');
-        e.target.value = d ? '$' + Number(d).toLocaleString('es-CO') : '';
-        recalc();
-      });
-      inp.addEventListener('focus', e => {
-        const val = parse(e.target.value);
-        e.target.value = val ? String(val) : '';
-        e.target.select();
-      });
-      inp.addEventListener('blur', e => {
-        const d = e.target.value.replace(/\D/g,'');
-        e.target.value = d ? '$' + Number(d).toLocaleString('es-CO') : '';
-      });
-    });
-
-    q('#dfDeudaSel').onchange = () => {
-      q('#dfDeuda').style.display = q('#dfDeudaSel').value ? 'block' : 'none';
-      recalc();
-    };
-
-    function vals(){
-      let total = 0, exceso = null;
-      overlay.querySelectorAll('.df-src').forEach(inp => {
-        const v = parse(inp.value);
-        const id = inp.dataset.metaid;
-        if (v > srcSaldo[id] + 0.5 && !exceso) {
-          const m = metaById(id);
-          exceso = m ? deficitFuenteNombre(m) : 'Una fuente';
-        }
-        total += v;
-      });
-      const vDeu = q('#dfDeudaSel').value ? parse(q('#dfDeuda').value) : 0;
-      return { total, vDeu, exceso };
-    }
-    function recalc(){
-      const { total, vDeu, exceso } = vals();
-      const falta = faltante - (total + vDeu);
-      let msg = '', ok = false;
-      if (exceso) msg = `"${exceso}" no tiene tanto.`;
-      else if (Math.abs(falta) <= 0.5) { msg = 'Cobertura completa ✓'; ok = true; }
-      else if (falta > 0) msg = 'Faltan ' + fmt(falta) + ' por cubrir.';
-      else msg = 'Te pasaste por ' + fmt(-falta) + '. Ajusta los montos.';
-      q('#dfResumen').textContent = msg;
-      q('#dfOk').disabled = !ok;
-    }
-
-    q('#dfCancel').onclick = () => { overlay.remove(); resolve(null); };
-    q('#dfOk').onclick = () => {
-      const cob = [];
-      overlay.querySelectorAll('.df-src').forEach(inp => {
-        const v = parse(inp.value);
-        if (v > 0.5) cob.push({fuente:'meta', metaId:inp.dataset.metaid, monto:v});
-      });
-      const vDeu = q('#dfDeudaSel').value ? parse(q('#dfDeuda').value) : 0;
-      if (vDeu > 0.5) {
-        let dId = q('#dfDeudaSel').value;
-        if (dId === '__nueva__') {
-          dId = uid();
-          state.metas.push({id:dId, nombre:'Tarjeta de crédito', tipo:'deuda', saldo:0, objetivo:0, aporteFijo:0, aportePct:0, pagoMinimo:0, prioridad:state.metas.length, creado:today(), aportes:[]});
-        }
-        cob.push({fuente:'deuda', metaId:dId, monto:vDeu});
-      }
-      overlay.remove();
-      resolve(cob);
-    };
-    recalc();
-  });
-}
-
 function openAsistenteIngresoExtra(preFill = null) {
   const c = state.config;
 
@@ -3238,8 +2340,8 @@ function openAsistenteIngresoExtra(preFill = null) {
   overlay.id = 'modalAsistente';
   overlay.style.display = 'flex';
 
-  const comp = metasCompartidas().filter(m => !m.colocado && m.tipo !== 'deuda');
-  const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado && m.tipo !== 'deuda');
+  const comp = metasCompartidas().filter(m => !m.colocado);
+  const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
   const optionsHtml = og('Metas comunes', comp) + og('Mis metas (privadas)', indiv);
 
@@ -3277,9 +2379,6 @@ function openAsistenteIngresoExtra(preFill = null) {
         </select>
       </div>
 
-      <!-- hidden placeholder inputs to keep backward compatibility with form selectors -->
-      <input type="range" id="aePctRange" value="0" style="display:none;">
-      <select id="aePersona" style="display:none;"><option value="ambos">Ambos</option></select>
       <div id="aePreviewContainer" style="display:none; margin-top:10px; background:rgba(246,241,230,0.04); border:1px dashed var(--line); border-radius:12px; padding:10px 12px; font-size:12.5px; flex-direction:column; gap:6px;"></div>
 
       <div style="display:flex; gap:10px; margin-top:8px;">
@@ -3305,70 +2404,31 @@ function openAsistenteIngresoExtra(preFill = null) {
     e.target.value = d ? '$' + Number(d).toLocaleString('es-CO') : '';
   });
 
-  const range = overlay.querySelector('#aePctRange');
-  const label = overlay.querySelector('#aePctLabel');
-  if (range && label) {
-    range.oninput = () => {
-      label.innerText = range.value + '%';
-    };
-  }
-
-  const aeToggleRet = overlay.querySelector('#aeToggleRet');
-  if (aeToggleRet) {
-    const retBox = overlay.querySelector('#aeRetBox');
-    aeToggleRet.onclick = () => {
-      const open = retBox.style.display === 'none';
-      retBox.style.display = open ? 'block' : 'none';
-      if (!open) { range.value = 0; label.innerText = '0%'; }
-      updateModalPreview();
-    };
-  }
-
   overlay.querySelector('#btnCancelAE').onclick = () => {
     overlay.remove();
   };
 
   const aeMontoInput = overlay.querySelector('#aeMonto');
-  const aePctRange = overlay.querySelector('#aePctRange');
   const aeMetaDestino = overlay.querySelector('#aeMetaDestino');
-  const aePersona = overlay.querySelector('#aePersona');
 
   const updateModalPreview = () => {
     const monto = parse(aeMontoInput.value);
-    const pctRetener = parseInt(aePctRange.value) || 0;
     const metaDestino = aeMetaDestino.value;
     const previewDiv = overlay.querySelector('#aePreviewContainer');
-    
+
     if (!previewDiv) return;
-    
+
     if (monto <= 0) {
       previewDiv.style.display = 'none';
       previewDiv.innerHTML = '';
       return;
     }
-    
-    const toPocket = monto * (pctRetener / 100);
-    const toSave = monto - toPocket;
-    
+
+    const toSave = monto;
+
     let html = '';
-    
-    // 1. Resumen de retención si aplica
-    if (toPocket > 0.5) {
-      const persona = aePersona.value;
-      let persLabel = '';
-      if (persona === 'ambos') persLabel = 'para Ambos (50/50)';
-      else if (persona === 'p1') persLabel = `para ${c.nombreP1}`;
-      else if (persona === 'p2') persLabel = `para ${c.nombreP2}`;
-      
-      html += `
-        <div style="display:flex; justify-content:space-between; align-items:center; color:var(--gs); margin-bottom:4px; font-size:12px; border-bottom: 1px solid rgba(246,241,230,.08); padding-bottom:4px;">
-          <span>Retenido para bolsillo ${persLabel}:</span>
-          <span style="font-weight:700; color:var(--gold);">${fmt(toPocket)} (${pctRetener}%)</span>
-        </div>
-      `;
-    }
-    
-    // 2. Destino de los Ahorros
+
+    // Destino de los Ahorros
     if (toSave > 0.5) {
       if (metaDestino === 'distribuir') {
         const oldSobrante = _ultimoSobrante;
@@ -3482,9 +2542,8 @@ function openAsistenteIngresoExtra(preFill = null) {
       } else {
         const m = metaById(metaDestino);
         if (m) {
-          const isDeuda = m.tipo === 'deuda';
           const currentSaldo = m.saldo;
-          
+
           let sobra = 0;
           let aplicado = toSave;
           if (m.objetivo > 0) {
@@ -3493,17 +2552,11 @@ function openAsistenteIngresoExtra(preFill = null) {
               sobra = toSave - falta;
               aplicado = falta;
             }
-          } else if (isDeuda) {
-            const falta = Math.max(0, currentSaldo);
-            if (toSave > falta) {
-              sobra = toSave - falta;
-              aplicado = falta;
-            }
           }
-          
-          const newSaldo = isDeuda ? Math.max(0, currentSaldo - aplicado) : (currentSaldo + aplicado);
-          const isFilled = (isDeuda && newSaldo <= 0.5) || (!isDeuda && m.objetivo > 0 && newSaldo >= m.objetivo);
-          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">${isDeuda ? '¡Saldada! 🎉' : '¡Llenada! 🎉'}</span>` : '';
+
+          const newSaldo = currentSaldo + aplicado;
+          const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
+          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada! 🎉</span>` : '';
           
           html += `
             <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Aporte directo a la meta:</div>
@@ -3525,19 +2578,8 @@ function openAsistenteIngresoExtra(preFill = null) {
                 <span>Objetivo: ${fmtK(m.objetivo)}</span>
               </div>
             `;
-          } else if (isDeuda && currentSaldo > 0) {
-            const pct = Math.min(100, (aplicado / currentSaldo) * 100);
-            html += `
-              <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
-                <i style="display:block; height:100%; border-radius:4px; background:${m.color || '#e06c75'}; width:${pct.toFixed(1)}%;"></i>
-              </div>
-              <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--gs); margin-top:3px;">
-                <span>Saldando: ${pct.toFixed(1)}%</span>
-                <span>Restante: ${fmtK(newSaldo)}</span>
-              </div>
-            `;
           } else {
-            // Sin objetivo ni saldo de deuda (p.ej. inversión abierta)
+            // Sin objetivo (p.ej. inversión abierta)
             html += `
               <div class="lvl-bar" style="height:7px; background:rgba(28, 58, 44, 0.08); border-radius:4px; overflow:hidden;">
                 <i style="display:block; height:100%; border-radius:4px; background:${m.color || 'var(--gb)'}; width:100%;"></i>
@@ -3565,9 +2607,7 @@ function openAsistenteIngresoExtra(preFill = null) {
   };
 
   aeMontoInput.addEventListener('input', updateModalPreview);
-  aePctRange.addEventListener('input', updateModalPreview);
   aeMetaDestino.addEventListener('change', updateModalPreview);
-  aePersona.addEventListener('change', updateModalPreview);
 
   if (preFill) {
     updateModalPreview();
@@ -3576,8 +2616,6 @@ function openAsistenteIngresoExtra(preFill = null) {
   overlay.querySelector('#btnApplyAE').onclick = () => {
     const concepto = overlay.querySelector('#aeConcepto').value.trim() || 'Ingreso adicional';
     const monto = parse(overlay.querySelector('#aeMonto').value);
-    const pctRetener = parseInt(range.value);
-    const persona = overlay.querySelector('#aePersona').value;
     const meta = overlay.querySelector('#aeMetaDestino').value;
 
     if (monto <= 0) {
@@ -3592,8 +2630,6 @@ function openAsistenteIngresoExtra(preFill = null) {
       nombre: concepto,
       monto: monto,
       meta: meta,
-      persona: esPriv ? c.perfil : persona,
-      pctRetener: esPriv ? 0 : pctRetener,
       privado: esPriv || undefined,
       duenoPriv: esPriv ? c.perfil : undefined,
       fecha: today(),
@@ -3608,10 +2644,8 @@ function openAsistenteIngresoExtra(preFill = null) {
 function aplicarIngresoInmediatoActivo(ep) {
   const c = state.config;
   const mes = ep.mes;
-  
-  const pctR = ep.pctRetener || 0;
-  const toSave = ep.monto * (1 - pctR / 100);
-  
+  const toSave = ep.monto;
+
   let distInmediato = null;
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
@@ -3619,11 +2653,7 @@ function aplicarIngresoInmediatoActivo(ep) {
       distInmediato = Object.assign({}, dist);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
-          if (m.tipo === 'deuda') {
-            m.saldo = Math.max(0, m.saldo - dist[m.id]);
-          } else {
-            m.saldo += dist[m.id];
-          }
+          m.saldo += dist[m.id];
         }
       });
     } else if (ep.meta === 'distribuir-individual') {
@@ -3632,16 +2662,11 @@ function aplicarIngresoInmediatoActivo(ep) {
       distInmediato = Object.assign({}, dist);
       state.metas.forEach(m => {
         if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
-          if (m.tipo === 'deuda') {
-            m.saldo = Math.max(0, m.saldo - dist[m.id]);
-          } else {
-            m.saldo += dist[m.id];
-          }
+          m.saldo += dist[m.id];
         }
       });
       if (rem > 0.5) {
-        const pocket = metaPersonal(profile);
-        if (pocket) pocket.saldo += rem;
+        registrarSobrantePendiente(rem, 'reparto individual');
       }
     } else {
       const m = metaById(ep.meta);
@@ -3655,61 +2680,19 @@ function aplicarIngresoInmediatoActivo(ep) {
     }
   }
 
-  const pocketP1 = metaPersonal('p1');
-  const pocketP2 = metaPersonal('p2');
-  const toPocket = ep.monto - toSave;
-  if (toPocket > 0.5) {
-    if (ep.persona === 'p1' && pocketP1) pocketP1.saldo += toPocket;
-    else if (ep.persona === 'p2' && pocketP2) pocketP2.saldo += toPocket;
-    else if (ep.persona === 'ambos') {
-      if (pocketP1) pocketP1.saldo += toPocket * 0.5;
-      if (pocketP2) pocketP2.saldo += toPocket * 0.5;
-    }
-  }
-
-  const newIngreso = {
+  state.ingresos.unshift({
     id: ep.id,
     mes: mes,
     nombre: ep.nombre,
     monto: ep.monto,
     meta: ep.meta,
-    persona: ep.persona || 'ambos',
-    pctRetener: pctR,
     dist: distInmediato,
     fecha: ep.fecha || today(),
     creadoPor: ep.creadoPor || c.perfil,
     privado: ep.privado,
     duenoPriv: ep.duenoPriv,
     aplicadoDirecto: ep.aplicadoDirecto
-  };
-  
-  state.ingresos.unshift(newIngreso);
-
-  const entry = state.log.find(e => e.mes === mes);
-  if (entry) {
-    if (!entry.especiales) entry.especiales = [];
-    entry.especiales.push({
-      id: ep.id,
-      nombre: ep.nombre,
-      monto: ep.monto,
-      meta: ep.meta,
-      persona: ep.persona || 'ambos',
-      pctRetener: pctR,
-      dist: distInmediato,
-      metaNombre: ep.meta === 'distribuir' ? 'Reparto' : (ep.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')),
-      aplicadoInmediato: true,
-      fecha: newIngreso.fecha,
-      privado: ep.privado,
-      duenoPriv: ep.duenoPriv,
-      aplicadoDirecto: ep.aplicadoDirecto
-    });
-  }
-
-  const perBug03 = metaPersonal(c.perfil);
-  if (perBug03) {
-    if (!Array.isArray(perBug03.inmediatosAplicados)) perBug03.inmediatosAplicados = [];
-    if (!perBug03.inmediatosAplicados.includes(ep.id)) perBug03.inmediatosAplicados.push(ep.id);
-  }
+  });
 
   save();
   rerender();
@@ -3725,14 +2708,8 @@ function aplicarIngresoInmediatoActivo(ep) {
           registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
         } else {
           const reg = state.ingresos.find(x => x.id === ep.id);
-          if (reg && res.tipo !== 'pendiente') {
+          if (reg) {
             reg.sobranteRes = Object.assign({ monto: ep._sobra }, res);
-          }
-          if (entry) {
-            const regE = entry.especiales.find(x => x.id === ep.id);
-            if (regE && res.tipo !== 'pendiente') {
-              regE.sobranteRes = Object.assign({ monto: ep._sobra }, res);
-            }
           }
         }
       }
@@ -3746,19 +2723,14 @@ function revertirAporte(id) {
   const ep = state.ingresos.find(x => x.id === id);
   if (!ep) return;
   
-  const pctR = ep.pctRetener || 0;
-  const toSave = ep.monto * (1 - pctR / 100);
-  
+  const toSave = ep.monto;
+
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
       const dist = ep.dist || distribuirAhorro(toSave, true);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
-          if (m.tipo === 'deuda') {
-            m.saldo += dist[m.id];
-          } else {
-            m.saldo = Math.max(0, m.saldo - dist[m.id]);
-          }
+          m.saldo = Math.max(0, m.saldo - dist[m.id]);
         }
       });
     } else if (ep.meta === 'distribuir-individual') {
@@ -3766,19 +2738,9 @@ function revertirAporte(id) {
       const dist = ep.dist || distribuirAhorroIndividual(profile, toSave, true).dist;
       state.metas.forEach(m => {
         if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
-          if (m.tipo === 'deuda') {
-            m.saldo += dist[m.id];
-          } else {
-            m.saldo = Math.max(0, m.saldo - dist[m.id]);
-          }
+          m.saldo = Math.max(0, m.saldo - dist[m.id]);
         }
       });
-      const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
-      const rem = Math.max(0, toSave - allocatedSum);
-      if (rem > 0.5) {
-        const pocket = metaPersonal(profile);
-        if (pocket) pocket.saldo = Math.max(0, pocket.saldo - rem);
-      }
     } else {
       const m = metaById(ep.meta);
       if (m) revertirAporteDirecto(m, ep.aplicadoDirecto != null ? ep.aplicadoDirecto : toSave);
@@ -3791,34 +2753,13 @@ function revertirAporte(id) {
     if (sr.tipo === 'motor' && sr.dist) {
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (sr.dist[m.id] || 0) > 0.5) {
-          if (m.tipo === 'deuda') m.saldo += sr.dist[m.id]; else m.saldo = Math.max(0, m.saldo - sr.dist[m.id]);
+          m.saldo = Math.max(0, m.saldo - sr.dist[m.id]);
         }
       });
     } else if (sr.tipo === 'meta') {
       const m2 = metaById(sr.metaId);
       if (m2) revertirAporteDirecto(m2, sr.monto);
-    } else if (sr.tipo === 'bolsillo') {
-      const per = metaPersonal(sr.perfil);
-      if (per) per.saldo = Math.max(0, per.saldo - sr.monto);
     }
-  }
-
-  const pocketP1 = metaPersonal('p1');
-  const pocketP2 = metaPersonal('p2');
-  const toPocket = ep.monto - toSave;
-  if (toPocket > 0.5) {
-    if (ep.persona === 'p1' && pocketP1) pocketP1.saldo = Math.max(0, pocketP1.saldo - toPocket);
-    else if (ep.persona === 'p2' && pocketP2) pocketP2.saldo = Math.max(0, pocketP2.saldo - toPocket);
-    else if (ep.persona === 'ambos') {
-      if (pocketP1) pocketP1.saldo = Math.max(0, pocketP1.saldo - toPocket * 0.5);
-      if (pocketP2) pocketP2.saldo = Math.max(0, pocketP2.saldo - toPocket * 0.5);
-    }
-  }
-
-  // Compatibilidad hacia atrás: eliminar de entry.especiales
-  const entry = state.log.find(e => e.mes === ep.mes);
-  if (entry && entry.especiales) {
-    entry.especiales = entry.especiales.filter(x => x.id !== id);
   }
 
   state.ingresos = state.ingresos.filter(ing => ing.id !== id);
@@ -3844,11 +2785,7 @@ function revertirGasto(id) {
         if (x.mov === 'transfer-out') {
           mx.saldo += x.monto;
         } else if (x.mov === 'transfer-in') {
-          if (mx.tipo === 'deuda') {
-            mx.saldo += x.monto;
-          } else {
-            mx.saldo = Math.max(0, mx.saldo - x.monto);
-          }
+          mx.saldo = Math.max(0, mx.saldo - x.monto);
         }
       }
     });
@@ -3890,27 +2827,8 @@ function getMonthlyDistributionData(mes) {
   const monthlyIngresos = state.ingresos.filter(ing => ing.mes === mes);
   
   monthlyIngresos.forEach(ing => {
-    const pctR = ing.pctRetener || 0;
-    const toPocket = ing.monto * (pctR / 100);
-    const toSave = ing.monto - toPocket;
-    
-    if (toPocket > 0.5) {
-      if (ing.persona === 'p1' || ing.persona === 'ambos') {
-        const pId = 'pocket_p1';
-        if (!distMap[pId]) {
-          distMap[pId] = { name: c.modo === 'pareja' ? `Individual ${c.nombreP1}` : 'Individual', amount: 0, color: '#c8a2c8', isPocket: true };
-        }
-        distMap[pId].amount += toPocket * (ing.persona === 'ambos' ? 0.5 : 1);
-      }
-      if (c.modo === 'pareja' && (ing.persona === 'p2' || ing.persona === 'ambos')) {
-        const pId = 'pocket_p2';
-        if (!distMap[pId]) {
-          distMap[pId] = { name: `Individual ${c.nombreP2}`, amount: 0, color: '#e5a3ad', isPocket: true };
-        }
-        distMap[pId].amount += toPocket * (ing.persona === 'ambos' ? 0.5 : 1);
-      }
-    }
-    
+    const toSave = ing.monto;
+
     if (toSave > 0.5) {
       if (ing.meta === 'distribuir') {
         const dist = ing.dist || distribuirAhorro(toSave, true);
@@ -3934,20 +2852,6 @@ function getMonthlyDistributionData(mes) {
             distMap[mId].amount += dist[mId];
           }
         });
-        const allocatedSum = Object.values(dist).reduce((a, b) => a + b, 0);
-        const rem = Math.max(0, toSave - allocatedSum);
-        if (rem > 0.5) {
-          const pId = (ing.duenoPriv || c.perfil) === 'p2' ? 'pocket_p2' : 'pocket_p1';
-          if (!distMap[pId]) {
-            distMap[pId] = {
-              name: c.modo === 'pareja' ? `Individual ${(ing.duenoPriv || c.perfil) === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Individual',
-              amount: 0,
-              color: (ing.duenoPriv || c.perfil) === 'p2' ? '#e5a3ad' : '#c8a2c8',
-              isPocket: true
-            };
-          }
-          distMap[pId].amount += rem;
-        }
       } else {
         const m = metaById(ing.meta);
         if (m) {
@@ -3982,34 +2886,10 @@ function getMonthlyDistributionData(mes) {
           }
           distMap[mId].amount += sr.monto;
         }
-      } else if (sr.tipo === 'bolsillo') {
-        const pId = sr.perfil === 'p2' ? 'pocket_p2' : 'pocket_p1';
-        if (!distMap[pId]) {
-          distMap[pId] = {
-            name: c.modo === 'pareja' ? `Individual ${sr.perfil === 'p2' ? c.nombreP2 : c.nombreP1}` : 'Individual',
-            amount: 0,
-            color: sr.perfil === 'p2' ? '#e5a3ad' : '#c8a2c8',
-            isPocket: true
-          };
-        }
-        distMap[pId].amount += sr.monto;
       }
     }
   });
 
-  const entry = state.log.find(e => e.mes === mes);
-  if (entry && entry.aplicado && entry.reparto && entry.reparto.dist) {
-    Object.keys(entry.reparto.dist).forEach(mId => {
-      const m = metaById(mId);
-      if (m) {
-        if (!distMap[mId]) {
-          distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
-        }
-        distMap[mId].amount += entry.reparto.dist[mId];
-      }
-    });
-  }
-  
   return Object.values(distMap).filter(x => x.amount > 0.5);
 }
 
@@ -4122,7 +3002,7 @@ function drawTransactionTimeline(transactions, canEdit) {
       sign = '+';
       color = 'var(--green)';
       const metaNom = t.meta === 'distribuir' ? 'Reparto' : (t.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
-      destLabel = t.pctRetener > 0 ? `${t.pctRetener}% al bolsillo · ${metaNom}` : metaNom;
+      destLabel = metaNom;
     } else if (t.type === 'gasto') {
       sign = '-';
       color = '#e06c75';
@@ -4198,7 +3078,6 @@ function renderMiMes(){
     fecha: ing.fecha || `${mes}-01`,
     creadoPor: ing.creadoPor,
     meta: ing.meta,
-    pctRetener: ing.pctRetener
   }));
 
   const listGastos = state.gastos.filter(g => {
@@ -4357,195 +3236,6 @@ function renderMiMes(){
   }
 }
 
-function positionMimesCta() {
-  const cta = $('mimesCta');
-  const nav = $('mainnav');
-  if (!cta || !nav) return;
-  cta.style.bottom = nav.offsetHeight + 'px';
-}
-
-async function aplicar(){
-  if (!canEditShared()) { flash('No tienes permisos para aportar'); return; }
-  const mes=selectedMonth;if(!mes){flash('Elige el mes');return;}
-  const ex=state.log.find(e=>e.mes===mes);
-  if(ex&&ex.aplicado){if(!await customConfirm('Ese mes ya se aplicó. ¿Recalcular y aplicar de nuevo? No se duplica: primero se deshace lo anterior.', false))return;}
-  const r=computeReparto(0,0),c=state.config;
-  let cobertura=null;
-  if(r.ahorro < 0){
-    cobertura = await openAsistenteDeficit(-r.ahorro);
-    if(!cobertura){flash('Mes sin aplicar: el déficit quedó sin cubrir');return;}
-  }
-  // Revertir distribución previa antes de re-aplicar para evitar doble conteo
-  if(ex && ex.aplicado && ex.reparto && ex.reparto.dist){
-    state.metas.forEach(m=>{
-      if(m.tipo!=='personal'){
-        const prev=ex.reparto.dist[m.id]||0;
-        if(prev!==0){
-          if(m.tipo==='deuda') m.saldo+=prev; else m.saldo=Math.max(0,m.saldo-prev);
-        }
-      }
-    });
-  }
-  if(ex && ex.aplicado && ex.cobertura) revertirCobertura(ex.cobertura);
-  state.metas.forEach(m=>{
-    if(m.tipo!=='personal'){
-      if(m.tipo==='deuda'){
-        m.saldo=Math.max(0,m.saldo-(r.dist[m.id]||0));
-      } else {
-        m.saldo=Math.max(0,m.saldo+(r.dist[m.id]||0));
-      }
-    }
-  });
-  if(cobertura) aplicarCobertura(cobertura, mes);
-  const p1Extra = especialesPendientes.filter(ep => ep.persona === 'p1').reduce((s, ep) => s + ep.monto, 0) + especialesPendientes.filter(ep => ep.persona === 'ambos').reduce((s, ep) => s + ep.monto * 0.5, 0);
-  const p2Extra = especialesPendientes.filter(ep => ep.persona === 'p2').reduce((s, ep) => s + ep.monto, 0) + especialesPendientes.filter(ep => ep.persona === 'ambos').reduce((s, ep) => s + ep.monto * 0.5, 0);
-  
-  const prev = state.log.find(e => e.mes === mes);
-  const yaInmediatos = prev ? (prev.especiales || []).filter(e => e.aplicadoInmediato) : [];
-  
-  const p1Inmediato = yaInmediatos.filter(e => e.persona === 'p1').reduce((s, e) => s + e.monto, 0) + yaInmediatos.filter(e => e.persona === 'ambos').reduce((s, e) => s + e.monto * 0.5, 0);
-  const p2Inmediato = yaInmediatos.filter(e => e.persona === 'p2').reduce((s, e) => s + e.monto, 0) + yaInmediatos.filter(e => e.persona === 'ambos').reduce((s, e) => s + e.monto * 0.5, 0);
-
-  // Aplica cada especial y captura el id del ingreso y el snapshot de la distribución,
-  // para poder revertir EXACTAMENTE lo aplicado (sin re-ejecutar distribuirAhorro al deshacer).
-  const espApplyMeta = especialesPendientes.map(ep=>{
-    const pctR=ep.pctRetener||0;
-    const toSave=ep.monto*(1-pctR/100);
-    const ingId=uid();
-    state.ingresos.unshift({id:ingId,mes:ep.mes,nombre:ep.nombre,monto:ep.monto,meta:ep.meta,persona:ep.persona||'ambos',pctRetener:pctR});
-    let distSnap=null;
-    if(toSave>0.5){
-      if(ep.meta==='distribuir'){
-        const dist=distribuirAhorro(toSave, true);
-        distSnap=Object.assign({},dist);
-        state.metas.forEach(m=>{
-          if(m.tipo!=='personal'&&!m.dueno&&(dist[m.id]||0)>0.5) {
-            if(m.tipo==='deuda'){
-              m.saldo=Math.max(0,m.saldo-dist[m.id]);
-            } else {
-              m.saldo+=dist[m.id];
-            }
-          }
-        });
-      }else{
-        const m=metaById(ep.meta);
-        if(m) {
-          if(m.tipo==='deuda'){
-            m.saldo=Math.max(0,m.saldo-toSave);
-          } else {
-            m.saldo+=toSave;
-          }
-        }
-      }
-    }
-    return {ingId, distSnap};
-  });
-  const espSnapshot = especialesPendientes.map((ep, i) => ({
-    nombre: ep.nombre,
-    monto: ep.monto,
-    meta: ep.meta,
-    persona: ep.persona||'ambos',
-    pctRetener: ep.pctRetener||0,
-    ingresoId: espApplyMeta[i].ingId,
-    dist: espApplyMeta[i].distSnap,
-    metaNombre: ep.meta === 'distribuir' ? 'Reparto' : (ep.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'))
-  }));
-  
-  const perfil=c.perfil,per=metaPersonal(perfil);
-  const retenPersonal=especialesPendientes.reduce((s,ep)=>{
-    const ret=ep.monto*(ep.pctRetener||0)/100;
-    if(ep.persona===perfil)return s+ret;
-    if(ep.persona==='ambos')return s+ret*0.5;
-    return s;
-  },0);
-  
-  especialesPendientes=[];
-  
-  // En mes con déficit el "dinero libre" no existió; solo aplica la retención de extras.
-  // Trade-off contable: En un ingreso "ambos" con retención, cada dispositivo solo aplica su 50%
-  // localmente en su propio bolsillo (Option 2).
-  const aporte=(r.ahorro>=0?libreOf(perfil):0)+retenPersonal;
-  const ya=per.aportes.find(x=>x.mes===mes);
-  let delta = aporte;
-  if(ya){
-    delta = aporte - ya.monto;
-    ya.monto = aporte;
-  }else{
-    per.aportes.push({mes,monto:aporte});
-  }
-  
-  if (delta !== 0 && per) {
-    const { dist, rem } = distribuirAhorroIndividual(perfil, delta);
-    Object.keys(dist).forEach(id => {
-      const m = metaById(id);
-      if (m) {
-        if(m.tipo==='deuda'){
-          m.saldo=Math.max(0,m.saldo-dist[id]);
-        } else {
-          m.saldo+=dist[id];
-        }
-      }
-    });
-    per.saldo = Math.max(0, per.saldo + rem);
-  }
-
-  const snapshot = {
-    mes,
-    p1: p1Extra + p1Inmediato,
-    p2: p2Extra + p2Inmediato,
-    aplicado: true,
-    config: {
-      modo: c.modo,
-      soloAhorroDirecto: c.soloAhorroDirecto,
-      nombreP1: c.nombreP1,
-      nombreP2: c.nombreP2,
-      nominaP1: c.nominaP1,
-      nominaP2: c.nominaP2,
-      gastos: c.gastos,
-      planPareja: c.planPareja,
-      libreP1: c.libreP1,
-      libreP2: c.libreP2,
-      pctPremio: c.pctPremio,
-      modoPremio: c.modoPremio,
-      pctPremioP1: c.pctPremioP1,
-      estrategia: c.estrategia
-    },
-    reparto: {
-      base: r.base,
-      comb: r.comb,
-      prem: r.prem,
-      ahorro: r.ahorro,
-      gastosDia: r.gastosDia,
-      gustos: r.gustos,
-      gustosPareja: r.gustosPareja,
-      gustosP1: r.gustosP1,
-      gustosP2: r.gustosP2,
-      nom: r.nom,
-      entra: r.entra,
-      dist: Object.assign({}, r.dist)
-    },
-    especiales: yaInmediatos.concat(espSnapshot),
-    cobertura: cobertura || null
-  };
-  state.log=state.log.filter(e=>e.mes!==mes);state.log.push(snapshot);
-  state.log.sort((x,y)=>y.mes.localeCompare(x.mes));
-  save();
-  renderMiMes();
-  let sobranteTxt='';
-  if(r.sobrante && r.sobrante.length){
-    const total=r.sobrante.reduce((s,p)=>s+p.monto,0);
-    if(total>0.5){
-      const dest=r.sobrante.map(p=>p.nombre).join(' y ');
-      sobranteTxt=` · remanente ${fmt(total)} → ${dest}`;
-    }
-  }
-  if(cobertura){flash('Mes en rojo cubierto ✓ · déficit de '+fmt(-r.ahorro)+' registrado');}
-  else{flash('Aplicado · tu bolsillo +'+fmt(aporte)+' ✓'+sobranteTxt);}
-}
-
-/* =========================================================
-   FLUJO (presupuesto editable)
-   ========================================================= */
 function renderAprender(){
   const c = state.config;
 
