@@ -263,6 +263,28 @@ function lanzarConfeti(){
   document.body.appendChild(cont);
   setTimeout(()=>cont.remove(), 2800);
 }
+/* ===== Hitos perpetuos de inversión (Fase 3c) =====
+   La inversión nunca se "completa": celebra crecimiento. Escalera 1·2·5 ×10^n. */
+function hitosInversionLadder(){
+  const L=[]; for(let e=6;e<=12;e++){ for(const mu of [1,2,5]){ L.push(mu*Math.pow(10,e)); } } return L;
+}
+function hitoInversion(saldo){
+  let alcanzado=null, siguiente=null;
+  for(const v of hitosInversionLadder()){ if(saldo>=v) alcanzado=v; else { siguiente=v; break; } }
+  return {alcanzado, siguiente};
+}
+// Flash (no confeti) al cruzar un hito nuevo. Inicializa silencioso (sin celebrar retroactivo).
+function checkHitosInversion(){
+  let cambio=false;
+  state.metas.forEach(m=>{
+    if(m.tipo!=='invertir') return;
+    const {alcanzado}=hitoInversion(m.saldo); const cur=alcanzado||0;
+    if(m.hitoMax===undefined){ m.hitoMax=cur; cambio=true; return; }   // init sin flash
+    if(cur>m.hitoMax){ flash(`Nuevo hito en "${esc(m.nombre)}": ${fmtK(alcanzado)} invertidos`); m.hitoMax=cur; cambio=true; }
+  });
+  if(cambio) saveLocalOnly();
+}
+
 /* Consumir un sueño cumplido → archivar a Historial de Logros (con deshacer). */
 function consumirSueno(m, skipConfirm=false){
   (async()=>{
@@ -1209,7 +1231,7 @@ function go(t){
   RENDER[t]();
   $('s'+t).scrollTop=0;
 }
-function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;checkCelebraciones();}
+function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;checkCelebraciones();checkHitosInversion();}
 let _rerenderTimer;
 function scheduleRerender(){clearTimeout(_rerenderTimer);_rerenderTimer=setTimeout(rerender,60);}
 $('mainnav').addEventListener('click', e => {
@@ -1927,7 +1949,11 @@ function renderMetas(){
       const generico = `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
       let sub;
       if(m.tipo==='invertir'){
-        sub = `↗ ${fmt(m.saldo)} · sin tope`;
+        const {alcanzado, siguiente} = hitoInversion(m.saldo);
+        const h = !alcanzado
+          ? `primer hito ${fmtK(siguiente)}`
+          : `hito ${fmtK(alcanzado)}${siguiente?` → ${fmtK(siguiente)}`:''}`;
+        sub = `↗ ${fmt(m.saldo)} · ${h}`;
       } else if(m.tipo==='imprevistos'){
         // Estado terminal propio: "Protegido" (revolvente, no se "completa"). Unidad: meses de respaldo si hay gasto de referencia.
         const lleno = obj>0 && m.saldo>=obj;
