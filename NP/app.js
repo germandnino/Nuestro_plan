@@ -1003,7 +1003,7 @@ function openRetiroDinero(){
     <div class="modal-card animate-in" style="max-width:400px;">
       <h3 class="modal-title" style="font-size:20px;">Retirar dinero</h3>
       <div><label class="lbl">¿De dónde sale?</label><select class="sf" id="rtOrigen">${origOpts}</select></div>
-      <div><label class="lbl">Monto</label><div style="display:flex;gap:8px;align-items:stretch;"><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0" style="flex:1;margin:0;"><button class="btn ghost sm" id="rtTodo" type="button" style="flex:0 0 auto;width:auto;margin:0;padding:0 16px;">Todo</button></div></div>
+      <div><label class="lbl">Monto</label><div style="display:flex;gap:8px;align-items:stretch;width:100%;box-sizing:border-box;"><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0" style="flex:1 1 auto;min-width:0;width:auto;margin:0;"><button class="btn ghost sm" id="rtTodo" type="button" style="flex:0 0 auto;width:auto;margin:0;padding:0 16px;">Todo</button></div></div>
       <div><label class="lbl">¿A dónde va?</label><select class="sf" id="rtDestino"></select></div>
       <div><label class="lbl">Nota (opcional)</label><input class="sf" id="rtNota" placeholder="Ej: compra del viaje, imprevisto"></div>
       <div style="display:flex; gap:10px; margin-top:8px;">
