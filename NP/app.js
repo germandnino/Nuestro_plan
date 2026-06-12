@@ -26,7 +26,7 @@ function metasEjemplo(){
   return [];
 }
 
-let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
+let state={config:{},metas:[],log:[],ingresos:[],gastos:[],logros:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
@@ -402,6 +402,7 @@ function normalize(){
   state.log=Array.isArray(state.log)?state.log:[];
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
   state.gastos=Array.isArray(state.gastos)?state.gastos:[];
+  state.logros=Array.isArray(state.logros)?state.logros:[]; // sueños cumplidos archivados (Historial de Logros)
 
   // Re-normaliza aportePct a "% dentro del bucket" (suma 100 por bucket × scope).
   // Aquí state.metas ya es array y sus aportePct/objetivo son numéricos.
@@ -439,7 +440,7 @@ async function syncLoadShared(planId) {
 }
 
 async function syncSaveShared(planId, stateToSave) {
-  const { config, metas, log, ingresos, gastos } = stateToSave;
+  const { config, metas, log, ingresos, gastos, logros } = stateToSave;
   const configSinPerfil = { ...config };
   delete configSinPerfil.perfil;
   const metasSync = metas.filter(m => m.tipo !== 'personal');
@@ -451,6 +452,7 @@ async function syncSaveShared(planId, stateToSave) {
       log,
       ingresos,
       gastos,
+      logros: logros || [],
       lastEditBy: stateToSave.config.perfil || 'p1',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -505,6 +507,7 @@ function syncSubscribe(planId) {
       state.log = remote.log || [];
       state.ingresos = remote.ingresos || [];
       state.gastos = remote.gastos || [];
+      state.logros = remote.logros || [];
       normalize();
       saveLocalOnly();
       scheduleRerender();
@@ -4120,7 +4123,7 @@ function attachPlan(){
         await auth.signOut();
         localStorage.removeItem('planId');
         localStorage.removeItem('isInvited');
-        state = { config: Object.assign({}, CFG_DEF), metas: metasEjemplo(), log: [], ingresos: [], gastos: [] };
+        state = { config: Object.assign({}, CFG_DEF), metas: metasEjemplo(), log: [], ingresos: [], gastos: [], logros: [] };
         save();
         startOnboarding();
         flash('Sesión cerrada ✓');
@@ -4160,7 +4163,7 @@ function attachPlan(){
       flash('Saldos e historial reiniciados ✓');
     };
   }
-  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
+  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
   if (bInst) {
