@@ -710,55 +710,24 @@ function colocarSobrante(rem, res){
           (2) prioritaria primero si es secuencial (recibe el remanente tras fijos),
           (3) cada meta toma su % del resto (post-fijos y post-prioritaria),
           (4) lo que sobre -> inversión abierta. */
-function distribuirAhorro(monto, esEspecial = false){
-  const c=state.config,res={};
-  _ultimoSobrante=[];
+/* Reparto de dos niveles del ahorro compartido:
+   nivel 1: el monto se parte entre los buckets presentes según pesosBuckets();
+   nivel 2: dentro de cada bucket, repartirEnBucket() por aportePct;
+   sobrante de todos los buckets → colocarSobrante (inversión abierta) → lo que reste, rem.
+   Devuelve { dist, rem }. `rem` lo registra el caller como sobrante "sin asignar". */
+function distribuirAhorro(monto){
+  const res={}; _ultimoSobrante=[];
   state.metas.forEach(m=>res[m.id]=0);
-  if(monto<=0)return res;
-  let rem=monto;
-  // Excluir metas marcadas "ya colocado": no admiten reparto nuevo (p.ej. CDT ya constituido).
-  // Orden por prioridad = el mismo que ve el usuario en pantalla; así, con %>100, las últimas
-  // metas (menor prioridad) son las que reciben menos, de forma predecible, no según orden de array.
-  const comp=metasCompartidas().filter(m=>!m.colocado).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-
-  if(c.estrategia==='cascada'){
-    const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-    for(let i=0;i<sorted.length;i++){
-      const m=sorted[i];
-      const falta=getMetaFalta(m, res);
-      if(falta === Infinity) {
-        res[m.id]+=rem;rem=0;
-      } else {
-        const add=Math.min(rem,falta);res[m.id]+=add;rem-=add;
-      }
-      if(rem<=0.5)break;
-    }
-    if(rem>0.5){colocarSobrante(rem,res);}
-    return res;
-  }
-
-  // (1) prioritaria primero si es secuencial
-  if(c.estrategia==='secuencial'){
-    const prio=getMetaPrioritaria();
-    if(prio){
-      const falta=getMetaFalta(prio, res);
-      const add=Math.min(rem,falta);res[prio.id]+=add;rem-=add;
-    }
-    if(rem<=0.5)return res;
-  }
-
-  // (2) cada meta toma su % del resto (base fija = remanente)
-  const baseRem=rem;
-  comp.filter(m=>(m.aportePct||0)>0&&(c.estrategia==='simultaneo'||m.tipo!=='imprevistos')).forEach(m=>{
-    let add=baseRem*m.aportePct/100;
-    const falta=getMetaFalta(m, res);
-    add=Math.min(add,falta,rem);res[m.id]+=add;rem-=add;
+  if(monto<=0)return { dist:res, rem:0 };
+  const pesos=pesosBuckets(null);
+  let rem=0;
+  BUCKETS.forEach(tipo=>{
+    const w=pesos[tipo]||0;
+    if(w<=0)return;
+    rem+=repartirEnBucket(tipo,null,monto*w/100,res);
   });
-  if(rem<=0.5)return res;
-
-  // (3) sobrante -> colocar en fondo de emergencias / inversión
-  colocarSobrante(rem,res);
-  return res;
+  const r=colocarSobrante(rem,res);
+  return { dist:res, rem:r.rem };
 }
 
 function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
