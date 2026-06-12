@@ -2104,9 +2104,7 @@ function renderMetaForm(editing){
 
   let fields='';
   if(m.tipo==='imprevistos'){
-    const prio = getMetaPrioritaria();
-    const isPrio = prio && prio.id === m.id;
-    const showAporte = state.config.estrategia === 'simultaneo' || !isPrio;
+    const showAporte = true; // % por bucket: el aporte siempre se puede definir
     const sug = colchonSugerido();
     const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
@@ -2115,9 +2113,7 @@ function renderMetaForm(editing){
       ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
       <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
   }else{
-    const prio = getMetaPrioritaria();
-    const isPrio = prio && prio.id === m.id;
-    const showAporte = state.config.estrategia !== 'secuencial' || !isPrio;
+    const showAporte = true; // % por bucket: el aporte siempre se puede definir
     fields=`<div class="card">
       <label class="lbl">Meta (opcional)</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
