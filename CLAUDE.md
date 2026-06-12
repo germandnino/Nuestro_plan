@@ -14,7 +14,7 @@
 
 - La pareja define un **flujo de caja mensual fijo** (nóminas, gastos del hogar, plan en pareja, dinero libre de cada uno).
 - El sobrante = **ahorro mensual**, que un **motor de distribución** reparte entre **metas** según una **estrategia**.
-- Mensualmente se hace un **Cierre de Mes** (registrar ingresos extra → simular cascada → aplicar).
+- Todo ingreso al plan es un **movimiento** ("Añadir dinero" → motor o meta directa); no hay cierre de mes obligatorio.
 - Roles en pareja: **Editor** (lee/escribe) y **Lector** (solo ve).
 - Monetización planeada: freemium, pago único Pro ~$9.99 (ver `plan_monetizacion.md`).
 

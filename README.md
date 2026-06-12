@@ -9,28 +9,31 @@ El proyecto está diseñado con un enfoque premium, móvil y offline-first, perm
 ## 🚀 Características Principales
 
 ### 🏠 Inicio (Dashboard)
-*   **Métricas Clave:** Visualización del total acumulado global, la etapa financiera actual y proyecciones de cumplimiento de metas.
-*   **Distribución de Ahorros:** Gráfico de dona interactivo en SVG que muestra la proporción del capital asignado a cada meta activa.
-*   **Presupuesto Fijo Mensual:** Gráfico apilado horizontal que desglosa la nómina regular conjunta en gastos del hogar, presupuesto en pareja, dinero libre individual y el ahorro base restante.
-*   **Evolución del Ahorro:** Gráfico histórico de barras para comparar el ahorro en los últimos 6 meses.
+*   **Patrimonio:** total de ahorros e inversiones con desglose Compartido / Individual (lo individual de la pareja nunca se muestra).
+*   **Accesos rápidos:** Añadir Dinero, Ver Mi Mes y Nueva Meta.
+*   **Consejo del día:** tarjeta educativa con rotación diaria según el estado del plan.
+
+### 💸 Movimientos Unificados
+*   **Añadir dinero:** un solo gesto para aportar al plan — el motor lo reparte entre metas, o va directo a una meta concreta (con manejo de sobrante si la meta se llena).
+*   **Retirar dinero:** movimiento espejo — saca dinero del plan (gasto real) o transfiere entre metas, con reversión atómica.
+*   **Privacidad en pareja:** los movimientos hacia metas individuales propias son invisibles para la pareja.
 
 ### 🎯 Gestión de Metas
-*   **Tipologías de Metas:** Clasificación en Meta de Imprevistos (emergencias), Sueños (con objetivos y plazos), Inversión (abierta a largo plazo) y Bolsillos Personales (para cada integrante).
-*   **Priorización Dinámica:** Reordenamiento mediante *Drag & Drop* (arrastrar y soltar) que define la prioridad de reparto de fondos en cascada.
-*   **Control de Gastos de Metas:** Posibilidad de registrar salidas de dinero asociadas directamente a cada meta.
+*   **Tipologías de Metas:** Imprevistos (emergencias), Sueños (con objetivos y plazos) e Inversión (abierta a largo plazo). Cada integrante puede tener además **metas individuales privadas**.
+*   **Priorización Dinámica:** Reordenamiento mediante *Drag & Drop* que define la prioridad de reparto.
+*   **% editable inline:** el porcentaje de cada meta se edita en su tarjeta y el sistema rebalancea automáticamente para mantener la suma en 100%.
+*   **KPI y evolución:** estadísticas (promedio, mejor mes, racha, tasa de ahorro) y gráfico de los últimos 6 meses, calculados desde los movimientos.
 
-### 💰 Aportar al Plan (Cierre de Mes)
-*   **Ingresos Extra y Especiales:** Registro de comisiones y bonos especiales, permitiendo distribuirlos según el plan general o asignarlos a metas específicas.
-*   **Cascada de Distribución:** Simulación y visualización interactiva del flujo del dinero en tiempo real antes de aplicar el cierre.
-*   **Control de Déficit:** Alerta y bloqueo de cierre en caso de que los egresos superen a los ingresos mensuales.
-*   **Liberación de Fondos:** Reasignación automática de aportes asignados a metas ya completadas hacia el ahorro libre.
+### 📅 Mi Mes
+*   **Línea de tiempo de movimientos** del mes con navegación entre meses, métricas (entradas/salidas/neto) y barras de distribución del ahorro realizado.
+*   **Sobrantes pendientes:** dinero sin asignar queda visible con un CTA para decidir su destino después.
 
 ### ⚙️ Estrategias de Ahorro y Configuración
 *   **Estrategias Configurables:** 
     1.  *Prioritaria Primero (Secuencial):* El 100% del ahorro va a la meta más prioritaria e incompleta.
-    2.  *Simultáneo:* Distribución paralela cubriendo aportes fijos y repartiendo el sobrante por porcentajes.
+    2.  *Simultáneo:* Distribución paralela proporcional a los porcentajes de cada meta.
     3.  *En Cascada:* Asignación secuencial de arriba hacia abajo llenando metas una a una según la lista.
-*   **Gestión de Perfiles:** Configuración personalizada para Persona 1 y Persona 2, permitiendo blindar la visibilidad de los bolsillos individuales en cada dispositivo.
+*   **Gestión de Perfiles y Roles:** perfil por dispositivo (Persona 1 / Persona 2) con metas individuales privadas; roles Editor/Lector para la pareja conectada.
 *   **Importación / Exportación:** Respaldo completo de la información mediante archivos JSON.
 
 ---

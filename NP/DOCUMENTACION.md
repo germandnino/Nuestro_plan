@@ -1,6 +1,6 @@
 # Documentación de la Web-App: Nuestro Plan
 
-"Nuestro Plan" es una aplicación web (Single Page Application) diseñada específicamente para ayudar a parejas a gestionar sus finanzas personales, organizar sus ingresos, distribuir gastos y ahorrar para metas conjuntas e individuales de manera inteligente y automatizada.
+"Nuestro Plan" es una aplicación web (Single Page Application) diseñada específicamente para ayudar a parejas a gestionar sus finanzas personales, organizar sus ingresos y ahorrar para metas conjuntas e individuales de manera inteligente y automatizada.
 
 ## 1. Arquitectura y Stack Tecnológico
 
@@ -8,111 +8,115 @@
 *   **Base de Datos y Sincronización:** Integra **Firebase (Auth y Firestore)** para permitir la autenticación de usuarios y la sincronización en tiempo real de los datos del plan compartido.
 *   **Diseño (UI/UX):** Enfoque móvil (Mobile-first) con un diseño oscuro premium. Utiliza tipografías de Google Fonts: `Fraunces` para títulos y números destacados, y `Hanken Grotesk` para textos generales. Cuenta con microanimaciones SVG, gráficos interactivos integrados y transiciones suaves.
 *   **Almacenamiento y Persistencia:** Utiliza `localStorage` para almacenar la información de forma persistente localmente (offline-first). Al estar conectado, se sincroniza bidireccionalmente en tiempo real con Firestore. Posee una capa de abstracción para entornos específicos que soporta `window.storage` si está disponible. Cuenta con un banner de alerta para avisar al usuario si el acceso al almacenamiento local está restringido.
+*   **Versionado:** La constante `APP_VERSION` (`app.js`, formato `1.0.x`) se muestra en el footer de Ajustes y se incrementa junto con la versión de caché del Service Worker (`CACHE` en `service-worker.js`) en cada release, para detectar versiones cacheadas obsoletas.
 *   **Gestión de Estado:** El estado completo de la aplicación se centraliza en un único objeto global `state` que contiene:
-    *   `config`: Opciones de presupuesto, nombres, perfil activo, estrategia y configuraciones de distribución.
-    *   `metas`: Un listado unificado de metas financieras (compartidas y personales).
-    *   `log`: Registro de meses cerrados y aplicados con sus correspondientes aportes.
-    *   `ingresos`: Historial de ingresos especiales (variables).
-    *   `gastos`: Registro detallado de salidas y gastos imputados a metas específicas.
+    *   `config`: Presupuesto, nombres, perfil activo del dispositivo, estrategia de distribución y modo (`pareja` | `individual`).
+    *   `metas`: Listado unificado de metas. Tipos: `imprevistos` | `invertir` | `sueno`. Las metas con `dueno` (`p1`|`p2`) son **individuales privadas** de ese perfil.
+    *   `log`: Registro legacy de meses cerrados (el "cierre de mes" ya no existe como flujo; queda vacío en planes nuevos).
+    *   `ingresos`: **Movimientos** de entrada de dinero al plan (modelo unificado).
+    *   `gastos`: Salidas y transferencias (`mov`: `salida` | `transfer-out`/`transfer-in` enlazadas por `transferId`).
+
+> **Conceptos eliminados del modelo (v2):** las metas tipo `deuda`, los bolsillos personales (metas tipo `personal` y la colección Firestore `bolsillos/{uid}`), el aporte fijo en pesos (`aporteFijo`, solo existe `aportePct`), la retención % de ingresos a bolsillo, el "aporte de siempre" y el cierre/confirmación de mes como paso obligatorio.
 
 ---
 
-## 2. Secciones Principales (Experiencia de Usuario)
+## 2. Modelo de Movimientos Unificados
 
-La navegación de la aplicación se divide en **cinco vistas principales** accesibles desde la barra de navegación inferior:
+Todo ingreso de dinero al plan es un **movimiento**, registrado desde una sola acción ("Añadir dinero"):
 
-### 🏠 Inicio (Dashboard)
-Es la vista general y de monitoreo del plan financiero. Incorpora componentes interactivos avanzados para visualizar el estado del ahorro de un vistazo:
-*   **Métricas Clave:** El **total acumulado** global, la **etapa financiera** actual ("Llenando [meta prioritaria]" o "Ahorrando e invirtiendo") y una proyección estimativa de en cuántos meses se cumplirán los objetivos.
-*   **Distribución de Ahorros (Gráfico de Dona):** Un gráfico circular SVG dinámico que muestra en tiempo real la proporción del capital actual asignado a cada meta activa (sueños, emergencias, inversiones y el bolsillo personal activo), con leyendas de color detalladas y porcentajes.
-*   **Presupuesto Fijo Mensual (Barra Apilada):** Gráfico apilado horizontal que desglosa cómo se divide la nómina regular mensual conjunta entre gastos del hogar, plan en pareja, presupuestos libres de cada uno y el ahorro base restante.
-*   **Evolución del Ahorro (Gráfico Histórico):** Gráfico de barras SVG animado que muestra la trayectoria de ahorro mensual de los últimos 6 meses cerrados (se activa al registrar el primer cierre de mes).
+1.  **¿Cuánto?** — monto del movimiento.
+2.  **¿A dónde va?** — tres destinos posibles:
+    *   `distribuir` — el **motor** lo reparte entre las metas compartidas según la estrategia activa.
+    *   `distribuir-individual` — el motor lo reparte entre las **metas individuales** del perfil activo (privado).
+    *   Una **meta concreta** — aporte directo. Si el aporte llena la meta, un modal pregunta qué hacer con el **sobrante**: repartir con el motor, enviarlo a otra meta, o dejarlo **pendiente**.
+
+*   **Sobrantes pendientes:** viven en `state.ingresos` con flag `sinAsignar:true`; un chip en Mi Mes permite asignarlos después.
+*   **Retirar dinero** es el movimiento espejo: origen (cualquier meta con saldo) → monto (con botón "Todo") → destino (fuera del plan = gasto real, u otra meta = transferencia). Las transferencias crean el par `transfer-out`/`transfer-in` enlazado por `transferId` y se revierten atómicamente.
+*   **Privacidad:** los movimientos hacia metas individuales propias son **invisibles para la pareja** (flags `privado`/`duenoPriv` + filtros `especialesVisibles()` en timeline, estadísticas y gráficos). Una transferencia desde terreno compartido a terreno personal es visible solo como monto ("Transferencia a lo personal"), sin revelar la meta destino.
+*   **Reversibilidad:** todo movimiento se puede eliminar desde la lista del mes; los saldos se revierten exactamente (incluyendo la decisión de sobrante que hubiera generado).
+
+---
+
+## 3. Secciones Principales (Experiencia de Usuario)
+
+Navegación inferior con cuatro vistas + botón central de acciones:
+
+### 🏠 Inicio
+*   **Patrimonio:** tarjeta "Nuestros ahorros e inversiones" con el total compartido y el desglose Compartido / Individual (lo individual del otro nunca se muestra). Sin metas creadas, muestra un **empty state guía** con CTA "Crear primera meta".
+*   **Accesos rápidos:** Añadir Dinero, Ver Mi Mes, Nueva Meta.
+*   **Consejo del día:** tarjeta educativa con rotación diaria según el estado del plan.
 
 ### 🎯 Metas
-El área de gestión de objetivos de ahorro.
-*   **Metas Compartidas y Personales:** Clasificación de los ahorros en 4 tipologías:
-    *   *Imprevistos:* Fondo de emergencia prioritario.
-    *   *Sueños:* Metas con valores objetivos y/o fecha límite (viajes, compras, etc.).
-    *   *Inversión:* Metas abiertas para canalizar ahorros de largo plazo.
-    *   *Personal:* Bolsillo libre blindado para el perfil del teléfono activo.
-*   **Reordenamiento por Arrastre (Drag and Drop):** Permite ordenar las metas directamente en la interfaz manteniendo presionado y arrastrando el control ☰. Este orden de la lista define de manera directa las prioridades para el reparto secuencial o en cascada.
-*   **Ficha de Detalle:** Acceso a la modificación del saldo, visualización de progreso y registro de salidas (gastos deducidos directamente de la meta con fecha, monto y descripción).
+Dos subpestañas:
+*   **Distribución:** dona SVG de proporción del capital por meta, KPI (ahorro mensual promedio con tendencia, total ahorrado, mejor mes, tasa de ahorro, constancia/racha) y gráfico de evolución de los últimos 6 meses. Todo se calcula **desde los movimientos registrados** (`mesesConDatosUI`/`ahorroMesUI`), no requiere cerrar meses.
+*   **Ahorros:** lista de metas compartidas (reordenables por **drag & drop** del control ☰ — el orden define la prioridad para secuencial/cascada) y metas individuales privadas. Cada tarjeta muestra el **% editable inline** (según estrategia); al editar, el sistema **rebalancea automáticamente para mantener la suma en 100%** y resalta con un flash la meta compensada. Al crear/editar una meta cuyo % haga superar el 100%, se ofrece reajustar las demás proporcionalmente.
 
-### 💰 Aportar al Plan (Cierre de Mes)
-Herramienta operativa para el cierre presupuestario mensual.
-*   **Ingresos Extra y Especiales:** Permite registrar los ingresos variables o comisiones de cada miembro del mes en curso, además de añadir ingresos especiales únicos (como primas o bonos) asignándolos directamente a una meta específica o distribuyéndolos según el plan.
-*   **Cascada de Distribución:** Visualizador en tiempo real del flujo financiero antes de ser aplicado. Muestra gráficamente cómo se descontará la nómina fija y los extras para cubrir los gastos fijos del hogar, el dinero libre de la pareja, y el ahorro sobrante distribuido.
-*   **Manejo de Ahorro Negativo (Déficit):** Si las salidas fijas y variables mensuales superan los ingresos mensuales combinados, la app despliega una advertencia indicando que el ahorro mensual es negativo y **deshabilita** el botón de "Aportar" para evitar desbalances en el saldo.
-*   **Meta Llena y Aportes Liberados:** Si una meta ya ha alcanzado o superado su valor objetivo, el visualizador notifica que sus aportes han sido automáticamente liberados y reasignados al ahorro libre del mes.
+### 📅 Mi Mes
+Pantalla de movimientos del mes seleccionado (navegación ‹ › entre meses — esto reemplaza al historial dedicado):
+*   **Métricas:** entradas, salidas y neto del mes.
+*   **Distribución del Ahorro Realizado:** barras horizontales doradas (una por meta, con monto y %).
+*   **Movimientos del mes:** línea de tiempo con cada ingreso/salida/transferencia, autor (en pareja) y botón de eliminación con reversión de saldos. Filtrada por privacidad.
+*   **Sobrantes sin asignar:** chip con CTA para asignarlos.
 
-### 📊 Flujo
-Configuración base del flujo de caja mensual regular (presupuesto estático):
-*   Nóminas netas de Persona 1 y Persona 2.
-*   Total unificado de gastos del hogar.
-*   Presupuesto asignado para gustos en pareja (citas, entretenimiento).
-*   Dinero libre regular de cada integrante.
+### 💡 Aprender
+Catálogo educativo interactivo con las plataformas reales del mercado colombiano de ahorro e inversión, y recomendaciones por horizonte de la meta (corto/flexible/largo plazo).
 
-### ⚙️ Ajustes (Configuración)
-Panel de control estratégico de la aplicación:
-*   **Estrategia de Ahorro:** Selección de la lógica de distribución (`secuencial`, `simultaneo` o `cascada`).
-*   **Reparto de Ingresos Extras:** Configuración del porcentaje de los ingresos variables del mes que se asigna como premio libre ("bolsillo") y el método para dividirlo.
-*   **Perfil Local:** Define a quién pertenece el dispositivo actual (Persona 1 o Persona 2) para blindar la visibilidad y edición del bolsillo libre individual correspondiente.
-*   **Sincronizar y Conectar Pareja:** 
-    *   **Identificación del Usuario:** Muestra una tarjeta de perfil con el nombre, correo y el proveedor de autenticación (Google o Correo).
-    *   **Estado de Conexión de Pareja:** Muestra en tiempo real el correo de la pareja conectada o el estado de espera.
-    *   **Gestión de Roles (Editor vs. Lector):** Permite al creador/dueño del plan configurar el permiso de su pareja:
-        *   *Editor:* Permiso de lectura y escritura completo sobre el presupuesto, metas compartidas y aportes.
-        *   *Lector:* Permiso de solo lectura. El usuario puede ver todo el progreso, pero no puede editar metas, registrar salidas de dinero, modificar presupuestos ni aplicar cierres de mes. El bolsillo personal del lector permanece editable localmente.
-*   **Nombres y Respaldo:** Personalización de los nombres y exportación/importación del estado de la aplicación mediante un bloque de texto JSON (deshabilitado en modo Lector).
+### ⚙️ Ajustes
+*   **Estrategia de Ahorro:** `secuencial`, `simultaneo` o `cascada`.
+*   **Perfil Local:** a quién pertenece el dispositivo (P1/P2) — controla la visibilidad de las metas individuales.
+*   **Sincronizar y Conectar Pareja:** tarjeta de perfil (nombre, correo, proveedor), estado de conexión de la pareja, y **gestión de roles**:
+    *   *Editor:* lectura y escritura completa.
+    *   *Lector:* solo lectura del plan compartido.
+*   **Nombres, Respaldo JSON** (exportar/importar el estado completo), reiniciar saldos, borrar datos y versión visible de la app.
+
+### ➕ Botón central de acciones
+Action sheet con 4 acciones: **Añadir dinero** · **Retirar dinero** · **Ver Mi Mes** · **Crear nueva meta**.
 
 ---
 
-## 3. Lógica Financiera Central (El Motor)
+## 4. Lógica Financiera Central (El Motor)
 
-El motor principal reside en la función `distribuirAhorro(monto)`. Los pesos y aportes se calculan y asignan dinámicamente según tres estrategias posibles definidas en Ajustes:
+El motor principal reside en `distribuirAhorro(monto)`. Tres estrategias definidas en Ajustes:
 
-### Estrategias de Ahorro:
 1.  **Prioritaria Primero (Secuencial):**
-    *   Primero, separa y asigna los **aportes fijos** en pesos (`aporteFijo`) de todas las metas compartidas activas (excepto fondos de imprevistos si no aplica).
-    *   Determina la meta con prioridad más alta que aún no esté completada.
-    *   Deriva el 100% del ahorro mensual restante a esta meta prioritaria hasta cubrir el saldo necesario para cumplir su objetivo.
-    *   Si sobra dinero, o si ya no hay metas prioritarias incompletas, se distribuye el remanente en paralelo entre las demás metas activas utilizando sus respectivos aportes porcentuales (`aportePct`).
-    *   Cualquier sobrante final se desvía a la inversión abierta.
+    *   Determina la meta con prioridad más alta que aún no esté completada y le deriva el 100% del monto hasta cubrir su objetivo.
+    *   El remanente se distribuye en paralelo entre las demás metas según sus `aportePct`.
+    *   Cualquier sobrante final se desvía a la inversión abierta (o al fondo de emergencias si le falta colchón).
 2.  **Simultáneo:**
-    *   Distribuye el ahorro base mensual en paralelo entre todas las metas vigentes.
-    *   Primero cubre los **aportes fijos** en pesos configurados de cada meta incompleta.
-    *   Del dinero remanente tras cubrir aportes fijos, reparte según los **porcentajes de ahorro** establecidos de manera proporcional.
-    *   Cualquier sobrante final de ahorro se asigna automáticamente a la meta de **Inversión abierta** (o al fondo de emergencias principal si no existe).
+    *   Reparte el monto en paralelo entre todas las metas vigentes según sus **porcentajes** (`aportePct`), de manera proporcional.
+    *   El sobrante se asigna a la **inversión abierta** (o al fondo de emergencias principal si no existe).
 3.  **En Cascada:**
-    *   Ignora por completo las configuraciones de aportes fijos y porcentajes de las metas.
-    *   Ordena las metas de acuerdo a su orden en la lista (prioridad definida por Drag & Drop).
-    *   Asigna el total del ahorro mensual disponible de forma secuencial a cada meta con objetivo establecido. Cuando una meta se llena por completo, el remanente continúa llenando la siguiente meta de la lista.
-    *   Cualquier saldo remanente que supere todas las metas definidas se desvía a la inversión abierta.
+    *   Ignora los porcentajes. Ordena las metas según la lista (drag & drop) y llena meta por meta secuencialmente.
+    *   El remanente final va a la inversión abierta.
 
-### Reglas Especiales de Lógica Financiera:
-*   **Liberación de Aportes por Meta Llena:** Si una meta tiene aportes recurrentes configurados (fijos o en porcentaje) pero su saldo es mayor o igual a su objetivo (`m.saldo >= m.objetivo`), el motor de cálculo omite la asignación a esa meta y libera los fondos para que se aprovechen en las demás metas activas.
-*   **Reparto Interno de Categorías de Inversión:** Para metas de tipo `invertir`, se permite configurar categorías internas (porcentajes de reparto). Cuando esta meta recibe aportes (ordinarios o ingresos especiales), la interfaz visualiza y desglosa el saldo correspondiente asignado a cada subcategoría interna (renta fija, variable, etc.).
+`distribuirAhorroIndividual(perfil, monto)` aplica la misma idea sobre las metas individuales del perfil; su remanente queda como **sobrante pendiente**.
 
----
-
-## 4. Onboarding (Primeros Pasos)
-
-Para facilitar la adopción inicial del sistema, la aplicación inicia un asistente interactivo de **5 pasos (Pantallas 0 a 4, `OB_TOTAL=5`)** si no se detectan datos guardados:
-*   **Paso 0:** Introducción a la filosofía de presupuesto compartido de la app y elección de modo (pareja / individual).
-*   **Paso 1:** Definición de nombres para Persona 1 y Persona 2 (y perfil del dispositivo).
-*   **Paso 2:** Ingreso del presupuesto base: nóminas netas, gastos del hogar y fondos libres individuales.
-*   **Paso 3:** Creación y configuración inicial de la primera meta (Sueño, Inversión o Deuda). El guardado es idempotente (`obMetaCreatedId`): navegar Atrás/Continuar no duplica la meta.
-*   **Paso 4 (Visualización):** Simulación interactiva con la cascada de distribución para que la pareja comprenda cómo opera el motor en un mes regular.
-
-> La estrategia de ahorro, el % de premios y demás ajustes finos ya no se piden en el onboarding (se aplican valores por defecto en `finishOnboarding`: estrategia `simultaneo`, premio 20%) y se configuran después en **Ajustes**.
+### Reglas Especiales:
+*   **Suma de % = 100:** `rebalancePct` (edición inline) y `rebalancePctProporcional` (creación/edición de meta) garantizan que los porcentajes de las metas elegibles sumen exactamente 100.
+*   **Liberación de Aportes por Meta Llena:** si `m.saldo >= m.objetivo`, el motor omite esa meta y libera sus fondos hacia las demás.
+*   **Colocación del Sobrante (`colocarSobrante`):** (1) completa el colchón del fondo de emergencia si tiene objetivo y le falta, (2) el resto a la inversión abierta, (3) sin inversión, el fondo de emergencia actúa de sumidero, (4) en último caso, la meta prioritaria.
+*   **Metas "colocadas":** una meta marcada `colocado` (p. ej. un CDT ya constituido) no admite reparto nuevo.
+*   **Reparto Interno de Inversión:** las metas `invertir` admiten subcategorías internas con porcentajes (renta fija, variable, etc.) que la interfaz desglosa.
 
 ---
 
-## 5. Integración Móvil y Despliegue Nativo (Capacitor & Android)
+## 5. Onboarding (Primeros Pasos)
+
+Asistente interactivo de **4 pasos (Pantallas 0 a 3, `OB_TOTAL=4`)** si no se detectan datos guardados:
+*   **Paso 0:** Introducción, login (Google / correo / modo local) y elección de modo (pareja / individual).
+*   **Paso 1:** Nombres de Persona 1 y Persona 2, y perfil del dispositivo.
+*   **Paso 2:** Creación de la primera meta (nombre, tipo Sueño/Imprevistos, objetivo). El guardado es idempotente (`obMetaCreatedId`): navegar Atrás/Continuar no duplica la meta.
+*   **Paso 3:** Resumen de la estructura de la app, tarjeta de instalación PWA y código de invitación para conectar a la pareja.
+
+> La estrategia de ahorro y demás ajustes finos no se piden en el onboarding (default: estrategia `simultaneo` en `finishOnboarding`) y se configuran después en **Ajustes**.
+
+---
+
+## 6. Integración Móvil y Despliegue Nativo (Capacitor & Android)
 
 La aplicación incluye adaptaciones específicas para ejecutarse de manera óptima como un APK nativo en dispositivos Android:
 
-*   **Autenticación de Google Nativa:** 
+*   **Autenticación de Google Nativa:**
     *   Utiliza el plugin `@codetrix-studio/capacitor-google-auth`.
     *   Para evitar fallos de inicialización (crashes por `NullPointerException` al obtener el `SignInIntent`), el código inicializa de manera explícita el cliente mediante `GoogleAuth.initialize({ clientId, scopes })` antes de invocar la pantalla de login.
     *   Usa el client ID de tipo Web (Web client ID) para el intercambio seguro del ID Token de Firebase.
