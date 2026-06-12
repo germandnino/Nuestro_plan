@@ -4674,7 +4674,7 @@ function attachOb(){
     const btnS=$('obTipoSueno'),btnP=$('obTipoImprev');
     const TIPO_HINTS={
       sueno:'Una meta con fecha u objetivo concreto: viaje, carro, apartamento…',
-      imprevistos:'Se llena primero cada mes, antes que las otras metas. Ideal como colchón de emergencias.'
+      imprevistos:'Tu colchón de seguridad. No se gasta: queda guardado para imprevistos y, si lo usas, lo vuelves a llenar.'
     };
     
     const setTipo=(t)=>{
