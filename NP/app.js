@@ -621,9 +621,14 @@ function metasDeBucket(tipo,dueno){
 function metasElegiblesBucket(tipo,dueno){
   return metasDeBucket(tipo,dueno).filter(m=>!(m.objetivo>0 && m.saldo>=m.objetivo));
 }
-// Buckets con al menos una meta elegible en el scope.
+// Buckets con al menos una meta elegible (no llena) en el scope — para el MOTOR de reparto.
 function bucketsPresentes(dueno){
   return BUCKETS.filter(t=>metasElegiblesBucket(t,dueno).length>0);
+}
+// Buckets con al menos UNA meta (llena o no) en el scope — para la VISTA (barra de propósitos):
+// un colchón lleno sigue siendo un propósito que el usuario tiene y quiere ver/ponderar.
+function bucketsConMetas(dueno){
+  return BUCKETS.filter(t=>metasDeBucket(t,dueno).length>0);
 }
 // Pesos normalizados (suma 100) de los buckets presentes; ausentes redistribuyen su parte.
 function pesosBuckets(dueno){
@@ -1416,7 +1421,7 @@ function heroMeta(m){
 // Barra de propósitos (nivel 1): muestra y edita config.buckets para los buckets PRESENTES.
 // Los % se normalizan a 100 sobre los buckets presentes al guardar.
 function drawBucketBar(dueno){
-  const pres = bucketsPresentes(dueno);
+  const pres = bucketsConMetas(dueno);
   if(pres.length <= 1) return ''; // con 0-1 propósitos no hay nada que repartir a nivel 1
   const meta = { imprevistos:{ic:'shield', lbl:'Colchón'}, sueno:{ic:'target', lbl:'Sueños'}, invertir:{ic:'trending', lbl:'Inversión'} };
   const cfg = state.config.buckets || {};
@@ -1940,7 +1945,7 @@ function renderMetas(){
       const t = inp.dataset.bucket;
       let v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
       const dueno = (state.config.modo==='individual') ? state.config.perfil : null;
-      const pres = bucketsPresentes(dueno);
+      const pres = bucketsConMetas(dueno);
       const cfg = state.config.buckets || (state.config.buckets={});
       cfg[t] = v;
       const otros = pres.filter(x=>x!==t);
