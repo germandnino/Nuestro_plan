@@ -70,6 +70,7 @@ function getSVG(name, cls='', style='') {
     home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>',
     lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1 .4 2.5 1.5 3.5.7.8 1.3 1.5 1.5 2.5M9 18h6M10 22h4"></path>',
     party: '<path d="M4 22L14 12M14 4l.01-.01M18 8l.01-.01M17 3l3 3M19 2l1.35 1.35M12 2v2M20 10h2M19 14l2.5 2.5M10 19l2.5 2.5"></path>',
+    trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>',
     plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
     unlock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path>',
     alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
@@ -232,7 +233,7 @@ function celebrarSueno(m){
   if(!ov){ ov=document.createElement('div'); ov.id='celebra-overlay'; ov.className='modal-overlay'; document.body.appendChild(ov); }
   ov.innerHTML=`
     <div class="modal-card animate-in" style="text-align:center;max-width:330px">
-      <div style="font-size:46px;line-height:1;margin-bottom:6px">🎉</div>
+      <div style="color:var(--gold);display:flex;justify-content:center;margin-bottom:8px">${getSVG('trophy','', 'width:44px;height:44px;stroke-width:1.5')}</div>
       <h3 class="modal-title" style="margin-bottom:2px">¡Sueño cumplido!</h3>
       <p style="font-size:15px;font-weight:700;color:var(--green);margin:0 0 6px">${esc(m.nombre)}</p>
       <p class="modal-msg" style="margin-bottom:16px">Reuniste <b>${fmt(m.saldo)}</b>. ¿Ya lo vas a disfrutar?</p>
@@ -245,7 +246,7 @@ function celebrarSueno(m){
   lanzarConfeti();
   const close=()=>{ ov.style.display='none'; ov.innerHTML=''; };
   $('celebMasTarde').onclick=close;
-  $('celebGastar').onclick=()=>{ close(); consumirSueno(m); };
+  $('celebGastar').onclick=()=>{ close(); consumirSueno(m, true); }; // ya confirmó al tocar el botón del modal
 }
 function lanzarConfeti(){
   const cont=document.createElement('div'); cont.className='confeti-cont';
@@ -263,14 +264,16 @@ function lanzarConfeti(){
   setTimeout(()=>cont.remove(), 2800);
 }
 /* Consumir un sueño cumplido → archivar a Historial de Logros (con deshacer). */
-function consumirSueno(m){
+function consumirSueno(m, skipConfirm=false){
   (async()=>{
     if(!m.dueno && !canEditShared()){ flash('Solo un editor puede hacer esto'); return; }
-    const ok=await customConfirm(`¿Ya gastaste el dinero de "${esc(m.nombre)}"? Lo guardamos como logro y lo retiramos del plan.`, false, 'Sí, guardar logro', 'Aún no');
-    if(!ok) return;
+    if(!skipConfirm){
+      const ok=await customConfirm(`¿Ya gastaste el dinero de "${esc(m.nombre)}"? Lo guardamos como logro y lo retiramos del plan.`, false, 'Sí, guardar logro', 'Aún no');
+      if(!ok) return;
+    }
     const metaSnap=JSON.parse(JSON.stringify(m));
     const logro={id:uid(), nombre:m.nombre, monto:m.saldo, fecha:today(), dueno:m.dueno||null};
-    const gasto={id:uid(),meta:m.id,fecha:today(),monto:m.saldo,mov:'salida',nota:'Sueño cumplido 🎉',creadoPor:state.config.perfil};
+    const gasto={id:uid(),meta:m.id,fecha:today(),monto:m.saldo,mov:'salida',nota:'Sueño cumplido',creadoPor:state.config.perfil};
     state.gastos.push(gasto);
     state.logros.push(logro);
     state.metas=state.metas.filter(x=>x.id!==m.id);
@@ -1665,7 +1668,7 @@ function drawLogros(){
                   .sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||''));
   if(items.length===0){
     return `<div class="card" style="text-align:center;padding:28px 18px;">
-      <div style="font-size:34px;margin-bottom:8px">🏆</div>
+      <div style="color:var(--gs);display:flex;justify-content:center;margin-bottom:10px">${getSVG('trophy','', 'width:34px;height:34px;stroke-width:1.5')}</div>
       <div class="empty" style="margin-bottom:6px">Aún no hay logros.</div>
       <div class="hint">Cuando cumplas un sueño y gastes el dinero, quedará guardado aquí como un logro.</div>
     </div><div style="height:24px"></div>`;
@@ -1673,7 +1676,7 @@ function drawLogros(){
   const total = items.reduce((s,l)=>s+(l.monto||0),0);
   const rows = items.map(l=>`
     <div class="card" style="display:flex;align-items:center;gap:12px;padding:13px 15px;">
-      <div style="font-size:22px;flex-shrink:0">🎉</div>
+      <div style="color:var(--gold);flex-shrink:0;display:flex">${getSVG('trophy','', 'width:20px;height:20px;stroke-width:1.6')}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;color:var(--ink);font-size:14.5px">${esc(l.nombre)}${l.dueno?' <span class="pill">Individual</span>':''}</div>
         <div class="hint" style="margin:0">Cumplido en ${fmtMes((l.fecha||'').slice(0,7))||l.fecha||''}</div>
@@ -1682,7 +1685,7 @@ function drawLogros(){
     </div>`).join('');
   return `
     <div class="card dark" style="text-align:center;padding:18px">
-      <div style="font-size:30px;margin-bottom:4px">🏆</div>
+      <div style="color:var(--gold);display:flex;justify-content:center;margin-bottom:6px">${getSVG('trophy','', 'width:30px;height:30px;stroke-width:1.5')}</div>
       <div class="k" style="color:var(--cream);margin:0">${isIndiv?'Lo que has logrado':'Lo que han logrado juntos'}</div>
       <div style="font-size:13px;color:rgba(246,241,230,.78);margin-top:4px">${items.length} sueño${items.length!==1?'s':''} cumplido${items.length!==1?'s':''} · ${fmt(total)}</div>
     </div>
@@ -1941,7 +1944,7 @@ function renderMetas(){
         }
       } else if(m.tipo==='sueno' && obj>0 && m.saldo>=obj){
         // Estado terminal del sueño: cumplido (único que celebra). Acción: consumir → Logros.
-        sub = `<b style="color:var(--green)">¡Cumplido!</b> 🎉`;
+        sub = `<b style="color:var(--green)">¡Cumplido!</b> ${getSVG('party','', 'width:12px;height:12px;vertical-align:-2px;color:var(--gold)')}`;
       } else {
         sub = generico;
       }
