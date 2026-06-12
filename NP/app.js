@@ -691,48 +691,18 @@ function getMetaPrioritaria(){
 
 /* Registro del último sobrante repartido por colocarSobrante (para avisar al usuario). */
 let _ultimoSobrante = [];
-/* Coloca el ahorro no asignado con una cascada inteligente, en vez de mandarlo
-   ciegamente a inversión:
-     (1) completa el colchón del fondo de emergencia (solo si tiene objetivo definido y le falta),
-     (2) el resto a la inversión abierta,
-     (3) si no hay inversión, el fondo de emergencia actúa de sumidero,
-     (4) en último caso, la meta prioritaria.
-   Muta `res` y registra en _ultimoSobrante a dónde fue cada parte. */
+/* Sumidero del sobrante del reparto: (1) inversión abierta (perpetua, sin tope),
+   (2) si no hay, queda como sobrante y el caller lo registra como "sin asignar".
+   Muta `res`. Devuelve { placements, rem } con lo que NO se pudo colocar. */
 function colocarSobrante(rem, res){
   const placements=[];
-  const push=(m,monto)=>{
-    if(monto<=0.5)return;
-    const ex=placements.find(p=>p.id===m.id);
-    if(ex)ex.monto+=monto;else placements.push({id:m.id,nombre:m.nombre,monto});
-  };
-  const e=emergenciaPrincipal();
-  // (1) colchón del fondo de emergencia (solo si definió objetivo y aún le falta)
-  if(e && e.objetivo>0){
-    const add=Math.min(rem,getMetaFalta(e,res));
-    if(add>0.5){res[e.id]+=add;rem-=add;push(e,add);}
+  const inv=inversionAbierta();
+  if(inv && rem>0.5){
+    if(res[inv.id]===undefined)res[inv.id]=0;
+    res[inv.id]+=rem; placements.push({id:inv.id,nombre:inv.nombre,monto:rem}); rem=0;
   }
-  // (2) inversión abierta: sumidero natural del excedente (sin tope, es meta abierta)
-  if(rem>0.5){
-    const inv=inversionAbierta();
-    if(inv){res[inv.id]+=rem;push(inv,rem);rem=0;}
-  }
-  // (3) sin inversión: repartir el resto en cascada por prioridad entre las demás metas con cupo,
-  //     cortando en su objetivo. Evita sobrellenar una sola meta dejando otras vacías.
-  if(rem>0.5){
-    const resto=metasCompartidas().filter(m=>!m.colocado).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-    for(let i=0;i<resto.length;i++){
-      if(rem<=0.5)break;
-      const m=resto[i];
-      const falta=getMetaFalta(m,res);
-      if(falta===Infinity){res[m.id]+=rem;push(m,rem);rem=0;break;}
-      const add=Math.min(rem,falta);
-      if(add>0.5){res[m.id]+=add;rem-=add;push(m,add);}
-    }
-  }
-  // (4) último recurso: todas las metas llenas y sin sumidero abierto → queda en emergencia.
-  if(rem>0.5 && e){res[e.id]+=rem;push(e,rem);rem=0;}
   _ultimoSobrante=placements;
-  return placements;
+  return { placements, rem };
 }
 
 /* Reparto del ahorro entre metas compartidas.
