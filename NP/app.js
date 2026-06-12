@@ -1779,13 +1779,8 @@ function renderMetas(){
       const isPersonal = m.tipo === 'personal';
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;padding:4px 0;display:inline-flex;align-items:center;color:var(--gs);touch-action:none;user-select:none;margin-right:8px">${getSVG('drag', '', 'opacity:0.6;')}</span>`;
 
-      const strat = state.config.estrategia;
-      const isPrio = getMetaPrioritaria()?.id === m.id;
-      const showPct = m.tipo !== 'personal' && (
-        (strat === 'simultaneo') ||
-        (strat === 'secuencial' && !isPrio)
-      );
-      
+      const showPct = m.tipo !== 'personal'; // % editable por bucket; ya no depende de estrategia
+
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
       const pctBadge = (canEdit && showPct && m.tipo !== 'personal')
         ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
@@ -1799,11 +1794,12 @@ function renderMetas(){
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="k" style="margin:0">${m.nombre}</span>
-            ${m.tipo!=='personal'?'<span class="pill">'+tipoLabel(m.tipo)+'</span>':''}
+            ${m.tipo!=='personal'?`<span class="pill">${getSVG(m.tipo==='imprevistos'?'shield':m.tipo==='invertir'?'trending':'target','', 'width:11px;height:11px;margin-right:3px;vertical-align:-1px;')}${tipoLabel(m.tipo)}</span>`:''}
             ${pctBadge?`<span style="flex:1"></span>${pctBadge}`:''}
           </div>
           <div class="num med">${fmt(m.saldo)}</div>
-          ${pct!=null?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
+          ${(pct!=null && m.tipo!=='invertir')?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
+          ${m.tipo==='invertir'?`<div class="muted" style="font-size:11.5px;margin:6px 0 2px;color:var(--gb);">↗ creciendo · sin tope</div>`:''}
           <div class="muted" style="font-size:12px">${metaSub(m)}</div>
         </div>
         ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar meta" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : ''}
@@ -1900,8 +1896,9 @@ function renderMetas(){
   if (tabDist) tabDist.onclick = () => { curMetasSubTab = 0; rerender(); };
   if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
 
-  // Attach change listener to inline percentage inputs
-  $('r1').querySelectorAll('.inline-pct-input').forEach(input => {
+  // Attach change listener to inline percentage inputs (solo los de meta; los de la
+  // barra de propósitos llevan data-bucket y se enganchan aparte).
+  $('r1').querySelectorAll('.inline-pct-input[data-pctmid]').forEach(input => {
     input.onchange = (e) => {
       const mid = input.dataset.pctmid;
       const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
