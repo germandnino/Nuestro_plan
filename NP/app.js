@@ -1806,9 +1806,27 @@ function renderMetas(){
         const meses=calcularTiempoRestante(m);
         if(meses!=null && meses>0) eta = meses<12 ? `~${meses} mes${meses!==1?'es':''}` : `~${Math.floor(meses/12)} año${Math.floor(meses/12)!==1?'s':''}`;
       }
-      const sub = m.tipo==='invertir'
-        ? `↗ ${fmt(m.saldo)} · sin tope`
-        : `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      const generico = `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      let sub;
+      if(m.tipo==='invertir'){
+        sub = `↗ ${fmt(m.saldo)} · sin tope`;
+      } else if(m.tipo==='imprevistos'){
+        // Estado terminal propio: "Protegido" (revolvente, no se "completa"). Unidad: meses de respaldo si hay gasto de referencia.
+        const lleno = obj>0 && m.saldo>=obj;
+        const prot = `<span style="color:var(--green);font-weight:700">Protegido</span>`;
+        if(m.gastoRef>0){
+          const fm = n => { const r=Math.round(n*10)/10; return (r%1===0?r.toFixed(0):r.toFixed(1)); };
+          const mAct = fm(m.saldo/m.gastoRef);
+          const unidad = (m.saldo/m.gastoRef)===1 ? 'mes' : 'meses';
+          sub = lleno
+            ? `${prot} · ${mAct} ${unidad} de respaldo`
+            : (obj>0 ? `${mAct} / ${fm(obj/m.gastoRef)} meses${eta?` · ${eta}`:''}` : `${mAct} ${unidad} de respaldo`);
+        } else {
+          sub = lleno ? `${prot} · ${fmt(m.saldo)}` : generico;
+        }
+      } else {
+        sub = generico;
+      }
       const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
@@ -2145,6 +2163,11 @@ function renderMetaForm(editing){
       <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
       ${sug>0 ? `<div class="hint" style="margin-top:6px">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de tus gastos fijos':'~6 meses de tu ahorro mensual'}). Ajústalo a tu realidad. El ahorro sobrante completa este colchón antes de ir a inversión.</div>` : ''}
       ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
+      <details style="margin-top:14px"${m.gastoRef?' open':''}>
+        <summary style="font-size:12px;font-weight:700;color:var(--gs);cursor:pointer">Medir en meses de respaldo (opcional)</summary>
+        <div class="hint" style="margin:6px 0 8px">¿Cuánto gastan al mes, aprox? Así mostramos tu colchón en <b>meses de respaldo</b> en vez de solo un monto.</div>
+        <input class="amt money" id="fGastoRef" inputmode="numeric" value="${m.gastoRef?fmt(m.gastoRef):''}" placeholder="$0 / mes">
+      </details>
       <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
   }else{
     const showAporte = true; // % por bucket: el aporte siempre se puede definir
@@ -2210,6 +2233,9 @@ function readMetaForm(){
   }
   if(m.tipo==='imprevistos'){
     m.fecha=null;
+    if($('fGastoRef'))m.gastoRef=parse($('fGastoRef').value);
+  }else{
+    m.gastoRef=0; // gasto de referencia solo aplica a imprevistos
   }
   if(m.tipo!=='invertir'){
     m.colocado=false;
