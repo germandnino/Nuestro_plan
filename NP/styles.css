@@ -649,3 +649,9 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .metacard-edit{background:none;border:none;color:var(--gs);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;opacity:.55;flex-shrink:0;transition:color .2s,opacity .2s}
 .metacard-edit:hover{opacity:1;color:var(--gold)}
 .metacard .inline-pct-container{background:rgba(192,138,45,.10);border:1px solid rgba(192,138,45,.30);color:var(--gold);font-weight:800;padding:4px 9px;min-height:28px;flex-shrink:0}
+/* Confeti celebración de sueño cumplido (Fase 3b) */
+.confeti-cont{position:fixed;inset:0;pointer-events:none;z-index:500;overflow:hidden}
+.confeti{position:absolute;top:-14px;width:9px;height:14px;border-radius:2px;opacity:.95;animation:confeti-fall 2.6s cubic-bezier(.3,.6,.5,1) forwards}
+@keyframes confeti-fall{0%{transform:translateY(-14px) rotate(0);opacity:1}100%{transform:translateY(104vh) rotate(var(--rot,360deg));opacity:.9}}
+/* Botón consumir sueño cumplido en la tarjeta */
+.metacard-consumir{background:var(--green);color:var(--cream);border:none;border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}

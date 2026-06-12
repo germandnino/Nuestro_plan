@@ -210,6 +210,79 @@ function customConfirm(message, isDestructive = false, okText = '', cancelText =
 function customPrompt(message, defaultText = '') {
   return showCustomModal({ title: 'Ingresar dato', message, type: 'prompt', placeholder: defaultText });
 }
+
+/* ===== Celebración exclusiva del sueño (Fase 3b) =====
+   Solo el sueño celebra: al cumplirse (saldo>=objetivo) dispara modal + confeti, una vez.
+   Imprevistos e inversión nunca celebran. Llamado desde rerender() (catch-all). */
+function checkCelebraciones(){
+  const perfil = state.config.perfil;
+  let cambio=false;
+  // Un sueño que bajó de lleno (retiro) puede volver a celebrar más adelante.
+  state.metas.forEach(m=>{
+    if(m.tipo==='sueno' && m.celebrado && !(m.objetivo>0 && m.saldo>=m.objetivo)){ m.celebrado=false; cambio=true; }
+  });
+  // Nuevo sueño cumplido visible a este perfil, aún sin celebrar.
+  const nuevo = state.metas.find(m=>m.tipo==='sueno' && m.objetivo>0 && m.saldo>=m.objetivo && !m.celebrado && (!m.dueno || m.dueno===perfil));
+  if(nuevo){ nuevo.celebrado=true; cambio=true; }
+  if(cambio) saveLocalOnly();
+  if(nuevo) celebrarSueno(nuevo);
+}
+function celebrarSueno(m){
+  let ov=$('celebra-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='celebra-overlay'; ov.className='modal-overlay'; document.body.appendChild(ov); }
+  ov.innerHTML=`
+    <div class="modal-card animate-in" style="text-align:center;max-width:330px">
+      <div style="font-size:46px;line-height:1;margin-bottom:6px">🎉</div>
+      <h3 class="modal-title" style="margin-bottom:2px">¡Sueño cumplido!</h3>
+      <p style="font-size:15px;font-weight:700;color:var(--green);margin:0 0 6px">${esc(m.nombre)}</p>
+      <p class="modal-msg" style="margin-bottom:16px">Reuniste <b>${fmt(m.saldo)}</b>. ¿Ya lo vas a disfrutar?</p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="celebMasTarde">Más tarde</button>
+        <button class="btn" id="celebGastar">Gastar y guardar</button>
+      </div>
+    </div>`;
+  ov.style.display='flex';
+  lanzarConfeti();
+  const close=()=>{ ov.style.display='none'; ov.innerHTML=''; };
+  $('celebMasTarde').onclick=close;
+  $('celebGastar').onclick=()=>{ close(); consumirSueno(m); };
+}
+function lanzarConfeti(){
+  const cont=document.createElement('div'); cont.className='confeti-cont';
+  const colores=['var(--gold)','var(--gb)','var(--green)','var(--cream)','#e0533a'];
+  for(let i=0;i<46;i++){
+    const p=document.createElement('i');
+    p.className='confeti';
+    p.style.left=Math.random()*100+'%';
+    p.style.background=colores[i%colores.length];
+    p.style.animationDelay=(Math.random()*0.5).toFixed(2)+'s';
+    p.style.setProperty('--rot', (Math.random()*720-360)+'deg');
+    cont.appendChild(p);
+  }
+  document.body.appendChild(cont);
+  setTimeout(()=>cont.remove(), 2800);
+}
+/* Consumir un sueño cumplido → archivar a Historial de Logros (con deshacer). */
+function consumirSueno(m){
+  (async()=>{
+    if(!m.dueno && !canEditShared()){ flash('Solo un editor puede hacer esto'); return; }
+    const ok=await customConfirm(`¿Ya gastaste el dinero de "${esc(m.nombre)}"? Lo guardamos como logro y lo retiramos del plan.`, false, 'Sí, guardar logro', 'Aún no');
+    if(!ok) return;
+    const metaSnap=JSON.parse(JSON.stringify(m));
+    const logro={id:uid(), nombre:m.nombre, monto:m.saldo, fecha:today(), dueno:m.dueno||null};
+    const gasto={id:uid(),meta:m.id,fecha:today(),monto:m.saldo,mov:'salida',nota:'Sueño cumplido 🎉',creadoPor:state.config.perfil};
+    state.gastos.push(gasto);
+    state.logros.push(logro);
+    state.metas=state.metas.filter(x=>x.id!==m.id);
+    save(); rerender();
+    flashUndo('Sueño guardado en Logros ✓', ()=>{
+      state.logros=state.logros.filter(l=>l.id!==logro.id);
+      state.gastos=state.gastos.filter(g=>g.id!==gasto.id);
+      if(!state.metas.some(x=>x.id===metaSnap.id)) state.metas.push(metaSnap);
+      save(); rerender();
+    });
+  })();
+}
 function showCustomMonthPicker(currentVal, allowClear = false) {
   return new Promise((resolve) => {
     let [year, month] = (currentVal || curMonth()).split('-').map(Number);
@@ -403,6 +476,11 @@ function normalize(){
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
   state.gastos=Array.isArray(state.gastos)?state.gastos:[];
   state.logros=Array.isArray(state.logros)?state.logros:[]; // sueños cumplidos archivados (Historial de Logros)
+  // Migración una sola vez: los sueños YA llenos antes de esta feature no deben celebrar retroactivamente.
+  if(!state.config._celebInit){
+    state.metas.forEach(m=>{ if(m.tipo==='sueno' && m.objetivo>0 && m.saldo>=m.objetivo) m.celebrado=true; });
+    state.config._celebInit=true;
+  }
 
   // Re-normaliza aportePct a "% dentro del bucket" (suma 100 por bucket × scope).
   // Aquí state.metas ya es array y sus aportePct/objetivo son numéricos.
@@ -1128,7 +1206,7 @@ function go(t){
   RENDER[t]();
   $('s'+t).scrollTop=0;
 }
-function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;}
+function rerender(){const sec=$('s'+curTab);const st=sec?sec.scrollTop:0;RENDER[curTab]();if(sec)sec.scrollTop=st;checkCelebraciones();}
 let _rerenderTimer;
 function scheduleRerender(){clearTimeout(_rerenderTimer);_rerenderTimer=setTimeout(rerender,60);}
 $('mainnav').addEventListener('click', e => {
