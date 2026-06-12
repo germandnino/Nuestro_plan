@@ -730,25 +730,24 @@ function distribuirAhorro(monto){
   return { dist:res, rem:r.rem };
 }
 
-function distribuirAhorroIndividual(perfil, monto, esEspecial = false) {
-  const res = {};
-  const indivs = metasIndividuales(perfil).filter(m => !m.colocado);
-  indivs.forEach(m => res[m.id] = 0);
-  if (monto <= 0 || indivs.length === 0) return { dist: res, rem: monto };
-  
-  let rem = monto;
-  
-  // Aportes porcentuales
-  const baseRem = rem;
-  indivs.filter(m => (m.aportePct||0) > 0).forEach(m => {
-    let add = (baseRem * m.aportePct) / 100;
-    const falta = getMetaFalta(m, res);
-    add = Math.min(add, falta, rem);
-    res[m.id] += add;
-    rem -= add;
+/* Espejo individual del reparto de dos niveles, scoped al perfil (privado).
+   Sin inversión-sumidero compartida: el sobrante del perfil vuelve como rem
+   y el caller lo registra como sobrante pendiente del perfil. Devuelve { dist, rem }. */
+function distribuirAhorroIndividual(perfil, monto){
+  const res={};
+  metasIndividuales(perfil).forEach(m=>res[m.id]=0);
+  if(monto<=0)return { dist:res, rem:monto };
+  const pesos=pesosBuckets(perfil);
+  let rem=0;
+  BUCKETS.forEach(tipo=>{
+    const w=pesos[tipo]||0;
+    if(w<=0)return;
+    rem+=repartirEnBucket(tipo,perfil,monto*w/100,res);
   });
-  
-  return { dist: res, rem };
+  // Sumidero individual: inversión abierta propia del perfil, si existe.
+  const invPerfil=metasIndividuales(perfil).find(m=>m.tipo==='invertir'&&!m.colocado);
+  if(invPerfil && rem>0.5){ res[invPerfil.id]+=rem; rem=0; }
+  return { dist:res, rem };
 }
 
 // Mantiene la suma de % en 100 entre las metas elegibles. La meta editada toma
