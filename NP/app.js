@@ -4729,7 +4729,6 @@ $('obSkip').onclick=()=>{
 };
 function finishOnboarding(){
   state.config.onboarded=true;
-  state.config.estrategia='simultaneo';
   state.config.pctPremio=20;
   state.config.modoPremio='igual';
   obMetaCreatedId=null;
