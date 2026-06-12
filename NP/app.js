@@ -1421,28 +1421,36 @@ function heroMeta(m){
 // Barra de propósitos (nivel 1): muestra y edita config.buckets para los buckets PRESENTES.
 // Los % se normalizan a 100 sobre los buckets presentes al guardar.
 function drawBucketBar(dueno){
-  const pres = bucketsConMetas(dueno);
-  if(pres.length <= 1) return ''; // con 0-1 propósitos no hay nada que repartir a nivel 1
+  const todos = bucketsConMetas(dueno);            // todos los propósitos que el usuario tiene (incl. llenos)
+  if(todos.length <= 1) return '';                 // con 0-1 propósitos no hay nada que repartir a nivel 1
+  const editables = bucketsPresentes(dueno);       // solo los que tienen cupo (no llenos) → reciben %
   const meta = { imprevistos:{ic:'shield', lbl:'Colchón'}, sueno:{ic:'target', lbl:'Sueños'}, invertir:{ic:'trending', lbl:'Inversión'} };
   const cfg = state.config.buckets || (state.config.buckets={});
-  // Auto-normaliza a 100 sobre los propósitos presentes. Se auto-cura cuando aparece o
-  // desaparece un propósito (no esperamos a que el usuario edite uno a mano).
-  const sum = pres.reduce((s,t)=>s+(cfg[t]||0),0);
-  if(Math.round(sum)!==100){
-    if(sum<=0){ const each=Math.floor(100/pres.length); pres.forEach(t=>cfg[t]=each); cfg[pres[pres.length-1]]+=100-each*pres.length; }
-    else { pres.forEach(t=>cfg[t]=Math.round((cfg[t]||0)/sum*100)); const t2=pres.reduce((s,t)=>s+(cfg[t]||0),0); cfg[pres[pres.length-1]]+=100-t2; }
+  // Propósitos llenos → 0% fijo (no reciben ahorro hasta tener una meta con cupo).
+  todos.forEach(t=>{ if(!editables.includes(t)) cfg[t]=0; });
+  // Auto-normaliza a 100 SOLO sobre los editables (con cupo). Se auto-cura cuando un
+  // propósito se llena/vacía o aparece/desaparece (sin esperar edición manual).
+  if(editables.length){
+    const sum = editables.reduce((s,t)=>s+(cfg[t]||0),0);
+    if(Math.round(sum)!==100){
+      if(sum<=0){ const each=Math.floor(100/editables.length); editables.forEach(t=>cfg[t]=each); cfg[editables[editables.length-1]]+=100-each*editables.length; }
+      else { editables.forEach(t=>cfg[t]=Math.round((cfg[t]||0)/sum*100)); const t2=editables.reduce((s,t)=>s+(cfg[t]||0),0); cfg[editables[editables.length-1]]+=100-t2; }
+    }
     save();
   }
-  const rows = pres.map(t=>`
-    <div class="bucketbar-row" style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+  const rows = todos.map(t=>{
+    const full = !editables.includes(t);
+    return `
+    <div class="bucketbar-row" style="display:flex;align-items:center;gap:8px;margin:6px 0;${full?'opacity:.55;':''}">
       <span style="display:inline-flex;align-items:center;gap:6px;flex:1;color:var(--cream);font-size:13px;">
-        ${getSVG(meta[t].ic,'', 'width:14px;height:14px;opacity:.8;')} ${meta[t].lbl}
+        ${getSVG(meta[t].ic,'', 'width:14px;height:14px;opacity:.8;')} ${meta[t].lbl}${full?' <span style="font-size:11px;color:rgba(246,241,230,.6)">· lleno</span>':''}
       </span>
-      <div class="inline-pct-container" title="% del ahorro a este propósito">
-        <input type="number" class="inline-pct-input" min="0" max="100" value="${cfg[t]||0}" data-bucket="${t}" aria-label="Porcentaje para ${meta[t].lbl}">
+      <div class="inline-pct-container" title="${full?'Propósito lleno: no recibe ahorro hasta que agregues una meta con cupo':'% del ahorro a este propósito'}">
+        <input type="number" class="inline-pct-input" min="0" max="100" value="${cfg[t]||0}" data-bucket="${t}"${full?' disabled':''} aria-label="Porcentaje para ${meta[t].lbl}">
         <span class="pct-sign">%</span>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   return `<div class="card dark" style="margin-bottom:12px;">
     <div class="k" style="margin:0 0 4px;color:var(--cream);">¿Cuánto a cada propósito?</div>
     <div class="hint" style="margin-bottom:4px;color:rgba(246,241,230,.7);">Reparte tu ahorro entre tus grandes propósitos. Dentro de cada uno decides por meta.</div>
@@ -1953,7 +1961,8 @@ function renderMetas(){
       const t = inp.dataset.bucket;
       let v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
       const dueno = (state.config.modo==='individual') ? state.config.perfil : null;
-      const pres = bucketsConMetas(dueno);
+      const pres = bucketsPresentes(dueno); // normaliza solo entre los editables (con cupo)
+      if(!pres.includes(t)) return;          // propósito lleno: no editable
       const cfg = state.config.buckets || (state.config.buckets={});
       cfg[t] = v;
       const otros = pres.filter(x=>x!==t);
