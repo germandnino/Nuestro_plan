@@ -1439,23 +1439,19 @@ function drawBucketBar(dueno){
     }
     save();
   }
-  const rows = todos.map(t=>{
+  const cells = todos.map(t=>{
     const full = !editables.includes(t);
-    return `
-    <div class="bucketbar-row" style="display:flex;align-items:center;gap:8px;margin:6px 0;${full?'opacity:.55;':''}">
-      <span style="display:inline-flex;align-items:center;gap:6px;flex:1;color:var(--cream);font-size:13px;">
-        ${getSVG(meta[t].ic,'', 'width:14px;height:14px;opacity:.8;')} ${meta[t].lbl}${full?' <span style="font-size:11px;color:rgba(246,241,230,.6)">· lleno</span>':''}
-      </span>
+    return `<div class="bucketcell${full?' full':''}">
+      <span class="bucketcell-lbl">${getSVG(meta[t].ic,'', 'width:13px;height:13px;opacity:.8;')} ${meta[t].lbl}</span>
       <div class="inline-pct-container" title="${full?'Propósito lleno: no recibe ahorro hasta que agregues una meta con cupo':'% del ahorro a este propósito'}">
         <input type="number" class="inline-pct-input" min="0" max="100" value="${cfg[t]||0}" data-bucket="${t}"${full?' disabled':''} aria-label="Porcentaje para ${meta[t].lbl}">
         <span class="pct-sign">%</span>
       </div>
     </div>`;
   }).join('');
-  return `<div class="card dark" style="margin-bottom:12px;">
-    <div class="k" style="margin:0 0 4px;color:var(--cream);">¿Cuánto a cada propósito?</div>
-    <div class="hint" style="margin-bottom:4px;color:rgba(246,241,230,.7);">Reparte tu ahorro entre tus grandes propósitos. Dentro de cada uno decides por meta.</div>
-    ${rows}
+  return `<div class="card dark" style="margin-bottom:12px;padding:12px 14px;">
+    <div class="k" style="margin:0 0 8px;color:var(--cream);">¿Cuánto a cada propósito?</div>
+    <div class="bucketgrid">${cells}</div>
   </div>`;
 }
 
