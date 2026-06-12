@@ -1024,7 +1024,7 @@ function openModalSobrante(monto, metaLlena){
     ov.className='modal-overlay'; ov.style.display='flex';
     ov.innerHTML=`
       <div class="modal-card animate-in" style="max-width:400px; padding:20px;">
-        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! ${getSVG('party','', 'width:15px;height:15px;vertical-align:-2px;color:var(--gold)')}</h3>
+        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! 🎉</h3>
         <div class="hint" style="margin:0; font-size:13px; color:var(--gs); line-height:1.45;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
         <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
           <button class="btn sm" id="sobMotor" style="margin:0; width:100%;">Repartir con el motor (según tu plan)</button>
@@ -1944,7 +1944,7 @@ function renderMetas(){
         }
       } else if(m.tipo==='sueno' && obj>0 && m.saldo>=obj){
         // Estado terminal del sueño: cumplido (único que celebra). Acción: consumir → Logros.
-        sub = `<b style="color:var(--green)">¡Cumplido!</b> ${getSVG('party','', 'width:12px;height:12px;vertical-align:-2px;color:var(--gold)')}`;
+        sub = `<b style="color:var(--green)">¡Cumplido!</b> 🎉`;
       } else {
         sub = generico;
       }
@@ -2775,7 +2775,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             const m = x.m;
             const newSaldo = m.saldo + x.v;
             const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! ${getSVG('party','', 'width:9px;height:9px;vertical-align:-1px')}</span>` : '';
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
             const pct = (x.v / toSave) * 100;
             
             html += `
@@ -2839,7 +2839,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             const m = x.m;
             const newSaldo = m.saldo + x.v;
             const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! ${getSVG('party','', 'width:9px;height:9px;vertical-align:-1px')}</span>` : '';
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
             const pct = (x.v / toSave) * 100;
             
             html += `
@@ -2887,7 +2887,7 @@ function openAsistenteIngresoExtra(preFill = null) {
 
           const newSaldo = currentSaldo + aplicado;
           const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada! ${getSVG('party','', 'width:9px;height:9px;vertical-align:-1px')}</span>` : '';
+          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada! 🎉</span>` : '';
           
           html += `
             <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Aporte directo a la meta:</div>
