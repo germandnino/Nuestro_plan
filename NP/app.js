@@ -395,55 +395,6 @@ function normalize(){
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
   state.gastos=Array.isArray(state.gastos)?state.gastos:[];
 
-  // Alinear aportes y saldo de los bolsillos principales del sistema con el log
-  const perfilActive = state.config.perfil;
-  const perActive = state.metas.find(x => x.tipo === 'personal' && x.dueno === perfilActive && x.sistema === true);
-  if (perActive) {
-    state.log.forEach(entry => {
-      if (entry.aplicado && entry.reparto) {
-        const val = perfilActive === 'p1' ? entry.reparto.gustosP1 : entry.reparto.gustosP2;
-        const ya = perActive.aportes.find(x => x.mes === entry.mes);
-        if (!ya) {
-          perActive.saldo += val;
-          perActive.aportes.push({ mes: entry.mes, monto: val });
-        } else if (ya.monto !== val) {
-          perActive.saldo += val - ya.monto;
-          ya.monto = val;
-        }
-      }
-    });
-
-    if (!Array.isArray(perActive.inmediatosAplicados)) perActive.inmediatosAplicados = [];
-    state.log.forEach(entry => {
-      (entry.especiales || []).forEach(ep => {
-        if (ep.aplicadoInmediato && ep.id) {
-          if (!perActive.inmediatosAplicados.includes(ep.id)) {
-            const pctR = ep.pctRetener || 0;
-            const ret = (pctR / 100) * ep.monto;
-            let share = 0;
-            if (ep.persona === perfilActive) share = ret;
-            else if (ep.persona === 'ambos') share = ret * 0.5;
-            
-            if (share > 0) {
-              const { dist, rem } = distribuirAhorroIndividual(perfilActive, share, true);
-              Object.keys(dist).forEach(id => {
-                const m = metaById(id);
-                if (m) {
-                  if (m.tipo === 'deuda') {
-                    m.saldo = Math.max(0, m.saldo - dist[id]);
-                  } else {
-                    m.saldo += dist[id];
-                  }
-                }
-              });
-              perActive.saldo += rem;
-            }
-            perActive.inmediatosAplicados.push(ep.id);
-          }
-        }
-      });
-    });
-  }
 }
 
 // --- Firebase Sync Helpers ---
@@ -1702,12 +1653,6 @@ function drawStatsBI(){
   const totalAhorrado = ahorros.reduce((s, v) => s + v, 0);
   const avgAhorro = totalAhorrado / n;
 
-  // Ingreso extra prom.: parte no-base de los movimientos visibles, por mes.
-  const extras = meses.map(m =>
-    especialesVisibles(state.ingresos.filter(i => i.mes === m && !i.sinAsignar && !i.esAporteBase))
-      .reduce((s, i) => s + i.monto, 0));
-  const avgExtra = extras.reduce((s, v) => s + v, 0) / n;
-
   let bestIdx = 0;
   ahorros.forEach((v, i) => { if (v > ahorros[bestIdx]) bestIdx = i; });
 
@@ -1743,7 +1688,6 @@ function drawStatsBI(){
 
   let tiles = '';
   tiles += tile('Ahorro mensual prom.', `${fmtK(avgAhorro)}${trend}`, '');
-  tiles += tile('Ingreso extra prom.', fmtK(avgExtra), '');
   tiles += tile('Total ahorrado', fmtK(totalAhorrado), '');
   tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
   if (tasa !== null) tiles += tile('Tasa de ahorro', `${tasa}%`, 'del ingreso');
@@ -3654,7 +3598,6 @@ function openAsistenteIngresoExtra(preFill = null) {
       duenoPriv: esPriv ? c.perfil : undefined,
       fecha: today(),
       creadoPor: c.perfil,
-      esAporteBase: preFill ? preFill.esAporteBase : undefined
     };
 
     aplicarIngresoInmediatoActivo(ep);
@@ -3737,8 +3680,7 @@ function aplicarIngresoInmediatoActivo(ep) {
     creadoPor: ep.creadoPor || c.perfil,
     privado: ep.privado,
     duenoPriv: ep.duenoPriv,
-    aplicadoDirecto: ep.aplicadoDirecto,
-    esAporteBase: ep.esAporteBase
+    aplicadoDirecto: ep.aplicadoDirecto
   };
   
   state.ingresos.unshift(newIngreso);
@@ -4084,7 +4026,7 @@ function drawMonthlyDistributionBars(mes) {
           <line x1="20" y1="20" x2="20" y2="14"></line>
         </svg>
         <div style="font-weight:700; font-size:13.5px; margin-bottom:4px;">Sin ahorros en este mes</div>
-        <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero o confirma tu aporte de siempre para ver la distribución.</div>
+        <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero a tus metas para ver la distribución del mes.</div>
       </div>
     `;
   }
@@ -4181,7 +4123,6 @@ function drawTransactionTimeline(transactions, canEdit) {
       color = 'var(--green)';
       const metaNom = t.meta === 'distribuir' ? 'Reparto' : (t.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
       destLabel = t.pctRetener > 0 ? `${t.pctRetener}% al bolsillo · ${metaNom}` : metaNom;
-      if (t.esAporteBase) destLabel += ' (Aporte base)';
     } else if (t.type === 'gasto') {
       sign = '-';
       color = '#e06c75';
@@ -4246,25 +4187,6 @@ function renderMiMes(){
   const totalOut = state.gastos.filter(g => g.fecha.substring(0, 7) === mes && g.mov === 'salida').reduce((sum, g) => sum + g.monto, 0);
   const netSaved = totalIn - totalOut;
   
-  const hasAporteBase = state.ingresos.some(ing => ing.mes === mes && ing.esAporteBase);
-  let baseCardHtml = '';
-  if (!hasAporteBase && computeBase() > 0.5) {
-    baseCardHtml = `
-      <div class="card" style="border:1px solid var(--gold); background:rgba(192,138,45,0.03); padding:14px; border-radius:12px; display:flex; flex-direction:column; gap:8px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="display:inline-flex;">${getSVG('calendar', '', 'color:var(--gold);')}</span>
-          <div style="font-weight:700; color:var(--gold); font-size:14px;">Tu aporte de siempre: ${fmt(computeBase())}</div>
-        </div>
-        <div style="font-size:12.5px; color:rgba(246,241,230,.8); line-height:1.4;">
-          Aún no has registrado tu aporte mensual programado de este mes. Confírmalo ahora para repartirlo entre tus metas.
-        </div>
-        <button class="btn sm gold" id="btnConfirmBaseAporte" style="margin:0; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
-          ${getSVG('check')} Confirmar aporte de siempre
-        </button>
-      </div>
-    `;
-  }
-  
   // Privacidad: la pareja solo ve movimientos de metas conjuntas. Se ocultan los
   // ingresos privados del otro perfil y los gastos que tocan una meta individual ajena.
   const perfilActivo = state.config.perfil;
@@ -4276,8 +4198,7 @@ function renderMiMes(){
     fecha: ing.fecha || `${mes}-01`,
     creadoPor: ing.creadoPor,
     meta: ing.meta,
-    pctRetener: ing.pctRetener,
-    esAporteBase: ing.esAporteBase
+    pctRetener: ing.pctRetener
   }));
 
   const listGastos = state.gastos.filter(g => {
@@ -4346,7 +4267,6 @@ function renderMiMes(){
     </div>`:''}
     <div style="display:flex; flex-direction:column; gap:12px;">
       ${metricsHtml}
-      ${baseCardHtml}
       ${donutHtml}
       ${timelineHtml}
     </div>
@@ -4404,17 +4324,6 @@ function renderMiMes(){
   }
   
   updateMesDisplay();
-
-  const btnConfirmBase = $('btnConfirmBaseAporte');
-  if (btnConfirmBase) {
-    btnConfirmBase.onclick = () => {
-      openAsistenteIngresoExtra({
-        concepto: 'Aporte mensual programado',
-        monto: computeBase(),
-        esAporteBase: true
-      });
-    };
-  }
 
   $('r2').querySelectorAll('.delete-tx-btn').forEach(btn => {
     btn.onclick = async () => {
