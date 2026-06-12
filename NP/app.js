@@ -54,7 +54,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.0'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.1'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -1278,10 +1278,8 @@ function renderInicio(){
         fn: () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); }
       },
       {
-        t: _svgTip('target') + (totalDeudas > 0 ? ' Las deudas también son metas' : ' Cada sueño merece su meta'),
-        d: totalDeudas > 0
-          ? `${_ind?'Tienes':'Tienen'} deudas activas. Crea una <b>meta de tipo Deuda</b> para hacerle seguimiento y enfocarte en pagarla más rápido con cada distribución mensual.`
-          : `Cada objetivo merece su propia meta: un viaje, un carro, la universidad. Sepáralos y verás el progreso de cada uno sin mezclarlos.`,
+        t: _svgTip('target') + ' Cada sueño merece su meta',
+        d: `Cada objetivo merece su propia meta: un viaje, un carro, la universidad. Sepáralos y verás el progreso de cada uno sin mezclarlos.`,
         a: 'Crear mi primera meta',
         fn: () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); }
       },
