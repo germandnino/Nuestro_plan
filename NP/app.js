@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.9'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.10'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -91,9 +91,18 @@ function flashUndo(m,onUndo,ms=6000){
   if(_undoTimer){clearTimeout(_undoTimer);_undoTimer=null;}
   const el=document.createElement('div');
   el.id='undo-toast';el.className='undo-toast';
-  el.innerHTML=`<span>${m}</span><button type="button" id="undo-toast-btn" class="undo-toast-btn">Deshacer</button>`;
+  el.innerHTML=`<svg class="undo-ring" aria-hidden="true"><rect/></svg><span>${m}</span><button type="button" id="undo-toast-btn" class="undo-toast-btn">Deshacer</button>`;
   document.body.appendChild(el);
-  requestAnimationFrame(()=>el.classList.add('on'));
+  // Anillo perimetral dorado que se vacía con el tiempo restante. Se dimensiona tras montar porque el ancho depende del texto.
+  const svg=el.querySelector('.undo-ring'),rc=svg.querySelector('rect'),sw=2;
+  const w=el.offsetWidth,h=el.offsetHeight;
+  svg.setAttribute('width',w);svg.setAttribute('height',h);
+  rc.setAttribute('x',sw/2);rc.setAttribute('y',sw/2);
+  rc.setAttribute('width',w-sw);rc.setAttribute('height',h-sw);
+  rc.setAttribute('rx',(h-sw)/2);rc.setAttribute('ry',(h-sw)/2);
+  rc.setAttribute('pathLength','100');
+  rc.style.strokeDasharray='100';rc.style.strokeDashoffset='0';
+  requestAnimationFrame(()=>{el.classList.add('on');requestAnimationFrame(()=>{rc.style.transition=`stroke-dashoffset ${ms}ms linear`;rc.style.strokeDashoffset='100';});});
   const dismiss=()=>{if(_undoTimer){clearTimeout(_undoTimer);_undoTimer=null;}el.classList.remove('on');setTimeout(()=>{if(el.parentNode)el.remove();},250);};
   $('undo-toast-btn').onclick=()=>{dismiss();onUndo();};
   _undoTimer=setTimeout(dismiss,ms);
