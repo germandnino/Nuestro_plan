@@ -16,7 +16,7 @@ const CFG_DEF={
   pctPremio:20,
   modoPremio:'igual',      // igual | proporcional | personalizado
   pctPremioP1:50,
-  estrategia:'secuencial', // secuencial | simultaneo
+  buckets:{ imprevistos:50, sueno:30, invertir:20 }, // % nivel 1 por propósito (split sugerido: colchón primero)
   soloAhorroDirecto:false,
   ahorroDirecto:0,
   onboarded:false,
@@ -366,6 +366,13 @@ function normalize(){
   state.config=Object.assign({},CFG_DEF,state.config||{});
   if(Array.isArray(state.config.gastosFijos)){state.config.gastos=state.config.gastosFijos.reduce((s,x)=>s+(x.v||0),0);delete state.config.gastosFijos;}
   if(typeof state.config.gastos!=='number')state.config.gastos=CFG_DEF.gastos;
+  // Migración a modelo de dos niveles: elimina estrategia, garantiza buckets,
+  // y re-normaliza el aportePct de cada meta a "% dentro de su bucket" (suma 100 por bucket+scope).
+  if(state.config.estrategia!==undefined){ delete state.config.estrategia; }
+  if(!state.config.buckets || typeof state.config.buckets!=='object'){
+    state.config.buckets={ imprevistos:50, sueno:30, invertir:20 };
+  }
+  migrarPctABuckets();
   if(state.config.modo==='individual'){
     state.config.perfil='p1';
     state.config.planPareja=0;
@@ -544,6 +551,25 @@ async function save(){
         showSyncStatus('Solo local (sin conexión)', true);
       });
   }
+}
+
+// Re-normaliza aportePct a "% dentro del bucket" (suma 100 por bucket × scope).
+// Idempotente: si ya suman ~100 los deja igual salvo redondeo.
+function migrarPctABuckets(){
+  const scopes=[null,'p1','p2']; // null = compartido
+  const tipos=['imprevistos','sueno','invertir'];
+  scopes.forEach(dueno=>{
+    tipos.forEach(tipo=>{
+      const grupo=state.metas.filter(m=>
+        m.tipo===tipo && (dueno? m.dueno===dueno : (!m.dueno)) && !m.colocado &&
+        !(m.objetivo>0 && m.saldo>=m.objetivo));
+      if(grupo.length===0)return;
+      const sum=grupo.reduce((s,m)=>s+(m.aportePct||0),0);
+      if(sum<=0){ const each=Math.floor(100/grupo.length); grupo.forEach(m=>m.aportePct=each); grupo[grupo.length-1].aportePct+=100-each*grupo.length; }
+      else { grupo.forEach(m=>m.aportePct=Math.round((m.aportePct||0)/sum*100));
+             const t=grupo.reduce((s,m)=>s+(m.aportePct||0),0); grupo[grupo.length-1].aportePct+=100-t; }
+    });
+  });
 }
 
 /* ---------- selectores de metas ---------- */
