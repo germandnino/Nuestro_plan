@@ -1905,9 +1905,16 @@ function renderMetas(){
         } else {
           sub = lleno ? `${prot} · ${fmt(m.saldo)}` : generico;
         }
+      } else if(m.tipo==='sueno' && obj>0 && m.saldo>=obj){
+        // Estado terminal del sueño: cumplido (único que celebra). Acción: consumir → Logros.
+        sub = `<b style="color:var(--green)">¡Cumplido!</b> 🎉`;
       } else {
         sub = generico;
       }
+      const suenoCumplido = m.tipo==='sueno' && obj>0 && m.saldo>=obj;
+      const puedeConsumir = m.dueno ? true : canEdit;
+      const consumirBtn = (suenoCumplido && puedeConsumir)
+        ? `<button class="metacard-consumir" data-consumir="${m.id}">Gastar y guardar</button>` : '';
       const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
@@ -1917,8 +1924,7 @@ function renderMetas(){
             <div class="metacard-title"><span class="metacard-name">${m.nombre}</span>${typePill}</div>
             <div class="metacard-sub">${sub}</div>
           </div>
-          ${pctBadge}
-          ${editBtn}
+          ${suenoCumplido ? consumirBtn : `${pctBadge}${editBtn}`}
         </div>
       </div>`;
     };
@@ -2041,6 +2047,14 @@ function renderMetas(){
     btn.onclick = (e) => {
       e.stopPropagation();
       openMetaForm(btn.dataset.editmid);
+    };
+  });
+
+  $('r1').querySelectorAll('[data-consumir]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const m = metaById(btn.dataset.consumir);
+      if (m) consumirSueno(m);
     };
   });
 
