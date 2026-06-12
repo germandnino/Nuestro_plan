@@ -1936,10 +1936,10 @@ function renderMetas(){
       adviceHtml = `
         <div class="card" style="background:${over?'rgba(224,108,117,.12)':'rgba(246,241,230,.03)'}; border-color:${over?'#e06c75':'var(--line)'}; margin-bottom:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span class="k" style="margin:0; color:${over?'#e06c75':'var(--gs)'}">Distribución del Ahorro</span>
-            <span class="num" style="font-size:18px; color:${over?'#e06c75':'var(--ink)'}">${sp}%</span>
+            <span class="k" style="margin:0; color:${over?'#e06c75':'var(--cream)'}">Distribución del Ahorro</span>
+            <span class="num" style="font-size:20px; font-weight:800; color:${over?'#e06c75':'var(--gb)'}">${sp}%</span>
           </div>
-          <div class="hint" style="margin-top:6px; color:var(--gs);">${hintText}</div>
+          <div class="hint" style="margin-top:6px; color:rgba(246,241,230,.7);">${hintText}</div>
         </div>
       `;
     }
@@ -3304,7 +3304,7 @@ function openAsistenteIngresoExtra(preFill = null) {
 
       <div style="display:flex; gap:10px; margin-top:8px;">
         <button class="btn ghost sm" id="btnCancelAE" style="flex:1; margin:0;">Cancelar</button>
-        <button class="btn sm" id="btnApplyAE" style="flex:1; margin:0;">Añadir al plan</button>
+        <button class="btn sm" id="btnApplyAE" style="flex:1; margin:0;">Añadir ahorro</button>
       </div>
     </div>
   `;
@@ -3718,7 +3718,7 @@ function aplicarIngresoInmediatoActivo(ep) {
       persona: ep.persona || 'ambos',
       pctRetener: pctR,
       dist: distInmediato,
-      metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (ep.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')),
+      metaNombre: ep.meta === 'distribuir' ? 'Reparto' : (ep.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada')),
       aplicadoInmediato: true,
       fecha: newIngreso.fecha,
       privado: ep.privado,
@@ -3734,7 +3734,7 @@ function aplicarIngresoInmediatoActivo(ep) {
   }
 
   save();
-  renderMiMes();
+  rerender();
   flash('Aporte aplicado con éxito ✓');
 
   if (ep._sobra) {
@@ -3759,7 +3759,7 @@ function aplicarIngresoInmediatoActivo(ep) {
         }
       }
       save();
-      renderMiMes();
+      rerender();
     });
   }
 }
@@ -4076,8 +4076,8 @@ function drawMonthlyDistributionBars(mes) {
   return `
     <div style="margin-top:2px;">
       <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(246,241,230,0.08);">
-        <span style="font-size:11px; font-weight:700; color:var(--gs); letter-spacing:0.06em; text-transform:uppercase;">Total ahorrado</span>
-        <span class="num" style="font-size:20px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
+        <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Total ahorrado</span>
+        <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
       </div>
       ${rows}
     </div>
@@ -4143,7 +4143,7 @@ function drawTransactionTimeline(transactions, canEdit) {
     if (t.type === 'ingreso') {
       sign = '+';
       color = 'var(--green)';
-      const metaNom = t.meta === 'distribuir' ? 'Según el plan' : (t.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
+      const metaNom = t.meta === 'distribuir' ? 'Reparto' : (t.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
       destLabel = t.pctRetener > 0 ? `${t.pctRetener}% al bolsillo · ${metaNom}` : metaNom;
       if (t.esAporteBase) destLabel += ' (Aporte base)';
     } else if (t.type === 'gasto') {
@@ -4229,7 +4229,10 @@ function renderMiMes(){
     `;
   }
   
-  const listIngresos = state.ingresos.filter(ing => ing.mes === mes).map(ing => ({
+  // Privacidad: la pareja solo ve movimientos de metas conjuntas. Se ocultan los
+  // ingresos privados del otro perfil y los gastos que tocan una meta individual ajena.
+  const perfilActivo = state.config.perfil;
+  const listIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).map(ing => ({
     type: 'ingreso',
     id: ing.id,
     nombre: ing.nombre,
@@ -4241,7 +4244,12 @@ function renderMiMes(){
     esAporteBase: ing.esAporteBase
   }));
 
-  const listGastos = state.gastos.filter(g => g.fecha.substring(0, 7) === mes).map(g => ({
+  const listGastos = state.gastos.filter(g => {
+    if (g.fecha.substring(0, 7) !== mes) return false;
+    const m = metaById(g.meta);
+    if (m && m.dueno && m.dueno !== perfilActivo) return false; // toca meta individual ajena
+    return true;
+  }).map(g => ({
     type: 'gasto',
     id: g.id,
     nombre: g.nota || (g.mov === 'salida' ? 'Retiro' : 'Transferencia'),
@@ -4495,7 +4503,7 @@ async function aplicar(){
     pctRetener: ep.pctRetener||0,
     ingresoId: espApplyMeta[i].ingId,
     dist: espApplyMeta[i].distSnap,
-    metaNombre: ep.meta === 'distribuir' ? 'Según el plan' : (ep.meta === 'distribuir-individual' ? 'Según el plan (Individual)' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'))
+    metaNombre: ep.meta === 'distribuir' ? 'Reparto' : (ep.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(ep.meta) ? metaById(ep.meta).nombre : 'Eliminada'))
   }));
   
   const perfil=c.perfil,per=metaPersonal(perfil);
