@@ -28,6 +28,7 @@ function metasEjemplo(){
 
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
+let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -1964,15 +1965,21 @@ function renderMetas(){
       const pres = bucketsPresentes(dueno); // normaliza solo entre los editables (con cupo)
       if(!pres.includes(t)) return;          // propósito lleno: no editable
       const cfg = state.config.buckets || (state.config.buckets={});
-      cfg[t] = v;
+      // Memoria: marca t como el más recién editado.
+      _bucketEditOrder = _bucketEditOrder.filter(x=>x!==t); _bucketEditOrder.push(t);
       const otros = pres.filter(x=>x!==t);
-      const resto = 100 - v;
-      const sumOtros = otros.reduce((s,x)=>s+(cfg[x]||0),0);
-      if(otros.length){
-        if(sumOtros<=0) otros.forEach(x=>cfg[x]=Math.round(resto/otros.length));
-        else otros.forEach(x=>cfg[x]=Math.round((cfg[x]||0)/sumOtros*resto));
-        const tot = pres.reduce((s,x)=>s+(cfg[x]||0),0);
-        if(tot!==100) cfg[otros[otros.length-1]] += 100-tot;
+      if(otros.length===0){ cfg[t]=100; }
+      else {
+        // Solo UN amortiguador absorbe el cambio: el editado hace más tiempo (o nunca).
+        // Desempate entre no-editados: el último en el orden de la barra.
+        const orden = BUCKETS.filter(x=>otros.includes(x)); // orden visual de la barra
+        const rank = x => { const i=_bucketEditOrder.indexOf(x); return i<0?-1:i; };
+        const absorber = orden.slice().sort((a,b)=> (rank(a)-rank(b)) || (orden.indexOf(b)-orden.indexOf(a)) )[0];
+        const fijos = otros.filter(x=>x!==absorber);
+        const sumFijos = fijos.reduce((s,x)=>s+(cfg[x]||0),0);
+        const maxEdit = Math.max(0, 100 - sumFijos); // t no puede pasar de lo que deja libre lo fijo
+        cfg[t] = Math.min(v, maxEdit);
+        cfg[absorber] = Math.max(0, 100 - sumFijos - cfg[t]);
       }
       save();
       rerender();
