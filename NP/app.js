@@ -1430,8 +1430,8 @@ function drawBucketBar(dueno){
         <span class="pct-sign">%</span>
       </div>
     </div>`).join('');
-  return `<div class="card" style="margin-bottom:12px;">
-    <div class="k" style="margin:0 0 4px;">¿Cuánto a cada propósito?</div>
+  return `<div class="card dark" style="margin-bottom:12px;">
+    <div class="k" style="margin:0 0 4px;color:var(--cream);">¿Cuánto a cada propósito?</div>
     <div class="hint" style="margin-bottom:4px;color:rgba(246,241,230,.7);">Reparte tu ahorro entre tus grandes propósitos. Dentro de cada uno decides por meta.</div>
     ${rows}
   </div>`;
