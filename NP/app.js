@@ -366,13 +366,13 @@ function normalize(){
   state.config=Object.assign({},CFG_DEF,state.config||{});
   if(Array.isArray(state.config.gastosFijos)){state.config.gastos=state.config.gastosFijos.reduce((s,x)=>s+(x.v||0),0);delete state.config.gastosFijos;}
   if(typeof state.config.gastos!=='number')state.config.gastos=CFG_DEF.gastos;
-  // Migración a modelo de dos niveles: elimina estrategia, garantiza buckets,
-  // y re-normaliza el aportePct de cada meta a "% dentro de su bucket" (suma 100 por bucket+scope).
+  // Migración a modelo de dos niveles: elimina estrategia, garantiza buckets.
+  // (La re-normalización de aportePct por bucket se hace más abajo, una vez que
+  //  state.metas está garantizado como array y con aportePct/objetivo numéricos.)
   if(state.config.estrategia!==undefined){ delete state.config.estrategia; }
   if(!state.config.buckets || typeof state.config.buckets!=='object'){
     state.config.buckets={ imprevistos:50, sueno:30, invertir:20 };
   }
-  migrarPctABuckets();
   if(state.config.modo==='individual'){
     state.config.perfil='p1';
     state.config.planPareja=0;
@@ -400,6 +400,10 @@ function normalize(){
   state.log=Array.isArray(state.log)?state.log:[];
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
   state.gastos=Array.isArray(state.gastos)?state.gastos:[];
+
+  // Re-normaliza aportePct a "% dentro del bucket" (suma 100 por bucket × scope).
+  // Aquí state.metas ya es array y sus aportePct/objetivo son numéricos.
+  migrarPctABuckets();
 
   if (reordenarMetasPorCompletadas()) {
     rebalancearElegiblesA100('compartido');
