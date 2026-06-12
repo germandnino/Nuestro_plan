@@ -1967,9 +1967,9 @@ function renderMetas(){
 
 function initReorder(){
   if (!canEditShared()) return;
-  const container=$('sharedMetasContainer');
-  if(!container)return;
-  let draggedEl=null,startY=0,grabOffsetY=0,hasDragged=false;
+  const sections=[...document.querySelectorAll('.bucket-section')];
+  if(sections.length===0)return;
+  let draggedEl=null,activeCont=null,startY=0,grabOffsetY=0,hasDragged=false;
 
   const onPointerMove=e=>{
     if(!draggedEl)return;
@@ -1978,20 +1978,21 @@ function initReorder(){
       hasDragged=true;
       draggedEl.classList.add('dragged');
     }
-    const siblings=[...container.querySelectorAll('.card[data-mid]:not(.dragging)')];
+    // El reordenamiento es SOLO dentro de la sección activa (mismo propósito).
+    const siblings=[...activeCont.querySelectorAll('.card[data-mid]:not(.dragging)')];
     const target=siblings.find(sibling=>{
       const box=sibling.getBoundingClientRect();
       return e.clientY<box.top+box.height/2;
     })||null;
 
     const orderChanged = target ? draggedEl.nextElementSibling!==target
-                                : container.lastElementChild!==draggedEl;
+                                : activeCont.lastElementChild!==draggedEl;
     if(orderChanged){
       // FLIP: snapshot sibling positions, reorder, animate delta to 0
       const firstTop=new Map();
       siblings.forEach(s=>firstTop.set(s,s.getBoundingClientRect().top));
-      if(target)container.insertBefore(draggedEl,target);
-      else container.appendChild(draggedEl);
+      if(target)activeCont.insertBefore(draggedEl,target);
+      else activeCont.appendChild(draggedEl);
       siblings.forEach(s=>{
         const dy=firstTop.get(s)-s.getBoundingClientRect().top;
         if(!dy)return;
@@ -2018,38 +2019,43 @@ function initReorder(){
     document.removeEventListener('pointercancel',onPointerUp);
 
     draggedEl.classList.remove('dragging');
-    container.querySelectorAll('.card[data-mid]').forEach(s=>{s.style.transform='';s.style.transition='';});
+    activeCont.querySelectorAll('.card[data-mid]').forEach(s=>{s.style.transform='';s.style.transition='';});
     if(hasDragged){
-      const cards=[...container.querySelectorAll('.card[data-mid]')];
+      // Reindexa prioridad globalmente dentro del MISMO scope (dueno), recorriendo las
+      // secciones en orden de DOM y sus tarjetas. Mantiene el orden intra-sección recién hecho.
+      const dueno=activeCont.dataset.dueno||'';
+      const cards=[...document.querySelectorAll(`.bucket-section[data-dueno="${dueno}"] .card[data-mid]`)];
       cards.forEach((card,idx)=>{
         const m=metaById(card.dataset.mid);
         if(m)m.prioridad=idx;
       });
       save();
       rerender();
-      flash('Prioridades actualizadas ✓');
+      flash('Orden actualizado ✓');
     }else{
       draggedEl.classList.remove('dragged');
     }
-    draggedEl=null;
+    draggedEl=null;activeCont=null;
   };
 
-  container.addEventListener('pointerdown',e=>{
-    const handle=e.target.closest('.drag-handle');
-    if(!handle)return;
-    const card=handle.closest('.card[data-mid]');
-    if(!card)return;
-    draggedEl=card;
-    startY=e.clientY;
-    grabOffsetY=e.clientY-card.getBoundingClientRect().top;
-    hasDragged=false;
-    card.classList.add('dragging');
-    
-    document.addEventListener('pointermove',onPointerMove);
-    document.addEventListener('pointerup',onPointerUp);
-    document.addEventListener('pointercancel',onPointerUp);
-    
-    e.preventDefault();
+  sections.forEach(cont=>{
+    cont.addEventListener('pointerdown',e=>{
+      const handle=e.target.closest('.drag-handle');
+      if(!handle)return;
+      const card=handle.closest('.card[data-mid]');
+      if(!card || !cont.contains(card))return;
+      draggedEl=card;activeCont=cont;
+      startY=e.clientY;
+      grabOffsetY=e.clientY-card.getBoundingClientRect().top;
+      hasDragged=false;
+      card.classList.add('dragging');
+
+      document.addEventListener('pointermove',onPointerMove);
+      document.addEventListener('pointerup',onPointerUp);
+      document.addEventListener('pointercancel',onPointerUp);
+
+      e.preventDefault();
+    });
   });
 }
 
