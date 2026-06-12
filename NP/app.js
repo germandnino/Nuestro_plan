@@ -2483,9 +2483,15 @@ function openAsistenteIngresoExtra(preFill = null) {
         html += `</div>`;
         
         if (rem > 0.5) {
+          // Distinguir "todas llenas" (sin espacio real) de "% suman <100" (hay espacio
+          // pero el reparto por % no lo cubre). Antes siempre decía "están llenas" (falso).
+          const hayEspacio = indivs.some(m => !(m.objetivo > 0) || m.saldo < m.objetivo);
+          const msg = hayEspacio
+            ? `Tus porcentajes suman menos de 100%; quedarán <b>${fmt(rem)}</b> sin repartir como sobrante por asignar.`
+            : `Tus metas individuales están llenas. El excedente de <b>${fmt(rem)}</b> quedará como sobrante por asignar.`;
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              💡 Tus metas individuales están llenas. El excedente de <b>${fmt(rem)}</b> quedará como sobrante por asignar.
+              💡 ${msg}
             </div>
           `;
         }
