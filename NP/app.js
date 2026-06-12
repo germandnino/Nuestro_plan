@@ -1024,7 +1024,7 @@ function openModalSobrante(monto, metaLlena){
     ov.className='modal-overlay'; ov.style.display='flex';
     ov.innerHTML=`
       <div class="modal-card animate-in" style="max-width:400px; padding:20px;">
-        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! 🎉</h3>
+        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! ${getSVG('party','', 'width:15px;height:15px;vertical-align:-2px;color:var(--gold)')}</h3>
         <div class="hint" style="margin:0; font-size:13px; color:var(--gs); line-height:1.45;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
         <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
           <button class="btn sm" id="sobMotor" style="margin:0; width:100%;">Repartir con el motor (según tu plan)</button>
@@ -2775,7 +2775,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             const m = x.m;
             const newSaldo = m.saldo + x.v;
             const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! ${getSVG('party','', 'width:9px;height:9px;vertical-align:-1px')}</span>` : '';
             const pct = (x.v / toSave) * 100;
             
             html += `
@@ -2811,7 +2811,7 @@ function openAsistenteIngresoExtra(preFill = null) {
         if (unallocated > 0.5) {
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--gold); background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              ⚠️ Todas las metas están llenas y no hay fondo de emergencia. Sobrarán <b>${fmt(unallocated)}</b> sin asignar.
+              ${getSVG('alert','', 'width:12px;height:12px;vertical-align:-2px')} Todas las metas están llenas y no hay fondo de emergencia. Sobrarán <b>${fmt(unallocated)}</b> sin asignar.
             </div>
           `;
         } else if (totalOverfill > 0.5) {
@@ -2839,7 +2839,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             const m = x.m;
             const newSaldo = m.saldo + x.v;
             const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! ${getSVG('party','', 'width:9px;height:9px;vertical-align:-1px')}</span>` : '';
             const pct = (x.v / toSave) * 100;
             
             html += `
@@ -2887,7 +2887,7 @@ function openAsistenteIngresoExtra(preFill = null) {
 
           const newSaldo = currentSaldo + aplicado;
           const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada! 🎉</span>` : '';
+          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada! ${getSVG('party','', 'width:9px;height:9px;vertical-align:-1px')}</span>` : '';
           
           html += `
             <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Aporte directo a la meta:</div>
@@ -2923,7 +2923,7 @@ function openAsistenteIngresoExtra(preFill = null) {
           if (sobra > 0.5) {
             html += `
               <div style="margin-top:6px; font-size:11.5px; color:var(--gold); background:rgba(192,138,45,0.06); border:1px solid rgba(192,138,45,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-                ⚠️ La meta se completará y quedará un excedente de <b>${fmt(sobra)}</b>. Al aplicar, podrás decidir su destino.
+                ${getSVG('alert','', 'width:12px;height:12px;vertical-align:-2px')} La meta se completará y quedará un excedente de <b>${fmt(sobra)}</b>. Al aplicar, podrás decidir su destino.
               </div>
             `;
           }
