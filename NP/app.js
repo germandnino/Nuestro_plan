@@ -1216,6 +1216,9 @@ function renderInicio(){
 
   // 1. Patrimonio Neto Card
   const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
+  // ¿Hay metas de ahorro creadas? (compartidas no-deuda o individuales propias)
+  const hayMetasAhorro = metasCompartidas().some(m => m.tipo !== 'deuda')
+    || metasIndividuales(perfil).some(m => m.tipo !== 'deuda');
   const desgloseHtml = esPareja
     ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
@@ -1225,11 +1228,20 @@ function renderInicio(){
     : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + miBolsillo)}</b></span>
       </div>`;
-  const patHtml = `
+  const patHtml = hayMetasAhorro
+    ? `
     <div class="card dark" style="border-left: 4px solid ${patColor};">
       <div class="k">${esPareja ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
       <div class="num big" style="color:var(--cream);">${fmt(patrimonioNeto)}</div>
       ${desgloseHtml}
+    </div>
+  `
+    : `
+    <div class="card dark" style="border-left: 4px solid var(--gold); text-align:center; padding:22px 18px;">
+      <div style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:12px;background:rgba(217,168,74,.12);margin:0 auto 12px;">${getSVG('target', '', 'width:24px;height:24px;color:var(--gb);')}</div>
+      <div class="k" style="margin-bottom:4px;">${esPareja ? 'Su plan está listo para empezar' : 'Tu plan está listo para empezar'}</div>
+      <div style="font-size:12.5px; color:rgba(246,241,230,.7); line-height:1.45; max-width:300px; margin:0 auto 14px;">Crea ${esPareja ? 'su' : 'tu'} primera meta y empieza a separar el ahorro. Aquí ${esPareja ? 'verán' : 'verás'} crecer ${esPareja ? 'sus' : 'tus'} ahorros e inversiones.</div>
+      <button class="btn gold" id="btnCrearPrimeraMeta" style="margin:0; width:100%; max-width:280px; display:inline-flex; align-items:center; justify-content:center; gap:6px;">${getSVG('plus')} Crear ${esPareja ? 'nuestra' : 'mi'} primera meta</button>
     </div>
   `;
 
@@ -1372,6 +1384,8 @@ function renderInicio(){
   $('btnGoAddMeta').onclick = () => openMetaForm(null);
   $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
   $('btnTipAction').onclick = tipActionFn;
+  const btnPrimeraMeta = $('btnCrearPrimeraMeta');
+  if (btnPrimeraMeta) btnPrimeraMeta.onclick = () => openMetaForm(null);
 }
 function heroMeta(m){
   const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):0,falta=Math.max(0,obj-m.saldo);
