@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.4'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.5'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -823,29 +823,49 @@ function openModalSobrante(monto, metaLlena){
     const c=state.config;
     const otras=metasVisiblesEnFondos().filter(m=>m.id!==metaLlena.id && m.tipo!=='personal');
     const opts=otras.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('');
+    const showDejar = metaLlena && metaLlena.id !== '_pend';
+    
     const ov=document.createElement('div');
     ov.className='modal-overlay'; ov.style.display='flex';
     ov.innerHTML=`
-      <div class="modal-card animate-in" style="max-width:400px;">
-        <h3 class="modal-title" style="font-size:18px;">¡${metaLlena.nombre} quedó completa!</h3>
-        <div class="hint" style="margin:0;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
-        <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
-          <button class="btn sm" id="sobMotor" style="margin:0;">Repartir con el motor (según tu plan)</button>
-          <div style="display:flex; gap:8px;">
-            <select class="sf" id="sobMetaSel" style="flex:1; margin:0;">${opts}</select>
-            <button class="btn sm" id="sobMeta" style="margin:0; flex-shrink:0;">Enviar</button>
-          </div>
-          <button class="btn ghost sm" id="sobPendiente" style="margin:0;">Dejarlo pendiente (decido luego)</button>
+      <div class="modal-card animate-in" style="max-width:400px; padding:20px;">
+        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! 🎉</h3>
+        <div class="hint" style="margin:0; font-size:13px; color:var(--gs); line-height:1.45;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+          <button class="btn sm" id="sobMotor" style="margin:0; width:100%;">Repartir con el motor (según tu plan)</button>
+          
+          ${showDejar ? `
+            <button class="btn sm ghost" id="sobDejar" style="margin:0; width:100%; border-color:var(--line); color:var(--ink);">
+              Dejarlo en "${esc(metaLlena.nombre)}" (exceder objetivo)
+            </button>
+          ` : ''}
+          
+          ${otras.length > 0 ? `
+            <div style="border-top:1px dashed var(--line); padding-top:10px; margin-top:4px;">
+              <label class="lbl" style="margin-bottom:6px; display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gs);">Enviar a otra meta</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <select class="sf" id="sobMetaSel" style="flex:1; margin:0; height:38px; padding:0 10px; font-size:13.5px; border-radius:8px;">${opts}</select>
+                <button class="btn sm" id="sobMeta" style="margin:0; flex-shrink:0; height:38px; padding:0 16px;">Enviar</button>
+              </div>
+            </div>
+          ` : ''}
+          
+          <button class="btn ghost sm" id="sobPendiente" style="margin:0; margin-top:6px; width:100%; border-color:transparent; color:var(--gs); font-size:12px;">
+            Dejarlo pendiente (decido luego)
+          </button>
         </div>
       </div>`;
     document.body.appendChild(ov);
     const done=r=>{ov.remove();resolve(r);};
     ov.querySelector('#sobMotor').onclick=()=>done({accion:'motor'});
-    ov.querySelector('#sobMeta').onclick=()=>done({accion:'meta',metaId:ov.querySelector('#sobMetaSel').value});
+    if(otras.length>0){
+      ov.querySelector('#sobMeta').onclick=()=>done({accion:'meta',metaId:ov.querySelector('#sobMetaSel').value});
+    }
+    if(showDejar){
+      ov.querySelector('#sobDejar').onclick=()=>done({accion:'dejar',metaId:metaLlena.id});
+    }
     ov.querySelector('#sobPendiente').onclick=()=>done({accion:'pendiente'});
     ov.onclick=e=>{if(e.target===ov)done({accion:'pendiente'});};
-
-    if(otras.length===0){ov.querySelector('#sobMeta').disabled=true;ov.querySelector('#sobMetaSel').disabled=true;}
   });
 }
 // Ejecuta la decisión del modal. Muta saldos. Devuelve descriptor para el registro del ingreso.
@@ -863,6 +883,11 @@ function aplicarDecisionSobrante(dec, monto){
   if(dec.accion==='meta'){
     const m=metaById(dec.metaId);
     if(m){aplicarAporteDirecto(m,monto);return {tipo:'meta',metaId:dec.metaId};}
+    return {tipo:'pendiente'};
+  }
+  if(dec.accion==='dejar'){
+    const m=metaById(dec.metaId);
+    if(m){m.saldo+=monto;return {tipo:'meta',metaId:dec.metaId};}
     return {tipo:'pendiente'};
   }
   return {tipo:'pendiente'};
