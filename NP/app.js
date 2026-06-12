@@ -1712,8 +1712,8 @@ function renderMetas(){
 
   let subTabsHtml = `
     <div class="seg dark-seg" style="margin-bottom:16px;">
-      <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Distribución</button>
-      <button id="btnTabAhorros" class="${curMetasSubTab===1?'on':''}">Ahorros</button>
+      <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Resumen</button>
+      <button id="btnTabAhorros" class="${curMetasSubTab===1?'on':''}">Mis metas</button>
     </div>
   `;
   
