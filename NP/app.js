@@ -776,18 +776,9 @@ function rebalancePct(eligible, editedId, newPct) {
 
 // Conjunto de metas que participan del reparto por % (mismo criterio que el motor).
 // Compartidas: en secuencial se exime la prioritaria (recibe el remanente). Individuales: las del perfil.
-function eligiblesPct(meta) {
-  const c = state.config;
-  if (meta.dueno) {
-    return metasIndividuales(meta.dueno).filter(m =>
-      m.tipo !== 'personal' && !m.colocado);
-  }
-  const isPrio = (m) => getMetaPrioritaria()?.id === m.id;
-  return metasCompartidas().filter(m => {
-    if (m.tipo === 'personal' || m.colocado) return false;
-    if (c.estrategia === 'secuencial' && isPrio(m)) return false;
-    return true;
-  });
+// Metas que comparten bucket+scope con `meta` y reparten % entre sí (suma 100 por grupo).
+function eligiblesPct(meta){
+  return metasElegiblesBucket(meta.tipo, meta.dueno || null);
 }
 
 // Mantiene keepId en su % y escala las demás proporcionalmente para que la suma sea 100.
@@ -815,14 +806,12 @@ function rebalancePctProporcional(eligible, keepId) {
   }
 }
 
-function autoAdjustPercentages(editedId, newPct) {
-  if (state.config.estrategia === 'cascada') return null;
-  const m = metaById(editedId);
+function autoAdjustPercentages(editedId, newPct){
+  const m=metaById(editedId);
   return m ? rebalancePct(eligiblesPct(m), editedId, newPct) : null;
 }
-
-function autoAdjustIndividualPercentages(perfil, editedId, newPct) {
-  const m = metaById(editedId);
+function autoAdjustIndividualPercentages(perfil, editedId, newPct){
+  const m=metaById(editedId);
   return m ? rebalancePct(eligiblesPct(m), editedId, newPct) : null;
 }
 
@@ -875,52 +864,29 @@ function reordenarMetasPorCompletadas() {
     });
   });
 
+  // Tras liberar el % de las completadas, re-normaliza cada bucket a 100.
+  if(changed){
+    rebalancearElegiblesA100('compartido');
+    rebalancearElegiblesA100('individual','p1');
+    rebalancearElegiblesA100('individual','p2');
+  }
+
   return changed;
 }
 
-function rebalancearElegiblesA100(tipoGrupo, dueno = null) {
-  const c = state.config;
-  if (c.estrategia === 'cascada') return;
-  
-  let elig = [];
-  if (tipoGrupo === 'compartido') {
-    const prio = getMetaPrioritaria();
-    const comp = metasCompartidas();
-    elig = comp.filter(m => {
-      if (m.colocado) return false;
-      if (m.objetivo > 0 && m.saldo >= m.objetivo) return false;
-      if (c.estrategia === 'secuencial' && prio && m.id === prio.id) return false;
-      return true;
-    });
-  } else {
-    elig = metasIndividuales(dueno).filter(m => {
-      if (m.colocado) return false;
-      if (m.objetivo > 0 && m.saldo >= m.objetivo) return false;
-      return true;
-    });
-  }
-  
-  if (elig.length === 0) return;
-  
-  const totalActual = elig.reduce((s, m) => s + (m.aportePct || 0), 0);
-  if (totalActual === 100) return;
-  
-  if (totalActual <= 0) {
-    const each = Math.floor(100 / elig.length);
-    elig.forEach(m => m.aportePct = each);
-  } else {
-    elig.forEach(m => {
-      m.aportePct = Math.round((m.aportePct || 0) / totalActual * 100);
-    });
-  }
-  
-  const totalFinal = elig.reduce((s, m) => s + (m.aportePct || 0), 0);
-  if (totalFinal !== 100) {
-    const sorted = elig.slice().sort((a,b) => (b.prioridad||0) - (a.prioridad||0));
-    if (sorted.length > 0) {
-      sorted[0].aportePct = Math.max(0, sorted[0].aportePct + (100 - totalFinal));
-    }
-  }
+// Normaliza a 100 el aportePct dentro de cada bucket del scope (compartido o un perfil).
+function rebalancearElegiblesA100(tipoGrupo, dueno = null){
+  const scope = tipoGrupo==='compartido' ? null : dueno;
+  BUCKETS.forEach(tipo=>{
+    const elig=metasElegiblesBucket(tipo,scope);
+    if(elig.length===0)return;
+    const total=elig.reduce((s,m)=>s+(m.aportePct||0),0);
+    if(total===100)return;
+    if(total<=0){ const each=Math.floor(100/elig.length); elig.forEach(m=>m.aportePct=each); }
+    else elig.forEach(m=>m.aportePct=Math.round((m.aportePct||0)/total*100));
+    const tf=elig.reduce((s,m)=>s+(m.aportePct||0),0);
+    if(tf!==100){ const s=elig.slice().sort((a,b)=>(b.prioridad||0)-(a.prioridad||0)); s[0].aportePct=Math.max(0,s[0].aportePct+(100-tf)); }
+  });
 }
 
 function rebalancearAlCambiarEstrategia(nuevaEstrategia) {
