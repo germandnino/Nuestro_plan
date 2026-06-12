@@ -626,6 +626,45 @@ function emergenciaPrincipal(){return emergencias()[0]||null;}
 // Inversión activa preferida; si no hay ninguna sin colocar, cae a la colocada como último
 // destino del sobrante (no perder la plata). Distribuir avisa cuando esto pasa.
 function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir'&&!m.colocado)||state.metas.find(m=>m.tipo==='invertir');}
+const BUCKETS=['imprevistos','sueno','invertir'];
+// Metas de un bucket en un scope (dueno=null → compartido) que admiten reparto.
+function metasDeBucket(tipo,dueno){
+  const base = dueno ? metasIndividuales(dueno) : metasCompartidas();
+  return base.filter(m=>m.tipo===tipo && !m.colocado);
+}
+// Metas elegibles para recibir % en un bucket: no colocadas y no llenas.
+function metasElegiblesBucket(tipo,dueno){
+  return metasDeBucket(tipo,dueno).filter(m=>!(m.objetivo>0 && m.saldo>=m.objetivo));
+}
+// Buckets con al menos una meta elegible en el scope.
+function bucketsPresentes(dueno){
+  return BUCKETS.filter(t=>metasElegiblesBucket(t,dueno).length>0);
+}
+// Pesos normalizados (suma 100) de los buckets presentes; ausentes redistribuyen su parte.
+function pesosBuckets(dueno){
+  const pres=bucketsPresentes(dueno), cfg=state.config.buckets||{}, w={};
+  const sum=pres.reduce((s,t)=>s+(cfg[t]||0),0);
+  if(sum<=0){ const each=100/(pres.length||1); pres.forEach(t=>w[t]=each); }
+  else pres.forEach(t=>w[t]=(cfg[t]||0)/sum*100);
+  return w;
+}
+// Reparte `monto` entre las metas elegibles del bucket por su aportePct (normalizado dentro
+// del bucket), topando en la falta de cada meta. Muta `res`. Devuelve el sobrante del bucket.
+function repartirEnBucket(tipo,dueno,monto,res){
+  let rem=monto;
+  const elig=metasElegiblesBucket(tipo,dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+  if(elig.length===0)return rem;
+  const sumPct=elig.reduce((s,m)=>s+(m.aportePct||0),0);
+  elig.forEach(m=>{
+    const pct = sumPct>0 ? (m.aportePct||0)/sumPct*100 : 100/elig.length;
+    let add=monto*pct/100;
+    const falta=getMetaFalta(m,res);
+    add=Math.min(add,falta,rem);
+    if(res[m.id]===undefined)res[m.id]=0;
+    res[m.id]+=add; rem-=add;
+  });
+  return rem;
+}
 function getMetaFalta(m, resAlloc) {
   const currentAlloc = resAlloc[m.id] || 0;
   if (m.objetivo > 0) {
