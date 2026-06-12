@@ -2145,9 +2145,19 @@ function attachMetaForm(editing){
     if(state.config.estrategia!=='cascada' && (mForm.aportePct||0)>0){
       const elig=eligiblesPct(mForm);
       const sum=elig.reduce((s,x)=>s+(x.aportePct||0),0);
-      if(sum>100){
-        const ok=await customConfirm(`Con esta meta, tus porcentajes suman ${sum}% (más de 100%). ¿Reajusto las demás metas para que sumen 100% y se respete el ${mForm.aportePct}% de "${esc(mForm.nombre)}"?`);
-        if(ok) rebalancePctProporcional(elig, mForm.id);
+      if(Math.abs(sum-100)>0.5){
+        if(elig.length===1){
+          // Única meta con %: no hay otras que absorban el resto. Ofrecer ponerla al 100%
+          // para que reciba todo el ahorro en vez de dejar un sobrante espurio.
+          if((mForm.aportePct||0)<100){
+            const ok=await customConfirm(`Es tu única meta con porcentaje (${mForm.aportePct}%). ¿La pongo al 100% para que reciba todo el ahorro?`);
+            if(ok) mForm.aportePct=100;
+          }
+        } else {
+          const masMenos = sum>100 ? 'más' : 'menos';
+          const ok=await customConfirm(`Con esta meta, tus porcentajes suman ${sum}% (${masMenos} de 100%). ¿Reajusto las demás metas para que sumen 100% y se respete el ${mForm.aportePct}% de "${esc(mForm.nombre)}"?`);
+          if(ok) rebalancePctProporcional(elig, mForm.id);
+        }
       }
     }
     mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
