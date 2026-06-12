@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.2'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.3'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -2281,7 +2281,9 @@ function openAsistenteIngresoExtra(preFill = null) {
   const comp = metasCompartidas().filter(m => !m.colocado);
   const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
-  const optionsHtml = og('Metas comunes', comp) + og('Mis metas (privadas)', indiv);
+  const optionsHtml = c.modo === 'individual'
+    ? comp.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
+    : og('Metas comunes', comp) + og('Mis metas (privadas)', indiv);
 
   const defaultConcepto = preFill ? preFill.concepto : '';
   const defaultMonto = preFill && preFill.monto ? '$' + Number(preFill.monto).toLocaleString('es-CO') : '';
@@ -2291,7 +2293,7 @@ function openAsistenteIngresoExtra(preFill = null) {
     selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes (según el plan)</option>';
     selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas individuales (según el plan)</option>';
   } else {
-    selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas (según el plan)</option>';
+    selectOptionsHtml += '<option value="distribuir">Repartir entre mis metas (según el plan)</option>';
   }
   selectOptionsHtml += optionsHtml;
 
@@ -2430,7 +2432,7 @@ function openAsistenteIngresoExtra(preFill = null) {
         } else if (totalOverfill > 0.5) {
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              💡 El plan de metas comunes está completo. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
+              💡 ${c.modo === 'individual' ? 'El plan de metas' : 'El plan de metas comunes'} está completo. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
             </div>
           `;
         }
