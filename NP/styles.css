@@ -620,3 +620,22 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
   animation: pctFlash 0.9s ease-out;
 }
 
+
+/* ---- Fase 2.1: barra de propósitos compacta ---- */
+.bucketgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.bucketcell{display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.14);border-radius:12px;padding:9px 6px}
+.bucketcell.full{opacity:.5}
+.bucketcell-lbl{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--cream);white-space:nowrap}
+
+/* ---- Fase 2.1: tarjeta de meta compacta con progreso de fondo ---- */
+.metacard{position:relative;overflow:hidden;padding:0;cursor:pointer}
+.card-fill{position:absolute;top:0;bottom:0;left:0;background:rgba(192,138,45,.13);pointer-events:none;transition:width .3s ease;z-index:0}
+.metacard-row{position:relative;z-index:1;display:flex;align-items:center;gap:8px;padding:11px 12px}
+.metacard-main{flex:1;min-width:0}
+.metacard-title{display:flex;align-items:center;gap:8px}
+.metacard-name{font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metacard-sub{font-size:11.5px;color:var(--gs);margin-top:2px}
+.metacard-chevron{display:inline-flex;color:var(--gs);transition:transform .2s ease;flex-shrink:0}
+.metacard.expanded .metacard-chevron{transform:rotate(180deg)}
+.metacard-detail{position:relative;z-index:1;padding:0 12px 12px;border-top:1px solid var(--line);padding-top:10px}
+.metacard-detail .btn-card-edit{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--line);color:var(--gs);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px}
