@@ -1,5 +1,5 @@
 // Nuestro plan — service worker (offline app shell)
-const CACHE = "nuestro-plan-v89";
+const CACHE = "nuestro-plan-v90";
 const CORE = [
   "index.html",
   "styles.css",

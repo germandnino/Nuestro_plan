@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.5'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.6'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -844,8 +844,8 @@ function openModalSobrante(monto, metaLlena){
             <div style="border-top:1px dashed var(--line); padding-top:10px; margin-top:4px;">
               <label class="lbl" style="margin-bottom:6px; display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gs);">Enviar a otra meta</label>
               <div style="display:flex; gap:8px; align-items:center;">
-                <select class="sf" id="sobMetaSel" style="flex:1; margin:0; height:38px; padding:0 10px; font-size:13.5px; border-radius:8px;">${opts}</select>
-                <button class="btn sm" id="sobMeta" style="margin:0; flex-shrink:0; height:38px; padding:0 16px;">Enviar</button>
+                <select class="sf" id="sobMetaSel" style="flex:1; min-width:0; margin:0; height:38px; padding:0 10px; font-size:13.5px; border-radius:8px;">${opts}</select>
+                <button class="btn sm" id="sobMeta" style="margin:0; flex-shrink:0; height:38px; padding:0 16px; width:auto;">Enviar</button>
               </div>
             </div>
           ` : ''}
