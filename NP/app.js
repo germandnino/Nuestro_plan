@@ -25,12 +25,6 @@ const CFG_DEF={
 function metasEjemplo(){
   return [];
 }
-function metasPersonales(){
-  return [
-    {id:'personal-p1',nombre:'Personal',tipo:'personal',dueno:'p1',sistema:true,saldo:0,aportes:[]},
-    {id:'personal-p2',nombre:'Personal',tipo:'personal',dueno:'p2',sistema:true,saldo:0,aportes:[]}
-  ];
-}
 
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
@@ -53,14 +47,14 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.1'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.2'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
 const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
-// Paleta categórica para donas (metas). Evita lila/rosa, reservados a bolsillos individuales (persona).
+// Paleta categórica para las gráficas de metas.
 const DONUT_PALETTE=['#d9a84a','#5b9aa0','#c87a53','#7fae6e','#6f8fc7','#b5923f','#7bc0b8','#c0673f','#4c936b','#8aa84a'];
 function getSVG(name, cls='', style='') {
   const icons = {
@@ -366,14 +360,10 @@ function normalize(){
   }
   if(!['p1','p2'].includes(state.config.perfil))state.config.perfil='p1';
   if(!Array.isArray(state.metas)||!state.metas.length){
-    state.metas=metasEjemplo().concat(metasPersonales());
+    state.metas=metasEjemplo();
   }
-  // garantizar metas personales
-  ['p1','p2'].forEach(p=>{
-    let m=state.metas.find(x=>x.tipo==='personal'&&x.dueno===p);
-    if(!m){state.metas.push({id:'personal-'+p,nombre:'Personal',tipo:'personal',dueno:p,sistema:true,saldo:0,aportes:[]});}
-    else{if(typeof m.saldo!=='number')m.saldo=0;if(!Array.isArray(m.aportes))m.aportes=[];}
-  });
+  // Bolsillos personales eliminados del modelo: purgar restos de datos viejos.
+  state.metas=state.metas.filter(m=>m.tipo!=='personal');
   state.metas.forEach(m=>{
     if(typeof m.saldo!=='number')m.saldo=0;
     if(m.tipo==='personal')return;
@@ -393,7 +383,6 @@ function normalize(){
 }
 
 // --- Firebase Sync Helpers ---
-let unsubscribeBolsillos = null;
 
 function getPlanId() {
   const params = new URLSearchParams(window.location.search);
@@ -421,12 +410,12 @@ async function syncSaveShared(planId, stateToSave) {
   const { config, metas, log, ingresos, gastos } = stateToSave;
   const configSinPerfil = { ...config };
   delete configSinPerfil.perfil;
-  const metasSinBolsillo = metas.filter(m => m.tipo !== 'personal');
+  const metasSync = metas.filter(m => m.tipo !== 'personal');
   await db.collection('planes').doc(planId)
     .collection('shared').doc('data')
     .set({
       config: configSinPerfil,
-      metas: metasSinBolsillo,
+      metas: metasSync,
       log,
       ingresos,
       gastos,
@@ -477,11 +466,10 @@ function syncSubscribe(planId) {
       // Marca como visto el último estado sincronizado.
       if (remoteUpdatedMs) { try { localStorage.setItem('lastSeenUpdate', String(remoteUpdatedMs)); } catch(_){} }
       const perfilLocal = state.config.perfil;
-      const personalesLocales = state.metas.filter(m => m.tipo === 'personal');
       const remoteMetas = remote.metas || [];
-      
+
       state.config = { ...remote.config, perfil: perfilLocal };
-      state.metas = remoteMetas.concat(personalesLocales.filter(pl => !remoteMetas.some(rm => rm.id === pl.id)));
+      state.metas = remoteMetas;
       state.log = remote.log || [];
       state.ingresos = remote.ingresos || [];
       state.gastos = remote.gastos || [];
@@ -511,35 +499,6 @@ function syncSubscribe(planId) {
       scheduleRerender();
     });
 
-  if (unsubscribeBolsillos) unsubscribeBolsillos();
-  if (currentUser) {
-    unsubscribeBolsillos = db.collection('planes').doc(planId).collection('bolsillos').doc(currentUser.uid)
-      .onSnapshot(doc => {
-        if (!doc.exists) return;
-        const remoteBolsillo = doc.data().meta;
-        if (remoteBolsillo && remoteBolsillo.dueno) {
-          const idx = state.metas.findIndex(m => m.tipo === 'personal' && m.dueno === remoteBolsillo.dueno);
-          if (idx !== -1) {
-            state.metas[idx].saldo = remoteBolsillo.saldo;
-            state.metas[idx].aportes = remoteBolsillo.aportes || [];
-            state.metas[idx].nombre = remoteBolsillo.nombre || state.metas[idx].nombre;
-          }
-        }
-        saveLocalOnly();
-        scheduleRerender();
-      }, e => {
-        console.warn("Error subscribing to pocket:", e.message);
-      });
-  }
-}
-
-async function syncSaveBolsillo(planId, uid, bolsilloMeta) {
-  await db.collection('planes').doc(planId)
-    .collection('bolsillos').doc(uid)
-    .set({
-      meta: bolsilloMeta,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
 }
 
 async function load(){
@@ -565,34 +524,15 @@ async function save(){
         showSyncStatus('Solo local (sin conexión)', true);
       });
   }
-
-  if (currentUser && currentPlanId) {
-    const miBolsillo = state.metas.find(m => m.tipo === 'personal' && m.dueno === state.config.perfil);
-    if (miBolsillo) {
-      syncSaveBolsillo(currentPlanId, currentUser.uid, miBolsillo)
-        .then(() => {
-          if (!isOwner) {
-            showSyncStatus('Bolsillo sincronizado ✓');
-          }
-        })
-        .catch(e => {
-          console.warn('Bolsillo sync failed, local only:', e.message);
-          if (!isOwner) {
-            showSyncStatus('Bolsillo local (sin conexión)', true);
-          }
-        });
-    }
-  }
 }
 
 /* ---------- selectores de metas ---------- */
 function metaById(id){return state.metas.find(m=>m.id===id);}
 function metasCompartidas(){return state.metas.filter(m=>m.tipo!=='personal'&&!m.dueno);}
 function metasIndividuales(p){return state.metas.filter(m=>m.dueno===p&&m.tipo!=='personal');}
-function metaPersonal(p){return state.metas.find(m=>m.tipo==='personal'&&m.dueno===p);}
 function metasVisiblesEnFondos(){
-  // todas las compartidas + la personal del perfil de este teléfono + individuales de este teléfono
-  return metasCompartidas().concat([metaPersonal(state.config.perfil)]).concat(metasIndividuales(state.config.perfil)).filter(Boolean);
+  // todas las compartidas + individuales de este teléfono
+  return metasCompartidas().concat(metasIndividuales(state.config.perfil));
 }
 function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inversión':t==='sueno'?'Sueño':'Personal';}
 
@@ -629,8 +569,7 @@ function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libr
 function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
 function computeTotal(){
   const p = state.config.perfil;
-  const mp = metaPersonal(p);
-  return metasCompartidas().reduce((s,m)=>s+m.saldo,0) + (mp?mp.saldo:0) + metasIndividuales(p).reduce((s,m)=>s+m.saldo,0);
+  return metasCompartidas().reduce((s,m)=>s+m.saldo,0) + metasIndividuales(p).reduce((s,m)=>s+m.saldo,0);
 }
 function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
 function emergenciaPrincipal(){return emergencias()[0]||null;}
@@ -872,13 +811,13 @@ function revertirAporteDirecto(m, monto){
   m.saldo=Math.max(0, m.saldo-monto);
 }
 // ¿La meta destino es del terreno personal del perfil activo?
-// Cubre bolsillo (tipo personal) y metas individuales: ambas llevan dueno.
+// Metas individuales: llevan dueno.
 function esDestinoPersonal(metaId){
   const m=metaById(metaId);
   return !!(m && m.dueno===state.config.perfil);
 }
 // Pregunta qué hacer con el sobrante cuando un aporte directo llena la meta.
-// Resuelve {accion:'motor'|'meta'|'bolsillo'|'pendiente', metaId?}.
+// Resuelve {accion:'motor'|'meta'|'pendiente', metaId?}.
 function openModalSobrante(monto, metaLlena){
   return new Promise(resolve=>{
     const c=state.config;
@@ -1119,16 +1058,15 @@ function renderInicio(){
   const esPareja = c.modo !== 'individual';
   // Compartido: lo de la pareja (sin dueño). Idéntico en ambos teléfonos.
   const ahorrosCompartidos = state.metas.filter(m => m.tipo !== 'personal' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
-  // Mi parte: bolsillo personal + metas individuales propias. Privada.
-  const miBolsillo = (metaPersonal(perfil)?.saldo||0)
-    + state.metas.filter(m => m.tipo !== 'personal' && m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
+  // Mi parte: metas individuales propias. Privada.
+  const misIndividuales = state.metas.filter(m => m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
 
   // Pareja: el número grande es SOLO lo compartido (mismo en ambos teléfonos).
   // Individual: una sola persona, se suma todo.
   const patrimonioNeto = esPareja
     ? ahorrosCompartidos
-    : (ahorrosCompartidos + miBolsillo);
-  const bolsilloColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
+    : (ahorrosCompartidos + misIndividuales);
+  const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   const headerHtml = c.modo === 'individual'
     ? `<header><div class="ey">${esc(c.nombreP1)}</div><h1>Mi plan</h1></header>`
@@ -1142,11 +1080,11 @@ function renderInicio(){
   const desgloseHtml = esPareja
     ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${bolsilloColor}; margin-right:4px;"></span>Individual: <b>${fmt(miBolsillo)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Individual: <b>${fmt(misIndividuales)}</b></span>
       </div>
       <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tus ahorros individuales son privados y no entran en el total de la pareja.</div>`
     : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + miBolsillo)}</b></span>
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + misIndividuales)}</b></span>
       </div>`;
   const patHtml = hayMetasAhorro
     ? `
@@ -1203,10 +1141,10 @@ function renderInicio(){
         fn: () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); }
       },
       {
-        t: _svgTip('target') + (_ind ? 'Tu bolsillo personal' : 'Metas individuales'),
+        t: _svgTip('target') + 'Metas individuales',
         d: _ind
-          ? `Además del plan general, puedes crear <b>metas individuales</b> que salen de tu bolsillo personal mensual — para tus ahorros o gastos propios sin mezclarlos con el plan.`
-          : `Cada uno puede tener <b>metas individuales</b> que salen de su bolsillo personal. Así cada quien ahorra para sus cosas sin afectar el plan compartido.`,
+          ? `Además del plan general, puedes crear <b>metas individuales</b> privadas — para tus ahorros propios sin mezclarlos con el plan.`
+          : `Cada uno puede tener <b>metas individuales</b> privadas. Así cada quien ahorra para sus cosas sin afectar el plan compartido.`,
         a: 'Ir a Metas',
         fn: () => go(1)
       },
@@ -1320,7 +1258,7 @@ function drawSavingsDonut() {
   const perfil = state.config.perfil;
   const metasConSaldo = state.metas.filter(m => {
     if (m.tipo === 'personal') return false;
-    // Privacidad: nada del otro perfil (ni su bolsillo ni sus metas individuales).
+    // Privacidad: nada del otro perfil (sus metas individuales).
     if (m.dueno && m.dueno !== perfil) return false;
     return true;
   }).map(m => {
@@ -1975,7 +1913,7 @@ function renderMetaForm(editing){
           </div>
         </div>
         <div class="hint" id="fVisHint" style="margin-top:10px;">
-          ${m.dueno ? '<b>Meta Individual (Privada):</b> Solo tú verás esta meta y la financiarás desde tu bolsillo personal.' : '<b>Meta Compartida:</b> Ambos verán la meta y aportarán a ella desde el ahorro colectivo.'}
+          ${m.dueno ? '<b>Meta Individual (Privada):</b> Solo tú verás esta meta y la financiarás con tus aportes directos.' : '<b>Meta Compartida:</b> Ambos verán la meta y aportarán a ella desde el ahorro colectivo.'}
         </div>
       </div>
     `;
@@ -2093,7 +2031,7 @@ function updateDeriv(){
     }else if(aporteMes>0&&!obj){
       txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
     }else if(obj){
-      txt=`Meta de <b>${fmt(obj)}</b> sin aporte mensual definido. Se financiará mediante aportes manuales desde tu bolsillo.`;
+      txt=`Meta de <b>${fmt(obj)}</b> sin aporte mensual definido. Se financiará mediante aportes manuales.`;
     }else{
       txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
     }
@@ -2248,7 +2186,7 @@ function obtenerRecomendacionInversion(m) {
     return `<strong>Dinero ya colocado:</strong> Registras esta meta solo para control, así que no te sugerimos moverla. Para su plazo lo habitual es <strong>${ideal}</strong>; si ya está ahí, perfecto — solo déjalo seguir su curso hasta que lo necesites.`;
   }
   if (m.tipo === 'personal' || m.tipo === 'imprevistos') {
-    return `<strong>Bolsillo de Emergencias / Corto Plazo:</strong> Para este tipo de fondos, la prioridad número uno es la <strong>liquidez y seguridad</strong>. Recomendamos usar <strong>Cajitas Nu</strong> (que ofrecen actualmente un 13% E.A. con disponibilidad 24/7) o la cuenta de ahorros de alto rendimiento de <strong>Lulo Bank</strong>.`;
+    return `<strong>Fondo de Emergencias / Corto Plazo:</strong> Para este tipo de fondos, la prioridad número uno es la <strong>liquidez y seguridad</strong>. Recomendamos usar <strong>Cajitas Nu</strong> (que ofrecen actualmente un 13% E.A. con disponibilidad 24/7) o la cuenta de ahorros de alto rendimiento de <strong>Lulo Bank</strong>.`;
   }
   const mr = horizonteMeses(m);
   if (mr === null || mr <= 0) {
@@ -2535,7 +2473,7 @@ function openAsistenteIngresoExtra(preFill = null) {
         if (rem > 0.5) {
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              💡 Tus metas individuales están llenas. El excedente de <b>${fmt(rem)}</b> se guardará en tu bolsillo.
+              💡 Tus metas individuales están llenas. El excedente de <b>${fmt(rem)}</b> quedará como sobrante por asignar.
             </div>
           `;
         }
@@ -2599,7 +2537,6 @@ function openAsistenteIngresoExtra(preFill = null) {
         }
       }
     } else {
-      html += `<div style="color:var(--gs); font-size:12px; font-style:italic; text-align:center;">El 100% del dinero se retiene en el bolsillo.</div>`;
     }
     
     previewDiv.innerHTML = html;
@@ -2774,7 +2711,6 @@ function revertirGasto(id) {
   if (!g) return;
 
   const m = metaById(g.meta);
-  const per = (g.fromPocket || g.toPocket) ? metaPersonal(m?.dueno || state.config.perfil) : null;
 
   if (g.transferId) {
     const tId = g.transferId;
@@ -2794,13 +2730,6 @@ function revertirGasto(id) {
     if (m) {
       if (g.entrada) {
         m.saldo = Math.max(0, m.saldo - g.monto);
-        if (per) per.saldo += g.monto;
-      } else if (g.mov === 'retiro') {
-        m.saldo += g.monto;
-        if (per) per.saldo = Math.max(0, per.saldo - g.monto);
-      } else if (g.mov === 'pagoDesdeBolsillo') {
-        m.saldo += g.monto;
-        if (per) per.saldo += g.monto;
       } else {
         m.saldo += g.monto;
       }
@@ -2822,7 +2751,7 @@ function getCreatorName(creadoPor) {
 
 function getMonthlyDistributionData(mes) {
   const c = state.config;
-  const distMap = {}; // key: metaId or pocketId, value: { name, amount, color, isPocket }
+  const distMap = {}; // key: metaId, value: { name, amount, color }
   
   const monthlyIngresos = state.ingresos.filter(ing => ing.mes === mes);
   
@@ -2836,7 +2765,7 @@ function getMonthlyDistributionData(mes) {
           const m = metaById(mId);
           if (m) {
             if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
+              distMap[mId] = { name: m.nombre, amount: 0, color: null };
             }
             distMap[mId].amount += dist[mId];
           }
@@ -2847,7 +2776,7 @@ function getMonthlyDistributionData(mes) {
           const m = metaById(mId);
           if (m) {
             if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
+              distMap[mId] = { name: m.nombre, amount: 0, color: null };
             }
             distMap[mId].amount += dist[mId];
           }
@@ -2857,7 +2786,7 @@ function getMonthlyDistributionData(mes) {
         if (m) {
           const mId = ing.meta;
           if (!distMap[mId]) {
-            distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
+            distMap[mId] = { name: m.nombre, amount: 0, color: null };
           }
           const amt = ing.aplicadoDirecto != null ? ing.aplicadoDirecto : toSave;
           distMap[mId].amount += amt;
@@ -2872,7 +2801,7 @@ function getMonthlyDistributionData(mes) {
           const m = metaById(mId);
           if (m) {
             if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: null, isPocket: false };
+              distMap[mId] = { name: m.nombre, amount: 0, color: null };
             }
             distMap[mId].amount += sr.dist[mId];
           }
@@ -2882,7 +2811,7 @@ function getMonthlyDistributionData(mes) {
         if (m2) {
           const mId = sr.metaId;
           if (!distMap[mId]) {
-            distMap[mId] = { name: m2.nombre, amount: 0, color: null, isPocket: false };
+            distMap[mId] = { name: m2.nombre, amount: 0, color: null };
           }
           distMap[mId].amount += sr.monto;
         }
@@ -2911,13 +2840,10 @@ function drawMonthlyDistributionBars(mes) {
     `;
   }
 
-  // Barras horizontales: ancho proporcional al % del mes. Metas en dorado;
-  // bolsillos individuales con su tinte de persona (lila/rosa) por privacidad.
+  // Barras horizontales doradas: ancho proporcional al % del mes.
   const rows = data.slice().sort((a, b) => b.amount - a.amount).map(slice => {
     const pct = slice.amount / total * 100;
-    const fill = slice.isPocket
-      ? slice.color
-      : 'linear-gradient(90deg, var(--gb), #e6c25a)';
+    const fill = 'linear-gradient(90deg, var(--gb), #e6c25a)';
     return `
       <div style="margin-bottom:13px;">
         <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:5px;">
@@ -3550,7 +3476,7 @@ function renderPlan(){
             </div>
             <div class="hint" style="margin-top:8px;font-size:11px;line-height:1.4;">
               ${isViewer
-                ? `<span style="display:flex;align-items:flex-start;gap:5px;">${getSVG('alert', '', 'flex-shrink:0;stroke:#e06c75;margin-top:1px;width:13px;height:13px;')} <span><b>Modo lectura activado</b>. Solo puedes visualizar la información de las metas compartidas, los gastos y el presupuesto. Tu bolsillo personal sigue estando disponible.</span></span>`
+                ? `<span style="display:flex;align-items:flex-start;gap:5px;">${getSVG('alert', '', 'flex-shrink:0;stroke:#e06c75;margin-top:1px;width:13px;height:13px;')} <span><b>Modo lectura activado</b>. Solo puedes visualizar la información de las metas compartidas, los gastos y el presupuesto.</span></span>`
                 : `<span style="display:flex;align-items:center;gap:5px;">${getSVG('target', '', 'flex-shrink:0;stroke:var(--green);width:13px;height:13px;')} <span>Tienes permisos de <b>Editor</b>. Puedes realizar aportes, modificar metas y rellenar presupuestos.</span></span>`}
             </div>
           </div>
@@ -3667,7 +3593,7 @@ function renderPlan(){
   const perfilDetailHtml = isIndiv
     ? ''
     : `<details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary>Perfil de este teléfono</summary><div class="dpad">
-        <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Tú ves y llenas tu bolsillo personal.</div>
+        <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Cada quien ve sus metas individuales privadas.</div>
         ${perfilHtml}
        </div></details>`;
 
@@ -3926,7 +3852,7 @@ function attachPlan(){
         await auth.signOut();
         localStorage.removeItem('planId');
         localStorage.removeItem('isInvited');
-        state = { config: Object.assign({}, CFG_DEF), metas: metasEjemplo().concat(metasPersonales()), log: [], ingresos: [], gastos: [] };
+        state = { config: Object.assign({}, CFG_DEF), metas: metasEjemplo(), log: [], ingresos: [], gastos: [] };
         save();
         startOnboarding();
         flash('Sesión cerrada ✓');
@@ -3938,23 +3864,14 @@ function attachPlan(){
 
   const bExp = $('bExp');
   if (bExp) {
-    // Privacidad: el respaldo no incluye el bolsillo de la pareja
-    // (vive en la nube bajo su cuenta y se repone al sincronizar).
     bExp.onclick=()=>{
-      const copia=Object.assign({},state,{metas:state.metas.filter(m=>!(m.tipo==='personal'&&m.dueno!==state.config.perfil))});
-      $('bTxt').value=JSON.stringify(copia);flash('Respaldo generado');};
+      $('bTxt').value=JSON.stringify(state);flash('Respaldo generado');};
   }
   const bImp = $('bImp');
   if (bImp) {
     bImp.onclick=()=>{try{const o=JSON.parse($('bTxt').value);if(!o.metas)throw 0;
       const perfil=state.config.perfil;
-      // Un respaldo nunca pisa bolsillos: conserva los dos personales locales.
-      const personalesLocales=state.metas.filter(m=>m.tipo==='personal').map(x=>JSON.parse(JSON.stringify(x)));
       state=o;normalize();state.config.perfil=perfil;
-      personalesLocales.forEach(pl=>{
-        const idx=state.metas.findIndex(m=>m.tipo==='personal'&&m.dueno===pl.dueno);
-        if(idx>=0)state.metas[idx]=pl;else state.metas.push(pl);
-      });
       save();go(0);flash('Respaldo restaurado ✓');}catch(e){flash('Respaldo inválido');}};
   }
   const bResetSaldos = $('bResetSaldos');
@@ -3963,11 +3880,7 @@ function attachPlan(){
       if (!canEditShared()) { flash('Solo un editor puede reiniciar el plan'); return; }
       if (!await customConfirm('¿Reiniciar todos los saldos y el historial a $0? Se mantendrán tus metas creadas, nombres, nóminas y gastos fijos configurados.', true)) return;
       
-      // Reiniciar saldos de todas las metas (incluyendo las personales)
-      state.metas.forEach(m => {
-        m.saldo = 0;
-        if (m.aportes) m.aportes = []; // limpiar historial de aportes si los hay en personales
-      });
+      state.metas.forEach(m => { m.saldo = 0; });
       
       // Limpiar historiales y movimientos
       state.log = [];
@@ -3979,7 +3892,7 @@ function attachPlan(){
       flash('Saldos e historial reiniciados ✓');
     };
   }
-  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo().concat(metasPersonales()),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
+  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
   if (bInst) {
@@ -4746,7 +4659,7 @@ auth.onAuthStateChanged(async user => {
       if (remote) {
         const perfilLocal = state.config.perfil;
         state.config = { ...remote.config, perfil: perfilLocal };
-        state.metas = (remote.metas || []).concat(state.metas.filter(m => m.tipo === 'personal'));
+        state.metas = remote.metas || [];
         state.log = remote.log || [];
         state.ingresos = remote.ingresos || [];
         state.gastos = remote.gastos || [];
@@ -4789,7 +4702,6 @@ auth.onAuthStateChanged(async user => {
     }
   } else {
     if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
-    if (unsubscribeBolsillos) { unsubscribeBolsillos(); unsubscribeBolsillos = null; }
     if (unsubscribeMeta) { unsubscribeMeta(); unsubscribeMeta = null; }
     currentPlanId = null;
     isOwner = false;

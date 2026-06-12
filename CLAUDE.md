@@ -47,27 +47,37 @@ Objeto global único en `app.js`:
 let state = { config:{}, metas:[], log:[], ingresos:[], gastos:[] };
 ```
 
-- `config` — presupuesto, nombres P1/P2, perfil del dispositivo, estrategia, modo (`pareja`|`individual`), `onboarded`, % premio.
-- `metas` — lista unificada. Tipos: `imprevistos` | `invertir` | `sueno` | `personal` (las `personal` son de sistema, una por dueño p1/p2).
-- `log` — meses cerrados y aplicados.
-- `ingresos` — ingresos especiales/variables.
-- `gastos` — salidas imputadas a metas.
+- `config` — presupuesto, nombres P1/P2, perfil del dispositivo, estrategia, modo (`pareja`|`individual`), `onboarded`.
+- `metas` — lista unificada. Tipos: `imprevistos` | `invertir` | `sueno`. Metas con `dueno` (`p1`|`p2`) son **individuales privadas** del perfil. **Ya NO existen**: tipo `deuda`, tipo `personal` (bolsillos de sistema), `aporteFijo` (solo `aportePct`).
+- `log` — legacy de meses cerrados (el "cierre de mes" ya no existe; queda vacío en planes nuevos).
+- `ingresos` — **movimientos** de entrada (modelo unificado: cada aporte es un movimiento).
+- `gastos` — salidas y transferencias (`mov`: `salida` | `transfer-out`/`transfer-in` con `transferId`).
+
+## Modelo de movimientos (v2 — sin cierre de mes)
+
+Todo ingreso es un **movimiento** vía "Añadir dinero": monto → destino (`distribuir` = motor compartido, `distribuir-individual` = motor del perfil, o id de meta = aporte directo). Aporte directo que llena la meta → modal de sobrante (motor / otra meta / pendiente). Sobrantes pendientes viven en `ingresos` con `sinAsignar:true`. "Retirar dinero" es el movimiento espejo (fuera del plan o transferencia entre metas). Los KPI (`mesesConDatosUI`/`ahorroMesUI`) se calculan desde los movimientos. Movimientos a metas individuales son invisibles para la pareja (`privado`/`duenoPriv` + filtros en timeline).
 
 ## Motor financiero
 
 Núcleo: `distribuirAhorro(monto)`. Tres estrategias:
 
-1. **secuencial** (Prioritaria primero) — cubre aportes fijos, vuelca 100% del resto a la meta incompleta de mayor prioridad, sobrante por % a las demás → inversión.
-2. **simultaneo** — aportes fijos + reparto proporcional por % en paralelo → sobrante a inversión.
-3. **cascada** — ignora fijos/%, llena meta por meta según orden de la lista (Drag & Drop) → sobrante a inversión.
+1. **secuencial** (Prioritaria primero) — 100% a la meta incompleta de mayor prioridad, resto por % a las demás → inversión.
+2. **simultaneo** — reparto proporcional por `aportePct` en paralelo → sobrante a inversión.
+3. **cascada** — ignora %, llena meta por meta según orden de la lista (Drag & Drop) → sobrante a inversión.
 
-Reglas: meta llena (`saldo >= objetivo`) libera sus aportes; déficit (egresos > ingresos) bloquea el cierre; metas `invertir` admiten subcategorías internas.
+`distribuirAhorroIndividual(perfil, monto)` reparte entre metas individuales; su remanente queda como sobrante pendiente. `rebalancePct`/`autoAdjustPercentages` mantienen la suma de % en 100. Reglas: meta llena (`saldo >= objetivo`) libera sus aportes; metas `invertir` admiten subcategorías internas.
 
 ## Vistas (nav inferior)
 
-Inicio (dashboard: dona SVG, barra apilada, histórico) · Metas · Aportar al Plan (cierre de mes) · Flujo (presupuesto base) · Ajustes (estrategia, perfil, sync pareja, roles, respaldo JSON).
+Inicio (patrimonio + atajos + consejo; empty state guía sin metas) · Metas (subtabs Distribución con dona/KPI/evolución + Ahorros con % inline editable y drag de prioridad) · Mi Mes (movimientos del mes, barras doradas de distribución, navegación ‹ › por mes) · Aprender · Ajustes (estrategia, perfil, sync pareja, roles, respaldo JSON, versión visible `APP_VERSION`).
 
-Onboarding: asistente de **5 pasos (0-4)** si no hay datos guardados (`OB_TOTAL=5`): 0 intro · 1 nombres/modo · 2 presupuesto (nóminas, gastos, libres) · 3 primera meta · 4 simulación. `obSaveStep()` persiste cada paso; la meta del paso 3 es idempotente vía `obMetaCreatedId`.
+Acciones (botón + del nav): Añadir dinero · Retirar dinero · Ver Mi Mes · Crear nueva meta.
+
+Onboarding: asistente de **4 pasos (0-3)** (`OB_TOTAL=4`): 0 intro/login · 1 nombres/modo · 2 primera meta · 3 resumen. `obSaveStep()` persiste cada paso; la meta del paso 2 es idempotente vía `obMetaCreatedId`.
+
+## Versionado
+
+`APP_VERSION` (`NP/app.js`, formato `1.0.x`, visible en Ajustes) se sube **junto con** `CACHE` del service worker en cada release.
 
 ## Reglas de trabajo en este repo
 
