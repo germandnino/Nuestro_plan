@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.8'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.9'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -98,7 +98,7 @@ function flashUndo(m,onUndo,ms=6000){
   $('undo-toast-btn').onclick=()=>{dismiss();onUndo();};
   _undoTimer=setTimeout(dismiss,ms);
 }
-function showCustomModal({ title, message, type = 'alert', placeholder = '', isDestructive = false }) {
+function showCustomModal({ title, message, type = 'alert', placeholder = '', isDestructive = false, okText = '', cancelText = '' }) {
   return new Promise((resolve) => {
     let overlay = $('custom-modal-overlay');
     if (!overlay) {
@@ -110,24 +110,29 @@ function showCustomModal({ title, message, type = 'alert', placeholder = '', isD
     let buttonsHtml = '';
     let inputHtml = '';
     if (type === 'prompt') {
+      const cancelLabel = cancelText || 'Cancelar';
+      const okLabel = okText || 'Aceptar';
       inputHtml = `
         <div class="modal-input-wrapper">
           <input type="text" id="modal-input" class="sf" value="${placeholder}" autocomplete="off" />
         </div>
       `;
       buttonsHtml = `
-        <button class="btn ghost" id="modal-btn-cancel">Cancelar</button>
-        <button class="btn" id="modal-btn-ok">Aceptar</button>
+        <button class="btn ghost" id="modal-btn-cancel">${cancelLabel}</button>
+        <button class="btn" id="modal-btn-ok">${okLabel}</button>
       `;
     } else if (type === 'confirm') {
       const confirmClass = isDestructive ? 'btn danger' : 'btn';
+      const cancelLabel = cancelText || 'Cancelar';
+      const okLabel = okText || 'Confirmar';
       buttonsHtml = `
-        <button class="btn ghost" id="modal-btn-cancel">Cancelar</button>
-        <button class="${confirmClass}" id="modal-btn-ok">Confirmar</button>
+        <button class="btn ghost" id="modal-btn-cancel">${cancelLabel}</button>
+        <button class="${confirmClass}" id="modal-btn-ok">${okLabel}</button>
       `;
     } else {
+      const okLabel = okText || 'Entendido';
       buttonsHtml = `
-        <button class="btn" id="modal-btn-ok">Entendido</button>
+        <button class="btn" id="modal-btn-ok">${okLabel}</button>
       `;
     }
     overlay.innerHTML = `
@@ -188,8 +193,8 @@ function showCustomModal({ title, message, type = 'alert', placeholder = '', isD
 function customAlert(message) {
   return showCustomModal({ title: 'Atención', message, type: 'alert' });
 }
-function customConfirm(message, isDestructive = false) {
-  return showCustomModal({ title: 'Confirmar', message, type: 'confirm', isDestructive });
+function customConfirm(message, isDestructive = false, okText = '', cancelText = '') {
+  return showCustomModal({ title: 'Confirmar', message, type: 'confirm', isDestructive, okText, cancelText });
 }
 function customPrompt(message, defaultText = '') {
   return showCustomModal({ title: 'Ingresar dato', message, type: 'prompt', placeholder: defaultText });
@@ -1065,11 +1070,15 @@ function openRetiroDinero(){
   ov.querySelector('#rtTodo').onclick=()=>{const o=metaById(selO.value);if(o&&o.saldo>0)mi.value='$'+Math.round(o.saldo).toLocaleString('es-CO');};
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   ov.querySelector('#rtCancel').onclick=()=>ov.remove();
-  ov.querySelector('#rtOk').onclick=()=>{
+  ov.querySelector('#rtOk').onclick=async ()=>{
     const o=metaById(selO.value), monto=parse(mi.value), nota=ov.querySelector('#rtNota').value.trim();
     if(!o||monto<=0){flash('Pon un monto válido');return;}
     if(monto>o.saldo){flash('Saldo insuficiente en el origen');return;}
     const dval=selD.value;
+
+    const wasCompleted = o.objetivo > 0 && o.saldo >= o.objetivo;
+    const isWithdrawingAll = Math.abs(o.saldo - monto) < 0.5;
+
     if(dval==='fuera'){
       o.saldo-=monto;
       state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan',creadoPor:c.perfil});
@@ -1086,6 +1095,31 @@ function openRetiroDinero(){
       flash('Transferencia realizada ✓');
     }
     save();ov.remove();rerender();
+
+    if (wasCompleted && isWithdrawingAll) {
+      const confirmDelete = await customConfirm(
+        `¿Ya usaste el dinero para cumplir la meta "${esc(o.nombre)}"?\n\nSi es así, la eliminaremos del plan. Si no, volverá a quedar como meta activa para seguir ahorrando.`,
+        false,
+        'Sí, eliminar',
+        'No, dejar activa'
+      );
+      if (confirmDelete) {
+        const metaSnap = JSON.parse(JSON.stringify(o));
+        const gastosSnap = state.gastos.filter(g => g.meta === metaSnap.id);
+        state.gastos = state.gastos.filter(g => g.meta !== metaSnap.id);
+        state.metas = state.metas.filter(x => x.id !== metaSnap.id);
+        save();
+        rerender();
+        flashUndo('Meta eliminada', () => {
+          if (!state.metas.some(x => x.id === metaSnap.id)) state.metas.push(metaSnap);
+          const faltantes = gastosSnap.filter(g => !state.gastos.some(x => x.id === g.id));
+          if (faltantes.length) state.gastos = state.gastos.concat(faltantes);
+          save();
+          rerender();
+          flash('Eliminación deshecha ✓');
+        });
+      }
+    }
   };
 }
 
