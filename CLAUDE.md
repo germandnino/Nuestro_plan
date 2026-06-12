@@ -81,7 +81,10 @@ Onboarding: asistente de **4 pasos (0-3)** (`OB_TOTAL=4`): 0 intro/login · 1 no
 
 ## Reglas de trabajo en este repo
 
-- **Service Worker bump obligatorio:** al cambiar `index.html`/`app.js`/`styles.css`, **incrementar** `CACHE` en `service-worker.js` (`v50` → `v51`...). Si no, los usuarios siguen viendo código viejo.
+- **Commits atómicos y control de versión/caché:**
+  - **Tareas complejas (subtareas):** Realizar commits locales atómicos por cada subtarea/paso intermedio completado **sin** alterar `CACHE` (`service-worker.js`) ni `APP_VERSION` (`app.js`). Solo al finalizar por completo la tarea grande/principal, incrementar `CACHE` y `APP_VERSION` y realizar el commit final de cierre.
+  - **Tareas pequeñas y acumulativas:** Si se realizan múltiples tareas pequeñas seguidas, evitar subir versiones por cada cambio mínimo individual. En su lugar, realizar commits locales atómicos por cada tarea y hacer un único incremento de `CACHE` y `APP_VERSION` al finalizar la sesión o bloque de trabajo.
+  - **Actualización obligatoria al finalizar:** Al final de cualquier entrega o ciclo de trabajo que modifique archivos estáticos (`index.html`/`app.js`/`styles.css`), es mandatorio incrementar `CACHE` y `APP_VERSION` para evitar que los usuarios utilicen código viejo.
 - **No push automático a `main`:** acumular commits locales; pushear solo cuando el usuario lo pida explícitamente.
 - **SW congela código en APK Capacitor:** en nativo el SW se desregistra. Para probar cambios en APK, desinstalar completo (no `install -r`).
 - **`docs/superpowers/` está gitignored:** specs/planes no se versionan; usar `-f` solo si el usuario lo pide.
