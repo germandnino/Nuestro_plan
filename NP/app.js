@@ -29,7 +29,6 @@ function metasEjemplo(){
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
-let _expandedMetas = new Set(); // ids de metas expandidas en "Mis metas"
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -1721,15 +1720,6 @@ function metaSub(m){
   
   let s=[];
   const isCompleted = m.objetivo > 0 && m.saldo >= m.objetivo;
-  
-  if(state.config.estrategia==='secuencial'){
-    const prio = getMetaPrioritaria();
-    if(prio && prio.id === m.id){
-      s.push('<span style="color:var(--gold);font-weight:600">Prioritaria primero</span>');
-    }
-  } else if(m.tipo==='imprevistos'){
-    s.push('Se llena primero');
-  }
 
   if(m.objetivo)s.push('meta '+fmtK(m.objetivo));
 
@@ -1796,21 +1786,27 @@ function renderMetas(){
     const card=(m)=>{
       const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
-      const expanded = _expandedMetas.has(m.id);
       const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
-      const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center" onclick="event.stopPropagation()">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
+      const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
       const pctBadge = (canEdit && !isPersonal)
-        ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro" onclick="event.stopPropagation()">
+        ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
              <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}">
              <span class="pct-sign">%</span>
            </div>`
         : (!isPersonal ? `<span class="pill${flashCls}">${m.aportePct||0}%</span>` : '');
       const typePill = isPersonal ? '' : `<span class="pill">${getSVG(m.tipo==='imprevistos'?'shield':m.tipo==='invertir'?'trending':'target','', 'width:11px;height:11px;margin-right:3px;vertical-align:-1px;')}${tipoLabel(m.tipo)}</span>`;
+      // ETA útil (sueño/colchón con objetivo y aún no lleno).
+      let eta='';
+      if(m.tipo!=='invertir' && obj && m.saldo<obj){
+        const meses=calcularTiempoRestante(m);
+        if(meses!=null && meses>0) eta = meses<12 ? `~${meses} mes${meses!==1?'es':''}` : `~${Math.floor(meses/12)} año${Math.floor(meses/12)!==1?'s':''}`;
+      }
       const sub = m.tipo==='invertir'
         ? `↗ ${fmt(m.saldo)} · sin tope`
-        : `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}`;
-      return `<div class="card metacard${expanded?' expanded':''}" data-mid="${m.id}">
+        : `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
+      return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
           ${dragHandle}
@@ -1819,12 +1815,8 @@ function renderMetas(){
             <div class="metacard-sub">${sub}</div>
           </div>
           ${pctBadge}
-          <span class="metacard-chevron">${getSVG('chevronDown','', 'width:14px;height:14px;')}</span>
+          ${editBtn}
         </div>
-        ${expanded?`<div class="metacard-detail">
-          <div class="muted" style="font-size:12px">${metaSub(m)}</div>
-          ${canEdit && !isPersonal ? `<button class="btn-card-edit" data-editmid="${m.id}" onclick="event.stopPropagation()">${getSVG('edit', '', 'width:13px;height:13px;')} Editar</button>` : ''}
-        </div>`:''}
       </div>`;
     };
 
@@ -1939,15 +1931,6 @@ function renderMetas(){
       if (e.key === 'Enter') {
         input.blur();
       }
-    };
-  });
-
-  $('r1').querySelectorAll('.metacard[data-mid]').forEach(cardEl => {
-    cardEl.onclick = (e) => {
-      if (e.target.closest('.drag-handle, .inline-pct-container, [data-editmid], [data-pctmid]')) return;
-      const id = cardEl.dataset.mid;
-      if (_expandedMetas.has(id)) _expandedMetas.delete(id); else _expandedMetas.add(id);
-      rerender();
     };
   });
 
