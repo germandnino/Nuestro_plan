@@ -598,23 +598,8 @@ function colchonSugerido(){
   if(c.soloAhorroDirecto && (c.ahorroDirecto||0)>0)return Math.round((c.ahorroDirecto||0)*6);
   return 0;
 }
-function sumaPct(){
-  const c=state.config;
-  if(c.estrategia==='cascada')return 0;
-  return metasCompartidas().filter(m=>c.estrategia==='simultaneo'||m.tipo!=='imprevistos').reduce((s,m)=>s+(m.aportePct||0),0);
-}
-function chequearDistribucionAhorro() {
-  const c = state.config;
-  if (c.estrategia === 'cascada') return { ok: true };
-  const totalPct = sumaPct();
-  if (totalPct >= 100) return { ok: true };
-  
-  const inv = inversionAbierta();
-  if (inv) return { ok: true }; // El sobrante se va a inversión abierta
-  
-  const faltante = 100 - totalPct;
-  return { ok: false, faltante };
-}
+function sumaPct(){ return 100; } // los % se normalizan por bucket; la suma global ya no aplica
+function chequearDistribucionAhorro(){ return { ok:true }; } // el sobrante siempre tiene destino (inversión o sin-asignar)
 function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
 function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
 function computeTotal(){
@@ -991,7 +976,8 @@ function openModalSobrante(monto, metaLlena){
 function aplicarDecisionSobrante(dec, monto){
   const c=state.config;
   if(dec.accion==='motor'){
-    const dist=distribuirAhorro(monto,true);
+    const { dist, rem } = distribuirAhorro(monto);
+    if(rem>0.5) registrarSobrantePendiente(rem, 'reparto');
     state.metas.forEach(m=>{
       if(m.tipo!=='personal'&&!m.dueno&&(dist[m.id]||0)>0.5){
         m.saldo+=dist[m.id];
@@ -1661,7 +1647,7 @@ function calcularTiempoRestante(m) {
 // Aporte mensual estimado a una meta según el ahorro distribuido por la estrategia actual.
 function aporteMensualEstimado(m){
   const est = Math.max(0, computeBase());
-  const dist = distribuirAhorro(est);
+  const { dist } = distribuirAhorro(est);
   return dist[m.id] || 0;
 }
 
@@ -2555,7 +2541,7 @@ function openAsistenteIngresoExtra(preFill = null) {
     if (toSave > 0.5) {
       if (metaDestino === 'distribuir') {
         const oldSobrante = _ultimoSobrante;
-        const dist = distribuirAhorro(toSave, true);
+        const { dist } = distribuirAhorro(toSave);
         _ultimoSobrante = oldSobrante; // restaurar
         
         const comp = metasCompartidas().filter(m => !m.colocado);
@@ -2777,7 +2763,8 @@ function aplicarIngresoInmediatoActivo(ep) {
   let distInmediato = null;
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
-      const dist = distribuirAhorro(toSave, true);
+      const { dist, rem: remDist } = distribuirAhorro(toSave);
+      if(remDist>0.5) registrarSobrantePendiente(remDist, 'reparto');
       distInmediato = Object.assign({}, dist);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
@@ -2855,7 +2842,7 @@ function revertirAporte(id) {
 
   if (toSave > 0.5) {
     if (ep.meta === 'distribuir') {
-      const dist = ep.dist || distribuirAhorro(toSave, true);
+      const dist = ep.dist || distribuirAhorro(toSave).dist;
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
           m.saldo = Math.max(0, m.saldo - dist[m.id]);
@@ -2951,7 +2938,7 @@ function getMonthlyDistributionData(mes) {
 
     if (toSave > 0.5) {
       if (ing.meta === 'distribuir') {
-        const dist = ing.dist || distribuirAhorro(toSave, true);
+        const dist = ing.dist || distribuirAhorro(toSave).dist;
         Object.keys(dist).forEach(mId => {
           const m = metaById(mId);
           if (m) {
