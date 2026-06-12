@@ -1662,15 +1662,38 @@ function ahorroDeMes(e){
   return base + comb * (1 - state.config.pctPremio / 100);
 }
 
+// Meses con datos para los KPI. El "confirmar mes" ya no existe: los indicadores
+// se alimentan de los movimientos registrados (state.ingresos), uniendo además
+// los meses cerrados del modelo legacy (state.log) para no perder histórico viejo.
+function mesesConDatosUI(){
+  const set = {};
+  especialesVisibles(state.ingresos).forEach(i => { if (i.mes && !i.sinAsignar) set[i.mes] = true; });
+  (state.log || []).forEach(e => { if (e.mes) set[e.mes] = true; });
+  return Object.keys(set).sort();
+}
+// Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
+// ya contados en su ingreso de origen); si el mes no tiene movimientos, cae al cierre legacy.
+function ahorroMesUI(mes){
+  const ing = especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar));
+  if (ing.length) return ing.reduce((s, i) => s + i.monto, 0);
+  const e = (state.log || []).find(x => x.mes === mes);
+  return e ? ahorroDeMes(e) : 0;
+}
+
 function drawStatsBI(){
-  if (!state.log || state.log.length === 0) return '';
   const c = state.config;
-  const logs = state.log.slice();
-  const ahorros = logs.map(ahorroDeMes);
-  const n = ahorros.length;
+  const meses = mesesConDatosUI();
+  const n = meses.length;
+  if (n === 0) return '';
+  const ahorros = meses.map(ahorroMesUI);
   const totalAhorrado = ahorros.reduce((s, v) => s + v, 0);
   const avgAhorro = totalAhorrado / n;
-  const avgExtra = avgVar();
+
+  // Ingreso extra prom.: parte no-base de los movimientos visibles, por mes.
+  const extras = meses.map(m =>
+    especialesVisibles(state.ingresos.filter(i => i.mes === m && !i.sinAsignar && !i.esAporteBase))
+      .reduce((s, i) => s + i.monto, 0));
+  const avgExtra = extras.reduce((s, v) => s + v, 0) / n;
 
   let bestIdx = 0;
   ahorros.forEach((v, i) => { if (v > ahorros[bestIdx]) bestIdx = i; });
@@ -1683,13 +1706,12 @@ function drawStatsBI(){
     const d = new Date(y, m - 2, 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   };
-  const meses = logs.map(e => e.mes).sort();
-  let racha = meses.length ? 1 : 0;
+  let racha = n ? 1 : 0;
   for (let i = meses.length - 1; i > 0; i--) {
     if (mesAnterior(meses[i]) === meses[i - 1]) racha++; else break;
   }
 
-  const lastAhorro = ahorroDeMes(logs.find(e => e.mes === meses[meses.length - 1]));
+  const lastAhorro = ahorros[n - 1];
   let trend = '';
   if (avgAhorro > 0 && n >= 2) {
     const diff = Math.round((lastAhorro - avgAhorro) / avgAhorro * 100);
@@ -1710,7 +1732,7 @@ function drawStatsBI(){
   tiles += tile('Ahorro mensual prom.', `${fmtK(avgAhorro)}${trend}`, '');
   tiles += tile('Ingreso extra prom.', fmtK(avgExtra), '');
   tiles += tile('Total ahorrado', fmtK(totalAhorrado), '');
-  tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(logs[bestIdx].mes));
+  tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
   if (tasa !== null) tiles += tile('Tasa de ahorro', `${tasa}%`, 'del ingreso');
   tiles += tile('Constancia', `${n} ${n === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
 
@@ -1723,18 +1745,19 @@ function drawStatsBI(){
 }
 
 function drawSavingsHistoryCard() {
-  if (!state.log || state.log.length === 0) {
+  const mesesUI = mesesConDatosUI();
+  if (mesesUI.length === 0) {
     return `<div class="card dark" style="padding:18px 16px; border: 1px dashed rgba(246,241,230,.15); background: transparent;">
       <div class="k" style="color:rgba(246,241,230,.5)">Evolución del Ahorro</div>
       <div style="font-size:12.5px; color:rgba(246,241,230,.5); line-height:1.45; text-align:center; padding:12px 6px;">
-        El gráfico de ahorro mensual se activará cuando confirmen su primer aporte en <b>Mi Mes</b>.
+        El gráfico de ahorro mensual se activará cuando agregues tu primer movimiento en <b>Mi Mes</b>.
       </div>
     </div>`;
   }
 
-  const historyData = state.log.slice(0, 6).reverse().map(e => ({
-    mesLabel: fmtMes(e.mes),
-    ahorro: ahorroDeMes(e)
+  const historyData = mesesUI.slice(-6).map(m => ({
+    mesLabel: fmtMes(m),
+    ahorro: ahorroMesUI(m)
   }));
 
   const maxVal = Math.max(...historyData.map(d => d.ahorro), 500000);
