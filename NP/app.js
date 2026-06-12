@@ -1424,7 +1424,15 @@ function drawBucketBar(dueno){
   const pres = bucketsConMetas(dueno);
   if(pres.length <= 1) return ''; // con 0-1 propósitos no hay nada que repartir a nivel 1
   const meta = { imprevistos:{ic:'shield', lbl:'Colchón'}, sueno:{ic:'target', lbl:'Sueños'}, invertir:{ic:'trending', lbl:'Inversión'} };
-  const cfg = state.config.buckets || {};
+  const cfg = state.config.buckets || (state.config.buckets={});
+  // Auto-normaliza a 100 sobre los propósitos presentes. Se auto-cura cuando aparece o
+  // desaparece un propósito (no esperamos a que el usuario edite uno a mano).
+  const sum = pres.reduce((s,t)=>s+(cfg[t]||0),0);
+  if(Math.round(sum)!==100){
+    if(sum<=0){ const each=Math.floor(100/pres.length); pres.forEach(t=>cfg[t]=each); cfg[pres[pres.length-1]]+=100-each*pres.length; }
+    else { pres.forEach(t=>cfg[t]=Math.round((cfg[t]||0)/sum*100)); const t2=pres.reduce((s,t)=>s+(cfg[t]||0),0); cfg[pres[pres.length-1]]+=100-t2; }
+    save();
+  }
   const rows = pres.map(t=>`
     <div class="bucketbar-row" style="display:flex;align-items:center;gap:8px;margin:6px 0;">
       <span style="display:inline-flex;align-items:center;gap:6px;flex:1;color:var(--cream);font-size:13px;">
