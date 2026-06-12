@@ -29,6 +29,7 @@ function metasEjemplo(){
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
+let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -1562,10 +1563,13 @@ function drawSeccionesPorBucket(dueno, card){
   BUCKETS.forEach(tipo=>{
     const metas = metasDeBucket(tipo, dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
     if(metas.length===0) return;
-    html += `<div class="stitle" style="display:flex;align-items:center;gap:6px;margin-top:14px;">
-      ${getSVG(meta[tipo].ic,'', 'width:15px;height:15px;opacity:.85;')} ${meta[tipo].lbl}
-    </div>
-    <div class="bucket-section" data-bucket="${tipo}" data-dueno="${dueno||''}">`;
+    const key=`${dueno||'shared'}:${tipo}`;
+    const collapsed=_collapsedBuckets.has(key);
+    html += `<button class="seccion-head" data-seccion="${key}">
+      <span class="seccion-lbl">${getSVG(meta[tipo].ic,'', 'width:15px;height:15px;opacity:.85;')} ${meta[tipo].lbl} <span class="seccion-count">${metas.length}</span></span>
+      <span class="seccion-chevron${collapsed?'':' open'}">${getSVG('chevronDown','', 'width:14px;height:14px;')}</span>
+    </button>
+    <div class="bucket-section${collapsed?' collapsed':''}" data-bucket="${tipo}" data-dueno="${dueno||''}">`;
     metas.forEach(m=>html+=card(m));
     html += `</div>`;
   });
@@ -1945,6 +1949,15 @@ function renderMetas(){
   $('r1').querySelectorAll('.filter-chips .chip').forEach(btn => {
     btn.onclick = () => {
       curAhorrosFilter = btn.dataset.f;
+      rerender();
+    };
+  });
+
+  // acordeón: colapsar/expandir secciones de propósito
+  $('r1').querySelectorAll('.seccion-head').forEach(h => {
+    h.onclick = () => {
+      const k = h.dataset.seccion;
+      if (_collapsedBuckets.has(k)) _collapsedBuckets.delete(k); else _collapsedBuckets.add(k);
       rerender();
     };
   });
