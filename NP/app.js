@@ -1532,6 +1532,28 @@ function drawSavingsDonut() {
   </div>`;
 }
 
+// Renderiza las metas de un scope agrupadas en 3 secciones por propósito.
+// `card` es la función que dibuja cada tarjeta. Secciones vacías se omiten.
+function drawSeccionesPorBucket(dueno, card){
+  const meta = {
+    imprevistos:{ic:'shield', lbl:'Tu colchón'},
+    sueno:{ic:'target', lbl:'Tus sueños'},
+    invertir:{ic:'trending', lbl:'Tus inversiones'}
+  };
+  let html='';
+  BUCKETS.forEach(tipo=>{
+    const metas = metasDeBucket(tipo, dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+    if(metas.length===0) return;
+    html += `<div class="stitle" style="display:flex;align-items:center;gap:6px;margin-top:14px;">
+      ${getSVG(meta[tipo].ic,'', 'width:15px;height:15px;opacity:.85;')} ${meta[tipo].lbl}
+    </div>
+    <div class="bucket-section" data-bucket="${tipo}" data-dueno="${dueno||''}">`;
+    metas.forEach(m=>html+=card(m));
+    html += `</div>`;
+  });
+  return html;
+}
+
 // Meses con datos para los KPI: se alimentan de los movimientos registrados (state.ingresos).
 function mesesConDatosUI(){
   const set = {};
@@ -1814,16 +1836,7 @@ function renderMetas(){
     const showShared = (isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'goals')) || (!isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'shared'));
     if (showShared) {
       if (nonDebtShared.length > 0) {
-        listHtml = `<div class="stitle" style="display:flex;align-items:center;gap:6px">
-          ${isIndiv ? 'Mis metas de ahorro' : 'Metas compartidas'}
-          <span id="helpPrioBtn" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(246,241,230,.15);color:var(--cream);font-size:9.5px;font-weight:bold;cursor:pointer;user-select:none">?</span>
-        </div>
-        <div id="prioHint" class="hint" style="display:none;background:rgba(192,138,45,.08);border:1px solid rgba(192,138,45,.2);border-radius:10px;padding:10px 12px;margin:2px 0 10px;color:rgba(246,241,230,.8);line-height:1.45">
-          El orden de esta lista define la prioridad de ahorro si usan la estrategia <b>Prioritaria primero</b> o <b>En cascada</b>. Mantén presionado y arrastra las barras de agarre para ordenarlas.
-        </div>
-        <div id="sharedMetasContainer">`;
-        nonDebtShared.forEach(m=>listHtml+=card(m));
-        listHtml+='</div>';
+        listHtml = drawSeccionesPorBucket(null, card);
       } else if (curAhorrosFilter !== 'all') {
         listHtml = `
           <div class="stitle">${isIndiv ? 'Mis metas de ahorro' : 'Metas compartidas'}</div>
@@ -1837,8 +1850,8 @@ function renderMetas(){
     if (showIndiv) {
       const indivs = metasIndividuales(state.config.perfil);
       if (indivs.length > 0) {
-        indivHtml += `<div class="stitle">Mis metas individuales (Privadas)</div>`;
-        indivs.forEach(m => indivHtml += card(m));
+        indivHtml = `<div class="stitle">${isIndiv ? '' : 'Tus metas individuales (privadas)'}</div>` +
+                    drawSeccionesPorBucket(state.config.perfil, card);
       } else if (curAhorrosFilter === 'individual') {
         indivHtml += `
           <div class="stitle">Mis metas individuales (Privadas)</div>
@@ -1886,15 +1899,6 @@ function renderMetas(){
   const tabAhorros = $('btnTabAhorros');
   if (tabDist) tabDist.onclick = () => { curMetasSubTab = 0; rerender(); };
   if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
-
-  const helpBtn = $('helpPrioBtn');
-  if(helpBtn){
-    helpBtn.onclick=(e)=>{
-      e.stopPropagation();
-      const hint = $('prioHint');
-      if(hint) hint.style.display = hint.style.display==='none'?'block':'none';
-    };
-  }
 
   // Attach change listener to inline percentage inputs
   $('r1').querySelectorAll('.inline-pct-input').forEach(input => {
