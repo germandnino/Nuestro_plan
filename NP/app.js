@@ -29,6 +29,7 @@ function metasEjemplo(){
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
+let _expandedMetas = new Set(); // ids de metas expandidas en "Mis metas"
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -1793,35 +1794,38 @@ function renderMetas(){
     `;
   } else if (curMetasSubTab === 1) {
     const card=(m)=>{
-      const obj=m.objetivo||0,pct=obj?Math.min(100,m.saldo/obj*100):null;
+      const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
-      const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;padding:4px 0;display:inline-flex;align-items:center;color:var(--gs);touch-action:none;user-select:none;margin-right:8px">${getSVG('drag', '', 'opacity:0.6;')}</span>`;
-
-      const showPct = m.tipo !== 'personal'; // % editable por bucket; ya no depende de estrategia
-
+      const expanded = _expandedMetas.has(m.id);
+      const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
+      const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center" onclick="event.stopPropagation()">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
-      const pctBadge = (canEdit && showPct && m.tipo !== 'personal')
-        ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
+      const pctBadge = (canEdit && !isPersonal)
+        ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro" onclick="event.stopPropagation()">
              <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}">
              <span class="pct-sign">%</span>
            </div>`
-        : (showPct && m.tipo !== 'personal' ? `<span class="pill${flashCls}" style="margin-left:6px;">${m.aportePct||0}%</span>` : '');
-
-      return `<div class="card" data-mid="${m.id}" style="display:flex;align-items:center;gap:6px">
-        ${dragHandle}
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span class="k" style="margin:0">${m.nombre}</span>
-            ${m.tipo!=='personal'?`<span class="pill">${getSVG(m.tipo==='imprevistos'?'shield':m.tipo==='invertir'?'trending':'target','', 'width:11px;height:11px;margin-right:3px;vertical-align:-1px;')}${tipoLabel(m.tipo)}</span>`:''}
-            ${pctBadge?`<span style="flex:1"></span>${pctBadge}`:''}
+        : (!isPersonal ? `<span class="pill${flashCls}">${m.aportePct||0}%</span>` : '');
+      const typePill = isPersonal ? '' : `<span class="pill">${getSVG(m.tipo==='imprevistos'?'shield':m.tipo==='invertir'?'trending':'target','', 'width:11px;height:11px;margin-right:3px;vertical-align:-1px;')}${tipoLabel(m.tipo)}</span>`;
+      const sub = m.tipo==='invertir'
+        ? `↗ ${fmt(m.saldo)} · sin tope`
+        : `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}`;
+      return `<div class="card metacard${expanded?' expanded':''}" data-mid="${m.id}">
+        ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
+        <div class="metacard-row">
+          ${dragHandle}
+          <div class="metacard-main">
+            <div class="metacard-title"><span class="metacard-name">${m.nombre}</span>${typePill}</div>
+            <div class="metacard-sub">${sub}</div>
           </div>
-          <div class="num med">${fmt(m.saldo)}</div>
-          ${(pct!=null && m.tipo!=='invertir')?`<div class="bar light" style="margin:8px 0 4px"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
-          ${m.tipo==='invertir'?`<div class="muted" style="font-size:11.5px;margin:6px 0 2px;color:var(--gb);">↗ creciendo · sin tope</div>`:''}
-          <div class="muted" style="font-size:12px">${metaSub(m)}</div>
+          ${pctBadge}
+          <span class="metacard-chevron">${getSVG('chevronDown','', 'width:14px;height:14px;')}</span>
         </div>
-        ${canEdit && m.tipo !== 'personal' ? `<button class="btn-card-edit" data-editmid="${m.id}" aria-label="Editar meta" style="background:none;border:none;color:var(--gs);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;transition:color .2s;opacity:0.6;margin-left:4px;margin-right:2px;">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : ''}
-        </div>`;
+        ${expanded?`<div class="metacard-detail">
+          <div class="muted" style="font-size:12px">${metaSub(m)}</div>
+          ${canEdit && !isPersonal ? `<button class="btn-card-edit" data-editmid="${m.id}" onclick="event.stopPropagation()">${getSVG('edit', '', 'width:13px;height:13px;')} Editar</button>` : ''}
+        </div>`:''}
+      </div>`;
     };
 
     const dueno = isIndiv ? state.config.perfil : null;
