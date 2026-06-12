@@ -1413,6 +1413,30 @@ function heroMeta(m){
     <div style="display:flex;justify-content:space-between;font-size:12.5px;color:rgba(246,241,230,.8)"><b>${pct.toFixed(0)}%</b><span>${falta>0?'faltan '+fmt(falta):'¡meta cumplida!'}</span></div></div>`;
 }
 
+// Barra de propósitos (nivel 1): muestra y edita config.buckets para los buckets PRESENTES.
+// Los % se normalizan a 100 sobre los buckets presentes al guardar.
+function drawBucketBar(dueno){
+  const pres = bucketsPresentes(dueno);
+  if(pres.length <= 1) return ''; // con 0-1 propósitos no hay nada que repartir a nivel 1
+  const meta = { imprevistos:{ic:'shield', lbl:'Colchón'}, sueno:{ic:'target', lbl:'Sueños'}, invertir:{ic:'trending', lbl:'Inversión'} };
+  const cfg = state.config.buckets || {};
+  const rows = pres.map(t=>`
+    <div class="bucketbar-row" style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+      <span style="display:inline-flex;align-items:center;gap:6px;flex:1;color:var(--cream);font-size:13px;">
+        ${getSVG(meta[t].ic,'', 'width:14px;height:14px;opacity:.8;')} ${meta[t].lbl}
+      </span>
+      <div class="inline-pct-container" title="% del ahorro a este propósito">
+        <input type="number" class="inline-pct-input" min="0" max="100" value="${cfg[t]||0}" data-bucket="${t}" aria-label="Porcentaje para ${meta[t].lbl}">
+        <span class="pct-sign">%</span>
+      </div>
+    </div>`).join('');
+  return `<div class="card" style="margin-bottom:12px;">
+    <div class="k" style="margin:0 0 4px;">¿Cuánto a cada propósito?</div>
+    <div class="hint" style="margin-bottom:4px;color:rgba(246,241,230,.7);">Reparte tu ahorro entre tus grandes propósitos. Dentro de cada uno decides por meta.</div>
+    ${rows}
+  </div>`;
+}
+
 function drawSavingsDonut() {
   const perfil = state.config.perfil;
   const metasConSaldo = state.metas.filter(m => {
@@ -1764,37 +1788,8 @@ function renderMetas(){
         </div>`;
     };
 
-    const strat = state.config.estrategia;
-    let adviceHtml = '';
-    if (strat !== 'cascada') {
-      const sp = sumaPct();
-      const over = sp > 100;
-      const inv = inversionAbierta();
-      const em = emergenciaPrincipal();
-      const colchonPend = em && em.objetivo > 0 && em.saldo < em.objetivo;
-      const targetName = inv
-        ? (colchonPend ? `tu fondo de emergencia y luego ${inv.nombre}` : inv.nombre)
-        : (em ? em.nombre : 'el fondo de emergencias');
-      
-      let hintText = '';
-      if (over) {
-        hintText = 'Te pasaste de 100%: las últimas metas recibirán menos de lo que indica su %.';
-      } else if (sp < 100) {
-        hintText = `El ${100-sp}% restante va a ${targetName}.`;
-      } else {
-        hintText = 'Repartes el 100% de tu ahorro mensual.';
-      }
-      
-      adviceHtml = `
-        <div class="card" style="background:${over?'rgba(224,108,117,.12)':'rgba(246,241,230,.03)'}; border-color:${over?'#e06c75':'var(--line)'}; margin-bottom:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span class="k" style="margin:0; color:${over?'#e06c75':'var(--cream)'}">Distribución del Ahorro</span>
-            <span class="num" style="font-size:20px; font-weight:800; color:${over?'#e06c75':'var(--gb)'}">${sp}%</span>
-          </div>
-          <div class="hint" style="margin-top:6px; color:rgba(246,241,230,.7);">${hintText}</div>
-        </div>
-      `;
-    }
+    const dueno = isIndiv ? state.config.perfil : null;
+    const adviceHtml = drawBucketBar(dueno);
 
     let chipsHtml = '';
     if (isIndiv) {
@@ -1935,6 +1930,28 @@ function renderMetas(){
   $('r1').querySelectorAll('.filter-chips .chip').forEach(btn => {
     btn.onclick = () => {
       curAhorrosFilter = btn.dataset.f;
+      rerender();
+    };
+  });
+
+  document.querySelectorAll('.inline-pct-input[data-bucket]').forEach(inp=>{
+    inp.onchange = () => {
+      const t = inp.dataset.bucket;
+      let v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
+      const dueno = (state.config.modo==='individual') ? state.config.perfil : null;
+      const pres = bucketsPresentes(dueno);
+      const cfg = state.config.buckets || (state.config.buckets={});
+      cfg[t] = v;
+      const otros = pres.filter(x=>x!==t);
+      const resto = 100 - v;
+      const sumOtros = otros.reduce((s,x)=>s+(cfg[x]||0),0);
+      if(otros.length){
+        if(sumOtros<=0) otros.forEach(x=>cfg[x]=Math.round(resto/otros.length));
+        else otros.forEach(x=>cfg[x]=Math.round((cfg[x]||0)/sumOtros*resto));
+        const tot = pres.reduce((s,x)=>s+(cfg[x]||0),0);
+        if(tot!==100) cfg[otros[otros.length-1]] += 100-tot;
+      }
+      save();
       rerender();
     };
   });
