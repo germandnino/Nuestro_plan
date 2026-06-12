@@ -866,24 +866,56 @@ function rebalancePct(eligible, editedId, newPct) {
   return target.id;
 }
 
-function autoAdjustPercentages(editedId, newPct) {
+// Conjunto de metas que participan del reparto por % (mismo criterio que el motor).
+// Compartidas: en secuencial se exime la prioritaria (recibe el remanente). Individuales: las del perfil.
+function eligiblesPct(meta) {
   const c = state.config;
-  if (c.estrategia === 'cascada') return null;
+  if (meta.dueno) {
+    return metasIndividuales(meta.dueno).filter(m =>
+      m.tipo !== 'deuda' && m.tipo !== 'personal' && !m.colocado);
+  }
   const isPrio = (m) => getMetaPrioritaria()?.id === m.id;
-  const eligible = metasCompartidas().filter(m => {
+  return metasCompartidas().filter(m => {
     if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
     if (c.estrategia === 'secuencial' && isPrio(m)) return false;
     return true;
   });
-  return rebalancePct(eligible, editedId, newPct);
+}
+
+// Mantiene keepId en su % y escala las demás proporcionalmente para que la suma sea 100.
+// Usado al crear/editar una meta vía formulario (respeta el % que el usuario acaba de poner).
+function rebalancePctProporcional(eligible, keepId) {
+  const keep = eligible.find(m => m.id === keepId);
+  if (!keep) return;
+  const keepPct = Math.max(0, Math.min(100, keep.aportePct || 0));
+  keep.aportePct = keepPct;
+  const others = eligible.filter(m => m.id !== keepId);
+  if (others.length === 0) return;
+  const restante = 100 - keepPct;
+  const sumOthers = others.reduce((s, m) => s + (m.aportePct || 0), 0);
+  if (sumOthers <= 0) {
+    const each = Math.floor(restante / others.length);
+    others.forEach(m => m.aportePct = each);
+  } else {
+    others.forEach(m => m.aportePct = Math.round((m.aportePct || 0) / sumOthers * restante));
+  }
+  // Corrige el redondeo en la última para que el total cuadre exacto en 100.
+  const total = eligible.reduce((s, m) => s + (m.aportePct || 0), 0);
+  if (total !== 100) {
+    const last = others[others.length - 1];
+    last.aportePct = Math.max(0, last.aportePct + (100 - total));
+  }
+}
+
+function autoAdjustPercentages(editedId, newPct) {
+  if (state.config.estrategia === 'cascada') return null;
+  const m = metaById(editedId);
+  return m ? rebalancePct(eligiblesPct(m), editedId, newPct) : null;
 }
 
 function autoAdjustIndividualPercentages(perfil, editedId, newPct) {
-  const eligible = metasIndividuales(perfil).filter(m => {
-    if (m.tipo === 'deuda' || m.tipo === 'personal' || m.colocado) return false;
-    return true;
-  });
-  return rebalancePct(eligible, editedId, newPct);
+  const m = metaById(editedId);
+  return m ? rebalancePct(eligiblesPct(m), editedId, newPct) : null;
 }
 
 
@@ -2141,7 +2173,7 @@ function initReorder(){
       hasDragged=true;
       draggedEl.classList.add('dragged');
     }
-    const siblings=[...container.querySelectorAll('.card.tap:not(.dragging)')];
+    const siblings=[...container.querySelectorAll('.card[data-mid]:not(.dragging)')];
     const target=siblings.find(sibling=>{
       const box=sibling.getBoundingClientRect();
       return e.clientY<box.top+box.height/2;
@@ -2181,9 +2213,9 @@ function initReorder(){
     document.removeEventListener('pointercancel',onPointerUp);
 
     draggedEl.classList.remove('dragging');
-    container.querySelectorAll('.card.tap').forEach(s=>{s.style.transform='';s.style.transition='';});
+    container.querySelectorAll('.card[data-mid]').forEach(s=>{s.style.transform='';s.style.transition='';});
     if(hasDragged){
-      const cards=[...container.querySelectorAll('.card.tap')];
+      const cards=[...container.querySelectorAll('.card[data-mid]')];
       cards.forEach((card,idx)=>{
         const m=metaById(card.dataset.mid);
         if(m)m.prioridad=idx;
@@ -2200,7 +2232,7 @@ function initReorder(){
   container.addEventListener('pointerdown',e=>{
     const handle=e.target.closest('.drag-handle');
     if(!handle)return;
-    const card=handle.closest('.card.tap');
+    const card=handle.closest('.card[data-mid]');
     if(!card)return;
     draggedEl=card;
     startY=e.clientY;
@@ -2480,7 +2512,7 @@ function attachMetaForm(editing){
       }
     };
   }
-  $('fSave').onclick=()=>{
+  $('fSave').onclick=async ()=>{
     readMetaForm();
     if(!mForm.nombre){flash('Ponle un nombre a la meta');return;}
     // Evita nombres repetidos (case-insensitive, sin importar espacios) para no confundir el reparto.
@@ -2494,6 +2526,15 @@ function attachMetaForm(editing){
     }
     const idx=state.metas.findIndex(x=>x.id===mForm.id);
     if(idx>=0)state.metas[idx]=mForm;else state.metas.push(mForm);
+    // Si los % superan 100, ofrecer reajustar las demás proporcionalmente (respetando el % de esta meta).
+    if(state.config.estrategia!=='cascada' && (mForm.aportePct||0)>0){
+      const elig=eligiblesPct(mForm);
+      const sum=elig.reduce((s,x)=>s+(x.aportePct||0),0);
+      if(sum>100){
+        const ok=await customConfirm(`Con esta meta, tus porcentajes suman ${sum}% (más de 100%). ¿Reajusto las demás metas para que sumen 100% y se respete el ${mForm.aportePct}% de "${esc(mForm.nombre)}"?`);
+        if(ok) rebalancePctProporcional(elig, mForm.id);
+      }
+    }
     mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
   };
   const del=$('fDel');
@@ -3994,79 +4035,51 @@ function getMonthlyDistributionData(mes) {
   return Object.values(distMap).filter(x => x.amount > 0.5);
 }
 
-function drawMonthlyDistributionDonut(mes) {
+function drawMonthlyDistributionBars(mes) {
   const data = getMonthlyDistributionData(mes);
-  // Metas llegan sin color (color:null); se asignan de la paleta por índice para
-  // diferenciarlas entre sí. Bolsillos conservan su color de persona (lila/rosa).
-  let _pi = 0;
-  data.forEach(s => { if (!s.color) s.color = DONUT_PALETTE[_pi++ % DONUT_PALETTE.length]; });
   const total = data.reduce((s, x) => s + x.amount, 0);
 
   if (total <= 0.5) {
     return `
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 16px; text-align:center; color:var(--gs);">
-        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3; margin-bottom:10px;">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 16px; text-align:center; color:var(--gs);">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3; margin-bottom:10px;">
+          <line x1="4" y1="20" x2="4" y2="12"></line>
+          <line x1="12" y1="20" x2="12" y2="6"></line>
+          <line x1="20" y1="20" x2="20" y2="14"></line>
         </svg>
         <div style="font-weight:700; font-size:13.5px; margin-bottom:4px;">Sin ahorros en este mes</div>
         <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero o confirma tu aporte de siempre para ver la distribución.</div>
       </div>
     `;
   }
-  
-  const r = 35;
-  const C = 2 * Math.PI * r;
-  let accumulatedPercent = 0;
-  
-  const slicesHtml = data.map((slice) => {
-    const pct = slice.amount / total;
-    const dashArray = `${(pct * C).toFixed(3)} ${C.toFixed(3)}`;
-    const dashOffset = `${(-accumulatedPercent * C).toFixed(3)}`;
-    accumulatedPercent += pct;
-    
+
+  // Barras horizontales: ancho proporcional al % del mes. Metas en dorado;
+  // bolsillos individuales con su tinte de persona (lila/rosa) por privacidad.
+  const rows = data.slice().sort((a, b) => b.amount - a.amount).map(slice => {
+    const pct = slice.amount / total * 100;
+    const fill = slice.isPocket
+      ? slice.color
+      : 'linear-gradient(90deg, var(--gb), #e6c25a)';
     return `
-      <circle
-        cx="50" cy="50" r="${r}"
-        fill="none"
-        stroke="${slice.color}"
-        stroke-width="12"
-        stroke-dasharray="${dashArray}"
-        stroke-dashoffset="${dashOffset}"
-        transform="rotate(-90 50 50)"
-        style="transition: stroke-dashoffset 0.3s ease;"
-      />
-    `;
-  }).join('');
-  
-  const legendHtml = data.map(slice => {
-    const pct = (slice.amount / total * 100).toFixed(1);
-    return `
-      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink);">
-        <span style="width:10px; height:10px; border-radius:50%; background:${slice.color}; flex-shrink:0;"></span>
-        <span style="flex:1; min-width:0; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-weight:500;">${slice.name}</span>
-        <span style="font-weight:700; color:var(--gs);" class="num">${pct}% <span style="font-weight:normal; font-size:10px; opacity:0.6; margin-left:4px;">(${fmtK(slice.amount)})</span></span>
-      </div>
-    `;
-  }).join('');
-  
-  return `
-    <div style="display:flex; flex-direction:column; gap:16px; align-items:center; justify-content:center; margin-top:6px;">
-      <div style="position:relative; width:160px; height:160px; flex-shrink:0;">
-        <svg viewBox="0 0 100 100" width="100%" height="100%">
-          <circle cx="50" cy="50" r="${r}" fill="none" stroke="rgba(246,241,230,0.06)" stroke-width="12" />
-          ${slicesHtml}
-        </svg>
-        <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
-          <span style="font-size:10px; font-weight:700; color:var(--gs); letter-spacing:0.05em; text-transform:uppercase;">Ahorrado</span>
-          <span style="font-size:18px; font-weight:800; color:var(--cream); margin-top:2px;" class="num">${fmtK(total)}</span>
+      <div style="margin-bottom:13px;">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:5px;">
+          <span style="font-size:13px; font-weight:600; color:var(--cream); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${slice.name}</span>
+          <span class="num" style="font-size:12.5px; font-weight:700; color:var(--cream); flex-shrink:0; white-space:nowrap;">${fmtK(slice.amount)} <span style="color:var(--gs); font-weight:600; font-size:11px; margin-left:2px;">${pct.toFixed(0)}%</span></span>
+        </div>
+        <div style="height:10px; background:rgba(246,241,230,0.08); border-radius:6px; overflow:hidden;">
+          <div style="height:100%; width:${pct.toFixed(1)}%; background:${fill}; border-radius:6px; transition:width .45s ease;"></div>
         </div>
       </div>
-      <div style="width:100%; display:flex; flex-direction:column; gap:8px; background:rgba(246,241,230,0.02); border:1px solid var(--line); border-radius:12px; padding:12px 14px;">
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; border-bottom:1px solid rgba(246,241,230,0.05); padding-bottom:4px;">Distribución detallada</div>
-        ${legendHtml}
+    `;
+  }).join('');
+
+  return `
+    <div style="margin-top:2px;">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(246,241,230,0.08);">
+        <span style="font-size:11px; font-weight:700; color:var(--gs); letter-spacing:0.06em; text-transform:uppercase;">Total ahorrado</span>
+        <span class="num" style="font-size:20px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
       </div>
+      ${rows}
     </div>
   `;
 }
@@ -4266,9 +4279,9 @@ function renderMiMes(){
   `;
   
   const donutHtml = `
-    <div class="card" style="padding:16px;">
-      <div class="k" style="margin-bottom:10px; text-align:center;">Distribución del Ahorro Realizado</div>
-      ${drawMonthlyDistributionDonut(mes)}
+    <div class="card dark" style="padding:16px;">
+      <div class="k" style="margin-bottom:12px;">Distribución del Ahorro Realizado</div>
+      ${drawMonthlyDistributionBars(mes)}
     </div>
   `;
   
