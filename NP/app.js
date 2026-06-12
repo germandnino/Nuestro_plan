@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.7'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.8'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -380,6 +380,11 @@ function normalize(){
   state.ingresos=Array.isArray(state.ingresos)?state.ingresos:[];
   state.gastos=Array.isArray(state.gastos)?state.gastos:[];
 
+  if (reordenarMetasPorCompletadas()) {
+    rebalancearElegiblesA100('compartido');
+    rebalancearElegiblesA100('individual', 'p1');
+    rebalancearElegiblesA100('individual', 'p2');
+  }
 }
 
 // --- Firebase Sync Helpers ---
@@ -511,6 +516,7 @@ async function saveLocalOnly(){
   if(!ok)$('banner').style.display='block';
 }
 async function save(){
+  normalize();
   const ok=await store.set(JSON.stringify(state));
   if(!ok)$('banner').style.display='block';
   
@@ -787,6 +793,122 @@ function autoAdjustPercentages(editedId, newPct) {
 function autoAdjustIndividualPercentages(perfil, editedId, newPct) {
   const m = metaById(editedId);
   return m ? rebalancePct(eligiblesPct(m), editedId, newPct) : null;
+}
+
+function reordenarMetasPorCompletadas() {
+  let changed = false;
+
+  // 1. Compartidas
+  const comp = metasCompartidas();
+  const compActivas = comp.filter(m => !(m.objetivo > 0 && m.saldo >= m.objetivo));
+  const compCompletadas = comp.filter(m => m.objetivo > 0 && m.saldo >= m.objetivo);
+  compActivas.sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+  compCompletadas.sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+  const newComp = [...compActivas, ...compCompletadas];
+  
+  newComp.forEach((m, idx) => {
+    if (m.prioridad !== idx) {
+      m.prioridad = idx;
+      changed = true;
+    }
+  });
+  
+  compCompletadas.forEach(m => {
+    if (m.aportePct !== 0) {
+      m.aportePct = 0;
+      changed = true;
+    }
+  });
+
+  // 2. Individuales (por dueño, p1 y p2 por separado)
+  ['p1', 'p2'].forEach(dueno => {
+    const indivs = metasIndividuales(dueno);
+    const indActivas = indivs.filter(m => !(m.objetivo > 0 && m.saldo >= m.objetivo));
+    const indCompletadas = indivs.filter(m => m.objetivo > 0 && m.saldo >= m.objetivo);
+    indActivas.sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+    indCompletadas.sort((a,b) => (a.prioridad||0) - (b.prioridad||0));
+    const newInd = [...indActivas, ...indCompletadas];
+    
+    newInd.forEach((m, idx) => {
+      if (m.prioridad !== idx) {
+        m.prioridad = idx;
+        changed = true;
+      }
+    });
+    
+    indCompletadas.forEach(m => {
+      if (m.aportePct !== 0) {
+        m.aportePct = 0;
+        changed = true;
+      }
+    });
+  });
+
+  return changed;
+}
+
+function rebalancearElegiblesA100(tipoGrupo, dueno = null) {
+  const c = state.config;
+  if (c.estrategia === 'cascada') return;
+  
+  let elig = [];
+  if (tipoGrupo === 'compartido') {
+    const prio = getMetaPrioritaria();
+    const comp = metasCompartidas();
+    elig = comp.filter(m => {
+      if (m.colocado) return false;
+      if (m.objetivo > 0 && m.saldo >= m.objetivo) return false;
+      if (c.estrategia === 'secuencial' && prio && m.id === prio.id) return false;
+      return true;
+    });
+  } else {
+    elig = metasIndividuales(dueno).filter(m => {
+      if (m.colocado) return false;
+      if (m.objetivo > 0 && m.saldo >= m.objetivo) return false;
+      return true;
+    });
+  }
+  
+  if (elig.length === 0) return;
+  
+  const totalActual = elig.reduce((s, m) => s + (m.aportePct || 0), 0);
+  if (totalActual === 100) return;
+  
+  if (totalActual <= 0) {
+    const each = Math.floor(100 / elig.length);
+    elig.forEach(m => m.aportePct = each);
+  } else {
+    elig.forEach(m => {
+      m.aportePct = Math.round((m.aportePct || 0) / totalActual * 100);
+    });
+  }
+  
+  const totalFinal = elig.reduce((s, m) => s + (m.aportePct || 0), 0);
+  if (totalFinal !== 100) {
+    const sorted = elig.slice().sort((a,b) => (b.prioridad||0) - (a.prioridad||0));
+    if (sorted.length > 0) {
+      sorted[0].aportePct = Math.max(0, sorted[0].aportePct + (100 - totalFinal));
+    }
+  }
+}
+
+function rebalancearAlCambiarEstrategia(nuevaEstrategia) {
+  const c = state.config;
+  const oldEstrategia = c.estrategia;
+  c.estrategia = nuevaEstrategia;
+  
+  reordenarMetasPorCompletadas();
+  
+  if (nuevaEstrategia === 'secuencial') {
+    const prio = getMetaPrioritaria();
+    if (prio) {
+      prio.aportePct = 0;
+    }
+  }
+  
+  rebalancearElegiblesA100('compartido');
+  
+  c.estrategia = oldEstrategia;
 }
 
 
@@ -3674,8 +3796,18 @@ ${logoutHtml}
 function attachPlan(){
   const c=state.config;
   const isIndiv = c.modo === 'individual';
-  $('estSeq').onclick=()=>{c.estrategia='secuencial';save();rerenderPlanKeepOpen();};
-  $('estSim').onclick=()=>{c.estrategia='simultaneo';save();rerenderPlanKeepOpen();};
+  $('estSeq').onclick=()=>{
+    rebalancearAlCambiarEstrategia('secuencial');
+    c.estrategia='secuencial';
+    save();
+    rerenderPlanKeepOpen();
+  };
+  $('estSim').onclick=()=>{
+    rebalancearAlCambiarEstrategia('simultaneo');
+    c.estrategia='simultaneo';
+    save();
+    rerenderPlanKeepOpen();
+  };
   $('estCas').onclick=()=>{c.estrategia='cascada';save();rerenderPlanKeepOpen();};
   if (!currentUser && !isIndiv) {
     const pfG = $('pfG');
