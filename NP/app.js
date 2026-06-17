@@ -3823,9 +3823,81 @@ function renderMiMes(){
   }
 }
 
-function renderAprender(){
-  const c = state.config;
+/* =========================================================
+   APRENDER — Hub de herramientas
+   Cada tarjeta abre una pantalla-herramienta (overlay full-screen).
+   ========================================================= */
+const LEARN_TOOLS = [
+  { id:'ahorro',    icon:'dollar',    color:'#14cb3c', title:'¿Cuánto puedo ahorrar?',     hook:'Juega con tus ingresos y gastos y mira cuánto te sobra al mes.' },
+  { id:'simulador', icon:'trending',  color:'#d9a84a', title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
+  { id:'quiz',      icon:'lightbulb', color:'#8f5dbb', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
+  { id:'inflacion', icon:'alert',     color:'#d9534f', title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
+  { id:'invertir',  icon:'home',      color:'#4a90e2', title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.', wide:true },
+];
 
+function renderAprender(){
+  const cards = LEARN_TOOLS.map(t => `
+    <button class="learn-tool-btn${t.wide?' wide':''}" data-tool="${esc(t.id)}" style="--tool-accent:${t.color}">
+      <span class="learn-tool-ic">${getSVG(t.icon)}</span>
+      <span class="learn-tool-txt">
+        <span class="learn-tool-tt">${t.title}</span>
+        <span class="learn-tool-hk">${t.hook}</span>
+      </span>
+    </button>`).join('');
+  $('r3').innerHTML = `
+    <header>
+      <div class="ey">Educación financiera</div>
+      <h1>Aprender</h1>
+      <p style="color:rgba(246,241,230,.65);font-size:13.5px;line-height:1.45;margin:6px 0 0;">Herramientas para entender tu plata y decidir mejor, sin tecnicismos.</p>
+    </header>
+    <div class="learn-hub">${cards}</div>
+  `;
+  $('r3').querySelectorAll('[data-tool]').forEach(btn => {
+    btn.onclick = () => openLearnTool(btn.dataset.tool);
+  });
+}
+
+// Overlay full-screen que aloja cada herramienta (se crea una vez, perezoso).
+function learnToolEl(){
+  let ov = $('learnTool');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'learnTool';
+    ov.className = 'learn-tool-overlay';
+    ov.innerHTML = '<div class="learn-tool-head"><button class="bk" id="learnToolBack">‹ Aprender</button></div><div class="learn-tool-scroll" id="learnToolBody"></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#learnToolBack').onclick = () => closeLearnTool();
+  }
+  return ov;
+}
+function openLearnTool(id){
+  const tool = LEARN_TOOLS.find(t => t.id === id);
+  if(!tool) return;
+  const ov = learnToolEl();
+  const body = $('learnToolBody');
+  body.innerHTML = '';
+  body.scrollTop = 0;
+  ov.classList.add('open');
+  $('mainnav').classList.add('hide');
+  const renderers = { invertir: renderLearnInvertir };
+  (renderers[id] || renderLearnPlaceholder)(body, tool);
+}
+function closeLearnTool(){
+  const ov = $('learnTool'); if(ov) ov.classList.remove('open');
+  $('mainnav').classList.remove('hide');
+}
+// Placeholder temporal para herramientas aún no construidas.
+function renderLearnPlaceholder(body, tool){
+  body.innerHTML = `
+    <header><div class="ey">Próximamente</div><h1>${tool.title}</h1></header>
+    <div class="card" style="text-align:center;padding:28px 16px;">
+      <div class="learn-tool-ic" style="--tool-accent:${tool.color};margin:0 auto 12px;width:48px;height:48px;">${getSVG(tool.icon)}</div>
+      <div class="muted" style="font-size:13.5px;line-height:1.5;">Estamos construyendo esta herramienta. Vuelve pronto. 🚧</div>
+    </div>`;
+}
+
+// --- Herramienta: ¿Dónde invertir en Colombia? (escalera + tus metas + catálogo) ---
+function renderLearnInvertir(body){
   // --- Capa 1: El principio (escalera plazo -> instrumento) ---
   const ladderHtml = `
     <div class="stitle" style="margin-top:4px;">El principio</div>
@@ -3973,21 +4045,19 @@ function renderAprender(){
     </div>
   `;
 
-  $('r3').innerHTML = `
+  body.innerHTML = `
     <header>
       <div class="ey">Educación financiera</div>
-      <h1>Aprender a invertir</h1>
+      <h1>¿Dónde invertir?</h1>
     </header>
     ${ladderHtml}
     ${coachHtml}
-    <details class="glosario">
-      <summary>¿Dónde invertir? Opciones en Colombia</summary>
-      ${catalogHtml}
-    </details>
+    <div class="stitle" style="margin-top:18px;">Opciones reales en Colombia</div>
+    ${catalogHtml}
   `;
 
-  // Filas de meta -> expandir recomendación completa inline (sin salir de Aprender)
-  $('r3').querySelectorAll('[data-meta]').forEach(row => {
+  // Filas de meta -> expandir recomendación completa inline (sin salir de la herramienta)
+  body.querySelectorAll('[data-meta]').forEach(row => {
     row.onclick = () => {
       const rec = row.querySelector('.apr-rec');
       const chev = row.querySelector('.apr-chev');
@@ -3998,8 +4068,8 @@ function renderAprender(){
     };
   });
   // Estado vacío -> crear meta
-  const btnCrear = $('aprCrearMeta');
-  if (btnCrear) btnCrear.onclick = () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); };
+  const btnCrear = body.querySelector('#aprCrearMeta');
+  if (btnCrear) btnCrear.onclick = () => { closeLearnTool(); go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); };
 }
 
 /* =========================================================
