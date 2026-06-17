@@ -2390,13 +2390,12 @@ function renderMetaForm(editing){
 
   let fields='';
   if(m.tipo==='imprevistos'){
-    const showAporte = true; // % por bucket: el aporte siempre se puede definir
     const sug = colchonSugerido();
     const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
       ${sug>0 ? `<div class="hint" style="margin-top:6px">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de tus gastos fijos':'~6 meses de tu ahorro mensual'}). Ajústalo a tu realidad. El ahorro sobrante completa este colchón antes de ir a inversión.</div>` : ''}
-      ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
+      <label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}
       <details style="margin-top:14px"${m.gastoRef?' open':''}>
         <summary style="font-size:12px;font-weight:700;color:var(--gs);cursor:pointer">Medir en meses de respaldo (opcional)</summary>
         <div class="hint" style="margin:6px 0 8px">¿Cuánto gastan al mes, aprox? Así mostramos tu colchón en <b>meses de respaldo</b> en vez de solo un monto.</div>
@@ -2404,7 +2403,6 @@ function renderMetaForm(editing){
       </details>
       <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
   }else{
-    const showAporte = true; // % por bucket: el aporte siempre se puede definir
     fields=`<div class="card">
       <label class="lbl">Meta (opcional)</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
@@ -2413,7 +2411,7 @@ function renderMetaForm(editing){
         <span id="fFechaText">${m.fecha ? fmtMes(m.fecha) : 'Seleccionar mes'}</span>
         <span style="color:var(--gs); display:inline-flex; align-items:center;">${getSVG('chevronDown', '', 'width:12px; height:12px;')}</span>
       </div>
-      ${showAporte ? `<label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}` : `<div class="hint" style="margin-top:14px">Estrategia actual: Prioritaria primero. Esta es la meta de máxima prioridad y se llena de primero automáticamente.</div>`}
+      <label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}
       <div class="deriv" id="fDeriv"></div>
     </div>`;
   }
@@ -2583,15 +2581,10 @@ function attachMetaForm(editing){
     const nombreNorm=mForm.nombre.trim().toLowerCase().replace(/\s+/g,' ');
     const dup=state.metas.some(x=>x.id!==mForm.id&&x.tipo!=='personal'&&(x.nombre||'').trim().toLowerCase().replace(/\s+/g,' ')===nombreNorm);
     if(dup){flash('Ya tienes una meta con ese nombre. Usa uno distinto para no confundirte.');return;}
-    // En simultáneo una meta sin fijo ni % no participa del reparto y queda en $0. Forzar uno u otro.
-    // La inversión abierta es sumidero del sobrante, así que se exime.
-    if(state.config.estrategia==='simultaneo'&&!mForm.dueno&&mForm.tipo!=='invertir'&&!mForm.colocado&&!((mForm.aporteFijo||0)>0)&&!((mForm.aportePct||0)>0)){
-      flash('En modo simultáneo define un aporte fijo o un % para esta meta; sin uno de los dos quedaría en $0.');return;
-    }
     const idx=state.metas.findIndex(x=>x.id===mForm.id);
     if(idx>=0)state.metas[idx]=mForm;else state.metas.push(mForm);
-    // Si los % superan 100, ofrecer reajustar las demás proporcionalmente (respetando el % de esta meta).
-    if(state.config.estrategia!=='cascada' && (mForm.aportePct||0)>0){
+    // Si los % del bucket superan 100, ofrecer reajustar las demás proporcionalmente (respetando el % de esta meta).
+    if((mForm.aportePct||0)>0){
       const elig=eligiblesPct(mForm);
       const sum=elig.reduce((s,x)=>s+(x.aportePct||0),0);
       if(Math.abs(sum-100)>0.5){
