@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.18'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.19'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -1632,13 +1632,12 @@ function drawBucketBar(dueno){
       </div>
     </div>`;
   }).join('');
-
   if (_distribucionCollapsed) {
     return `
       <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:10px 14px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; transition: background 0.2s;">
         <div style="display:flex; align-items:center; gap:8px; flex-grow:1; min-width:0;">
-          <span style="font-size:11px; font-weight:700; color:var(--gb); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">Reparto:</span>
-          <span style="font-size:12.5px; font-weight:600; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${resumenText}</span>
+          <span style="font-family:var(--serif); font-size:13.5px; font-weight:700; color:var(--gb); white-space:nowrap;">Reparto:</span>
+          <span style="font-family:var(--serif); font-size:14px; font-weight:500; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${resumenText}</span>
         </div>
         <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
           ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}
@@ -1650,7 +1649,7 @@ function drawBucketBar(dueno){
   return `
     <div class="card dark bucketbar-expanded" style="margin-bottom:12px; padding:12px 14px;">
       <div class="bucketbar-toggle" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer;">
-        <div class="k" style="margin:0; color:var(--gb); flex-grow:1;">¿Cuánto a cada propósito?</div>
+        <div style="font-family:var(--serif); font-size:16px; font-weight:450; color:var(--gb); flex-grow:1;">¿Cuánto a cada propósito?</div>
         <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
           ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7; transform: rotate(180deg);')}
         </div>
