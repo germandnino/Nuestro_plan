@@ -3924,19 +3924,19 @@ function renderLearnInvertir(body){
       <details class="learn-acc invest-rung" style="border-left:4px solid ${r.color}">
         <summary>
           <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
-            <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14.5px;font-weight:800;color:var(--cream)">${r.plazo}</span><span style="font-size:11.5px;color:rgba(246,241,230,.5)">${r.time}</span></span>
+            <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14.5px;font-weight:800;color:var(--ink)">${r.plazo}</span><span style="font-size:11.5px;color:var(--gs)">${r.time}</span></span>
             <span style="font-size:12px;font-weight:700;color:${r.color}">${r.tipo} · ${r.tasa}</span>
           </span>
         </summary>
         <div class="learn-acc-body">
           ${r.instr.map((it,idx) => `
-            <div style="${idx?'border-top:1px solid rgba(246,241,230,.1);margin-top:12px;padding-top:12px':''}">
+            <div style="${idx?'border-top:1px solid var(--line);margin-top:12px;padding-top:12px':''}">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${it.sub?'2px':'5px'}">
-                <b style="font-size:13.5px;color:var(--cream)">${it.nom}</b>
+                <b style="font-size:13.5px;color:var(--ink)">${it.nom}</b>
                 <span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${r.color};background:${r.color}1f;border-radius:100px;padding:3px 8px;white-space:nowrap">${it.tag}</span>
               </div>
-              ${it.sub?`<div style="font-size:11px;color:rgba(246,241,230,.5);margin:0 0 6px">${it.sub}</div>`:''}
-              ${it.facts.map(f => `<div style="font-size:12px;line-height:1.55;color:rgba(246,241,230,.78)">${f}</div>`).join('')}
+              ${it.sub?`<div style="font-size:11px;color:var(--gs);margin:0 0 6px">${it.sub}</div>`:''}
+              ${it.facts.map(f => `<div style="font-size:12px;line-height:1.55;color:rgba(21,36,28,.82)">${f}</div>`).join('')}
             </div>`).join('')}
         </div>
       </details>`).join('')}
