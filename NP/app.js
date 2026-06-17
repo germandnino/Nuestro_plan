@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.25'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.26'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -2071,7 +2071,6 @@ function renderMetas(){
              <span class="pct-sign">%</span>
            </div>`
         : (!isPersonal ? `<span class="pill${flashCls}">${m.aportePct||0}%</span>` : '');
-      const typePill = isPersonal ? '' : `<span class="pill">${getSVG(m.tipo==='imprevistos'?'shield':m.tipo==='invertir'?'trending':'target','', 'width:11px;height:11px;margin-right:3px;vertical-align:-1px;')}${tipoLabel(m.tipo)}</span>`;
       // ETA útil (sueño/colchón con objetivo y aún no lleno).
       let eta='';
       if(m.tipo!=='invertir' && obj && m.saldo<obj){
@@ -2126,7 +2125,7 @@ function renderMetas(){
         <div class="metacard-row">
           ${dragHandle}
           <div class="metacard-main">
-            <div class="metacard-title"><span class="metacard-name">${m.nombre}</span>${typePill}</div>
+            <div class="metacard-title"><span class="metacard-name">${m.nombre}</span></div>
             <div class="metacard-sub">${sub}</div>
           </div>
           ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${pctBadge}${editBtn}`))}
