@@ -4220,7 +4220,8 @@ function renderLearnSimulador(body){
   const S = {
     monto: sugAhorro || sugPlan || 500000,
     years: 10,
-    instr: 'cdt'
+    instr: 'cdt',
+    rate: LEARN_INSTR.cdt.rate   // tasa anual efectiva; el instrumento la sugiere, el usuario la edita
   };
   const MAX = Math.max(100000000, Math.ceil(S.monto / SNAP) * SNAP); // hasta 100M; sube si el handoff es mayor
   const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
@@ -4262,12 +4263,27 @@ function renderLearnSimulador(body){
         </div>
         <input type="range" class="learn-slider" id="lsYears" min="1" max="40" step="1" value="${S.years}">
       </div>
-      <div class="learn-field-lbl" style="margin-bottom:6px">¿Dónde?</div>
+      <div class="learn-field-lbl" style="margin-bottom:6px">¿Dónde? <span style="font-weight:400;color:rgba(246,241,230,.5)">— sugiere una tasa, ajústala si quieres</span></div>
       <div class="seg dark-seg" id="lsInstr">${segHtml}</div>
+      <div class="learn-field" style="margin:12px 0 0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Rendimiento anual</span>
+          <span class="learn-field-input"><input type="number" class="learn-num pct" id="lsRateVal" value="${(S.rate*100)}" min="0" max="50" step="0.5"><span class="lfx" style="font-size:13px">% E.A.</span></span>
+        </div>
+      </div>
       <div id="lsNote" style="font-size:12px;color:rgba(246,241,230,.65);line-height:1.4;margin-top:8px"></div>
     </div>
 
     <div class="card" id="lsResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);padding:16px"></div>
+
+    <details class="learn-acc">
+      <summary>¿Por qué crece tanto? El interés compuesto</summary>
+      <div class="learn-acc-body">
+        <p style="margin:0 0 8px">Tus rendimientos también generan rendimientos. El primer año ganas sobre lo que pusiste; el segundo, ganas sobre lo que pusiste <b style="color:var(--cream)">más</b> lo que ya habías ganado. Y así, año tras año.</p>
+        <p style="margin:0 0 8px">Por eso la línea dorada se despega de la del colchón: entre más tiempo lo dejes, más se acelera. El tiempo es tu mejor aliado.</p>
+        <p style="margin:0;color:rgba(246,241,230,.6)">Esta simulación capitaliza mes a mes (interés compuesto mensual) con la tasa que elijas arriba.</p>
+      </div>
+    </details>
 
     <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
       <div class="k" style="color:var(--gb);margin-bottom:8px">Bajo el colchón vs. invertido</div>
@@ -4298,7 +4314,7 @@ function renderLearnSimulador(body){
   }
 
   function paint(){
-    const m = S.monto, years = S.years, annual = LEARN_INSTR[S.instr].rate;
+    const m = S.monto, years = S.years, annual = S.rate;
     const n = years * 12;
     const r = Math.pow(1 + annual, 1/12) - 1;
     const aportado = m * n;
@@ -4338,9 +4354,16 @@ function renderLearnSimulador(body){
   $$('lsInstr').querySelectorAll('[data-instr]').forEach(b => {
     b.onclick = () => {
       S.instr = b.dataset.instr;
+      S.rate = LEARN_INSTR[S.instr].rate;       // el instrumento sugiere la tasa
+      $$('lsRateVal').value = S.rate * 100;
       $$('lsInstr').querySelectorAll('[data-instr]').forEach(x => x.classList.toggle('on', x === b));
       paint();
     };
+  });
+  $$('lsRateVal').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    S.rate = Math.max(0, Math.min(50, isNaN(v) ? 0 : v)) / 100;
+    paint();
   });
   body.querySelectorAll('.learn-sugg').forEach(b => {
     b.onclick = () => { S.monto = Math.min(MAX, +b.dataset.v); $$('lsMonto').value = posFromMonto(S.monto); $$('lsMontoVal').value = formatInt(S.monto); paint(); };
