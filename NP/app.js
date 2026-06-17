@@ -829,13 +829,6 @@ function getMetaFalta(m, resAlloc) {
   }
   return Infinity;
 }
-function getMetaPrioritaria(){
-  const comp=metasCompartidas();
-  const sorted=comp.slice().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-  return sorted.find(m=>m.objetivo>0&&m.saldo<m.objetivo)||null;
-}
-
-
 /* Registro del último sobrante repartido por colocarSobrante (para avisar al usuario). */
 let _ultimoSobrante = [];
 /* Sumidero del sobrante del reparto: (1) inversión abierta (perpetua, sin tope),
@@ -1035,26 +1028,6 @@ function rebalancearElegiblesA100(tipoGrupo, dueno = null){
     if(tf!==100){ const s=elig.slice().sort((a,b)=>(b.prioridad||0)-(a.prioridad||0)); s[0].aportePct=Math.max(0,s[0].aportePct+(100-tf)); }
   });
 }
-
-function rebalancearAlCambiarEstrategia(nuevaEstrategia) {
-  const c = state.config;
-  const oldEstrategia = c.estrategia;
-  c.estrategia = nuevaEstrategia;
-  
-  reordenarMetasPorCompletadas();
-  
-  if (nuevaEstrategia === 'secuencial') {
-    const prio = getMetaPrioritaria();
-    if (prio) {
-      prio.aportePct = 0;
-    }
-  }
-  
-  rebalancearElegiblesA100('compartido');
-  
-  c.estrategia = oldEstrategia;
-}
-
 
 /* =========================================================
    MOVIMIENTOS UNIFICADOS — helpers
@@ -2492,13 +2465,6 @@ function readMetaForm(){
   m.aporteFijo=0;
   if($('fPct'))m.aportePct=Math.max(0,Math.min(100,parse($('fPct').value)));
   if($('fSaldo'))m.saldo=parse($('fSaldo').value);
-  if(state.config.estrategia==='secuencial'){
-    const prio = getMetaPrioritaria();
-    const isPrio = prio && prio.id === m.id;
-    if(isPrio){
-      m.aporteFijo=0;m.aportePct=0;
-    }
-  }
   if(m.tipo==='imprevistos'){
     m.fecha=null;
     if($('fGastoRef'))m.gastoRef=parse($('fGastoRef').value);
@@ -2530,7 +2496,6 @@ function updateDeriv(){
   const apTxt=()=>pct>0 ? '~'+fmt(pctMes)+' ('+pct+'% del ahorro)' : '';
 
   let txt='';
-  const strat = c.estrategia;
 
   if (mForm.dueno) {
     if(obj&&fecha){
@@ -2546,44 +2511,6 @@ function updateDeriv(){
       txt=`Meta de <b>${fmt(obj)}</b> sin aporte mensual definido. Se financiará mediante aportes manuales.`;
     }else{
       txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
-    }
-  } else if (strat === 'cascada') {
-    if (obj) {
-      const falta = Math.max(0, obj - saldo);
-      txt = `Estrategia actual: <b>En cascada</b>. Esta meta se llenará al 100% con todo el ahorro disponible (según prioridad) hasta completar los <b>${fmt(obj)}</b> (faltan ${fmt(falta)}).`;
-    } else {
-      txt = `Estrategia actual: <b>En cascada</b>. Esta meta abierta absorberá todo el ahorro sobrante una vez se completen las metas de mayor prioridad.`;
-    }
-  } else if (strat === 'secuencial') {
-    const prio = getMetaPrioritaria();
-    const isPrio = prio && prio.id === mForm.id;
-    if (isPrio) {
-      const falta = Math.max(0, obj - saldo);
-      const fijosOtros = metasCompartidas().filter(m => m.id !== prio.id && m.tipo !== 'imprevistos').reduce((s, m) => s + (m.aporteFijo || 0), 0);
-      const estPrio = Math.max(0, est - fijosOtros);
-      const meses = estPrio > 0 ? Math.ceil(falta / estPrio) : '—';
-      if (fijosOtros > 0) {
-        txt = `Estrategia actual: <b>Prioritaria primero</b>. Esta meta recibe el ahorro base restante de <b>${fmt(estPrio)}/mes</b> (tras cubrir aportes fijos de otras metas). Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
-      } else {
-        txt = `Estrategia actual: <b>Prioritaria primero</b>. Todo el ahorro base de <b>${fmt(est)}/mes</b> va a esta meta primero por ser la de máxima prioridad. Lista en <b>~${meses} mes${meses!==1?'es':''}</b> (faltan ${fmt(falta)}).`;
-      }
-    } else {
-      const prioNom = prio ? prio.nombre : 'la meta principal';
-      if(obj&&fecha){
-        const meses=Math.max(1,monthsUntil(fecha));const need=Math.ceil((obj-saldo)/meses);
-        txt=`Para llegar a <b>${fmt(obj)}</b> en ${fmtMes(fecha)} necesitas <b>${fmt(need)}/mes</b>.`;
-        if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} (~${fmt(aporteMes)}/mes) llegarías en ${addMonths(m2)}.`;}
-      }else if(obj&&aporteMes>0){
-        const meses=Math.ceil((obj-saldo)/aporteMes);
-        txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
-      }else if(aporteMes>0&&!obj){
-        txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
-      }else if(obj){
-        txt=`Meta de <b>${fmt(obj)}</b> sin aporte definido: recibe lo que sobre del ahorro mensual.`;
-      }else{
-        txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
-      }
-      txt += ` <br><span style="opacity:0.8; font-size:11px;">Nota: Recibirá aportes en paralelo una vez se complete <b>${prioNom}</b> o si sobra ahorro mensual.</span>`;
     }
   } else {
     if(obj&&fecha){
@@ -3875,7 +3802,6 @@ function renderAprender(){
 function renderPlan(){
   const c=state.config;
   const isIndiv = c.modo === 'individual';
-  const detEstrategiaOpen = $('detEstrategia') ? $('detEstrategia').hasAttribute('open') : false;
   const detPerfilOpen = $('detPerfil') ? $('detPerfil').hasAttribute('open') : false;
   const detNombresOpen = $('detNombres') ? $('detNombres').hasAttribute('open') : false;
   const detRespaldoOpen = $('detRespaldo') ? $('detRespaldo').hasAttribute('open') : false;
@@ -4127,19 +4053,6 @@ function renderPlan(){
 
   $('r4').innerHTML=`
 <header><div class="ey">Configuración</div><h1>Ajustes</h1></header>
- 
-<details id="detEstrategia" ${detEstrategiaOpen ? 'open' : ''}><summary>Estrategia de ahorro</summary><div class="dpad">
-  <div class="seg">
-    <button id="estSeq" class="${c.estrategia==='secuencial'?'on':''}" ${dis}>Prioritaria primero</button>
-    <button id="estSim" class="${c.estrategia==='simultaneo'?'on':''}" ${dis}>Simultáneo</button>
-    <button id="estCas" class="${c.estrategia==='cascada'?'on':''}" ${dis}>En cascada</button>
-  </div>
-  <div class="hint">
-    ${c.estrategia==='secuencial'?'<b>Prioritaria primero</b>: Cubre los aportes fijos de todas las metas y luego destina todo el ahorro restante a la meta de máxima prioridad.'
-      :c.estrategia==='simultaneo'?'<b>Simultáneo</b>: Reparte en paralelo entre todas las metas (incluyendo la prioritaria si tiene aportes) desde el inicio.'
-      :'<b>En cascada</b>: Llena las metas una por una en estricto orden de prioridad (número menor a mayor), ignorando porcentajes y fijos.'}
-  </div>
-</div></details>
 
 ${perfilDetailHtml}
  
@@ -4159,19 +4072,6 @@ ${logoutHtml}
 function attachPlan(){
   const c=state.config;
   const isIndiv = c.modo === 'individual';
-  $('estSeq').onclick=()=>{
-    rebalancearAlCambiarEstrategia('secuencial');
-    c.estrategia='secuencial';
-    save();
-    rerenderPlanKeepOpen();
-  };
-  $('estSim').onclick=()=>{
-    rebalancearAlCambiarEstrategia('simultaneo');
-    c.estrategia='simultaneo';
-    save();
-    rerenderPlanKeepOpen();
-  };
-  $('estCas').onclick=()=>{c.estrategia='cascada';save();rerenderPlanKeepOpen();};
   if (!currentUser && !isIndiv) {
     const pfG = $('pfG');
     if (pfG) pfG.onclick=()=>{c.perfil='p1';save();rerenderPlanKeepOpen();};
