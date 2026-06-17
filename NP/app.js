@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.21'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.22'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -2946,7 +2946,10 @@ function openAsistenteIngresoExtra(preFill = null) {
 
     // Destino de los Ahorros
     if (toSave > 0.5) {
-      if (metaDestino === 'distribuir') {
+      const esDistComun = metaDestino === 'distribuir' && c.modo === 'pareja';
+      const esDistIndiv = metaDestino === 'distribuir-individual' || (metaDestino === 'distribuir' && c.modo === 'individual');
+
+      if (esDistComun) {
         const oldSobrante = _ultimoSobrante;
         const { dist } = distribuirAhorro(toSave);
         _ultimoSobrante = oldSobrante; // restaurar
@@ -3012,7 +3015,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             </div>
           `;
         }
-      } else if (metaDestino === 'distribuir-individual') {
+      } else if (esDistIndiv) {
         const { dist, rem } = distribuirAhorroIndividual(c.perfil, toSave, true);
         
         const indivs = metasIndividuales(c.perfil).filter(m => !m.colocado);
@@ -3144,7 +3147,7 @@ function openAsistenteIngresoExtra(preFill = null) {
       return;
     }
 
-    const esPriv = esDestinoPersonal(meta) || meta === 'distribuir-individual';
+    const esPriv = esDestinoPersonal(meta) || meta === 'distribuir-individual' || (meta === 'distribuir' && c.modo === 'individual');
     const ep = {
       id: uid(),
       mes: selectedMonth || curMonth(),
@@ -3169,7 +3172,10 @@ function aplicarIngresoInmediatoActivo(ep) {
 
   let distInmediato = null;
   if (toSave > 0.5) {
-    if (ep.meta === 'distribuir') {
+    const esDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
+    const esDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
+
+    if (esDistComun) {
       const { dist, rem: remDist } = distribuirAhorro(toSave);
       if(remDist>0.5) registrarSobrantePendiente(remDist, 'reparto');
       distInmediato = Object.assign({}, dist);
@@ -3178,7 +3184,7 @@ function aplicarIngresoInmediatoActivo(ep) {
           m.saldo += dist[m.id];
         }
       });
-    } else if (ep.meta === 'distribuir-individual') {
+    } else if (esDistIndiv) {
       const profile = ep.duenoPriv || c.perfil;
       const { dist, rem } = distribuirAhorroIndividual(profile, toSave, true);
       distInmediato = Object.assign({}, dist);
@@ -3248,14 +3254,17 @@ function revertirAporte(id) {
   const toSave = ep.monto;
 
   if (toSave > 0.5) {
-    if (ep.meta === 'distribuir') {
+    const esDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
+    const esDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
+
+    if (esDistComun) {
       const dist = ep.dist || distribuirAhorro(toSave).dist;
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
           m.saldo = Math.max(0, m.saldo - dist[m.id]);
         }
       });
-    } else if (ep.meta === 'distribuir-individual') {
+    } else if (esDistIndiv) {
       const profile = ep.duenoPriv || state.config.perfil;
       const dist = ep.dist || distribuirAhorroIndividual(profile, toSave, true).dist;
       state.metas.forEach(m => {
@@ -3344,7 +3353,10 @@ function getMonthlyDistributionData(mes) {
     const toSave = ing.monto;
 
     if (toSave > 0.5) {
-      if (ing.meta === 'distribuir') {
+      const esDistComun = ing.meta === 'distribuir' && !ing.duenoPriv;
+      const esDistIndiv = ing.meta === 'distribuir-individual' || (ing.meta === 'distribuir' && ing.duenoPriv);
+
+      if (esDistComun) {
         const dist = ing.dist || distribuirAhorro(toSave).dist;
         Object.keys(dist).forEach(mId => {
           const m = metaById(mId);
@@ -3355,7 +3367,7 @@ function getMonthlyDistributionData(mes) {
             distMap[mId].amount += dist[mId];
           }
         });
-      } else if (ing.meta === 'distribuir-individual') {
+      } else if (esDistIndiv) {
         const dist = ing.dist || distribuirAhorroIndividual(ing.duenoPriv || c.perfil, toSave, true).dist;
         Object.keys(dist).forEach(mId => {
           const m = metaById(mId);
