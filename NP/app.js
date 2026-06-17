@@ -3833,7 +3833,7 @@ const LEARN_TOOLS = [
   { id:'simulador', icon:'trending',  color:'#d9a84a', title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
   { id:'quiz',      icon:'lightbulb', color:'#8f5dbb', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
   { id:'inflacion', icon:'alert',     color:'#d9534f', title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
-  { id:'aporte',    icon:'users',     color:'#2bb6a8', title:'Aporte justo en pareja',     hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
+  { id:'aporte',    icon:'users',     color:'#2bb6a8', title:'Aporte en pareja',           hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
   { id:'invertir',  icon:'home',      color:'#4a90e2', title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.', wide:true },
 ];
 
@@ -4489,13 +4489,13 @@ function renderLearnInflacion(body){
   paint();
 }
 
-// --- Herramienta: Aporte justo en pareja (id aporte, SOLO modo pareja) ---
+// --- Herramienta: Aporte en pareja (id aporte, SOLO modo pareja) ---
 // Conversación neutral: muestra 3 formas de repartir el gasto compartido, sin
 // favorita y sin guardar nada. Opera solo sobre gastos+planPareja.
 function renderLearnAporte(body){
   const c = state.config;
   if (c.modo !== 'pareja'){
-    body.innerHTML = `<header><h1>Aporte justo en pareja</h1></header>
+    body.innerHTML = `<header><h1>Aporte en pareja</h1></header>
       <div class="card" style="text-align:center"><div class="muted" style="font-size:13.5px;line-height:1.5">Esta herramienta es para planes en pareja. Cámbialo en Ajustes si quieren usarla.</div></div>`;
     return;
   }
@@ -4518,7 +4518,7 @@ function renderLearnAporte(body){
   body.innerHTML = `
     <header style="padding-top:8px">
       <div class="ey">Educación financiera</div>
-      <h1 style="margin:2px 0 0">Aporte justo en pareja</h1>
+      <h1 style="margin:2px 0 0">Aporte en pareja</h1>
       <p style="color:rgba(246,241,230,.65);font-size:13px;line-height:1.45;margin:6px 0 0">No hay una forma "correcta". Aquí están las tres más comunes para que ustedes conversen y decidan. Esto no toca su plan ni su dinero libre.</p>
     </header>
 
