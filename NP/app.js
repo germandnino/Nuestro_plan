@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.26'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.27'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -213,6 +213,79 @@ function customConfirm(message, isDestructive = false, okText = '', cancelText =
 }
 function customPrompt(message, defaultText = '') {
   return showCustomModal({ title: 'Ingresar dato', message, type: 'prompt', placeholder: defaultText });
+}
+function showResetSaldosModal() {
+  return new Promise((resolve) => {
+    let overlay = $('custom-modal-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'custom-modal-overlay';
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      <div class="modal-card animate-in" style="max-width:340px;">
+        <h3 class="modal-title">Reiniciar Plan</h3>
+        <p class="modal-msg" style="margin-bottom:8px;font-size:14px;line-height:1.45;">Elige qué datos deseas limpiar. Se conservará la configuración de tus metas y nombres.</p>
+        
+        <div style="display:flex;flex-direction:column;gap:12px;margin:8px 0 16px;text-align:left;">
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink);cursor:pointer;user-select:none;line-height:1.3;">
+            <input type="checkbox" id="chkResetSaldos" checked style="width:16px;height:16px;margin-top:1px;accent-color:var(--gold);cursor:pointer;">
+            <span>Reiniciar saldos de metas a $0</span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink);cursor:pointer;user-select:none;line-height:1.3;">
+            <input type="checkbox" id="chkResetHistorial" checked style="width:16px;height:16px;margin-top:1px;accent-color:var(--gold);cursor:pointer;">
+            <span>Borrar historial de movimientos (ingresos y gastos)</span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink);cursor:pointer;user-select:none;line-height:1.3;">
+            <input type="checkbox" id="chkResetLogros" checked style="width:16px;height:16px;margin-top:1px;accent-color:var(--gold);cursor:pointer;">
+            <span>Borrar historial de logros (sueños cumplidos)</span>
+          </label>
+        </div>
+        
+        <div class="modal-actions">
+          <button class="btn ghost" id="modal-btn-cancel">Cancelar</button>
+          <button class="btn danger" id="modal-btn-ok">Reiniciar</button>
+        </div>
+      </div>
+    `;
+    overlay.style.display = 'flex';
+    
+    const btnOk = $('modal-btn-ok');
+    const btnCancel = $('modal-btn-cancel');
+    const chkSaldos = $('chkResetSaldos');
+    const chkHistorial = $('chkResetHistorial');
+    const chkLogros = $('chkResetLogros');
+    
+    const cleanup = () => {
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+      document.removeEventListener('keydown', handleKeydown);
+    };
+    
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape') {
+        cleanup();
+        resolve(null);
+      } else if (e.key === 'Enter') {
+        btnOk.click();
+      }
+    };
+    document.addEventListener('keydown', handleKeydown);
+    
+    btnOk.onclick = () => {
+      const resetSaldos = chkSaldos ? chkSaldos.checked : false;
+      const resetHistorial = chkHistorial ? chkHistorial.checked : false;
+      const resetLogros = chkLogros ? chkLogros.checked : false;
+      cleanup();
+      resolve({ resetSaldos, resetHistorial, resetLogros });
+    };
+    
+    btnCancel.onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+  });
 }
 
 /* ===== Celebración exclusiva del sueño (Fase 3b) =====
@@ -4108,7 +4181,7 @@ function renderPlan(){
           <span><b>Sincronización activa:</b> Tus datos se guardan de forma automática en tu cuenta en la nube. No necesitas respaldos manuales.</span>
         </div>
         <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(155,103,28,.4);color:#9b671c;margin-bottom:12px;" ${dis}>Reiniciar saldos a $0</button>
-        <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
+        <button class="btn danger" id="bReset" ${dis}>Borrar plan y todos los datos</button>
         <div class="hint" style="margin-top:6px;font-size:11px;color:#b3261e;display:flex;align-items:flex-start;gap:5px;">
           ${getSVG('alert', '', 'flex-shrink:0;stroke:#b3261e;width:12px;height:12px;margin-top:1px;')}
           <span>Esta acción restablecerá tu app local y eliminará permanentemente la información compartida de este plan en la nube.</span>
@@ -4162,7 +4235,7 @@ function renderPlan(){
         <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp" ${dis}>Restaurar</button>
         <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
         <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(155,103,28,.4);color:#9b671c;margin-bottom:12px;" ${dis}>Reiniciar saldos a $0</button>
-        <button class="btn danger" id="bReset" ${dis}>Borrar todos los datos</button>
+        <button class="btn danger" id="bReset" ${dis}>Borrar plan y todos los datos</button>
         <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
       </div></details>
     `;
@@ -4449,21 +4522,38 @@ function attachPlan(){
   if (bResetSaldos) {
     bResetSaldos.onclick = async () => {
       if (!canEditShared()) { flash('Solo un editor puede reiniciar el plan'); return; }
-      if (!await customConfirm('¿Reiniciar todos los saldos y el historial a $0? Se mantendrán tus metas creadas y nombres configurados.', true)) return;
       
-      state.metas.forEach(m => { m.saldo = 0; });
+      const res = await showResetSaldosModal();
+      if (!res) return;
       
-      // Limpiar historiales y movimientos
-      state.log = [];
-      state.ingresos = [];
-      state.gastos = [];
+      const { resetSaldos, resetHistorial, resetLogros } = res;
+      if (!resetSaldos && !resetHistorial && !resetLogros) {
+        flash('No se seleccionó nada para reiniciar');
+        return;
+      }
+      
+      const msgs = [];
+      if (resetSaldos) {
+        state.metas.forEach(m => { m.saldo = 0; });
+        msgs.push('saldos');
+      }
+      if (resetHistorial) {
+        state.log = [];
+        state.ingresos = [];
+        state.gastos = [];
+        msgs.push('historial');
+      }
+      if (resetLogros) {
+        state.logros = [];
+        msgs.push('logros');
+      }
       
       save();
       rerender();
-      flash('Saldos e historial reiniciados ✓');
+      flash(`Reiniciamos: ${msgs.join(', ')} ✓`);
     };
   }
-  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Borrar todos los datos?', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};save();startOnboarding();};
+  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Eliminar por completo el plan y todos los datos permanentemente? Esta acción es irreversible.', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};save();startOnboarding();};
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
   if (bInst) {
