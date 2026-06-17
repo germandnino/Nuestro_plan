@@ -2356,10 +2356,17 @@ ${m.tipo!=='personal' ? `<div class="card"><label class="lbl">¿Ya tienes algo g
 ${m.tipo==='invertir' ? `<div class="card" id="fColocado" style="cursor:pointer;display:flex;align-items:center;gap:12px">
   <div style="width:22px;height:22px;border-radius:6px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:2px solid ${m.colocado?'var(--green)':'var(--line)'};background:${m.colocado?'var(--green)':'transparent'}">${m.colocado?'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--cream)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>':''}</div>
   <div style="flex:1;min-width:0">
-    <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Este dinero ya está invertido</div>
-    <div class="hint" style="margin:0">Lo registro solo para control. No me sugieras moverlo.</div>
+    <div style="font-size:13.5px;font-weight:700;color:var(--ink)">No admite aportes (CDT / plazo fijo)</div>
+    <div class="hint" style="margin:0">Dinero bloqueado a término. No recibe reparto; lo registramos para control.</div>
   </div>
-</div>` : ''}
+</div>
+${m.colocado ? `<div class="card"><label class="lbl">¿Cuándo vence? (opcional)</label>
+  <div class="sf" id="fVenceTrigger" data-val="${m.vencimiento||''}" style="margin-top:4px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+    <span id="fVenceText">${m.vencimiento?fmtMes(m.vencimiento):'Seleccionar mes'}</span>
+    <span style="color:var(--gs);display:inline-flex;align-items:center;">${getSVG('chevronDown','','width:12px;height:12px;')}</span>
+  </div>
+  <div class="hint" style="margin-top:6px">Te avisamos al vencer para renovarlo o liberar el dinero.</div>
+</div>` : ''}` : ''}
 <button class="btn" id="fSave">${editing?'Guardar cambios':'Crear'}</button>
 ${editing?'<button class="btn danger" id="fDel">Eliminar</button>':''}`;
   attachMetaForm(editing);
@@ -2401,6 +2408,11 @@ function readMetaForm(){
   }
   if(m.tipo!=='invertir'){
     m.colocado=false;
+  }
+  if(m.tipo==='invertir' && m.colocado){
+    if($('fVenceTrigger'))m.vencimiento=$('fVenceTrigger').dataset.val||null;
+  }else{
+    m.vencimiento=null; // vencimiento solo para inversión fija
   }
 }
 function updateDeriv(){
@@ -2513,6 +2525,16 @@ function attachMetaForm(editing){
   }
   const colBtn = $('fColocado');
   if (colBtn) colBtn.onclick = () => { readMetaForm(); mForm.colocado = !mForm.colocado; renderMetaForm(editing); };
+  const vTrigger = $('fVenceTrigger');
+  if(vTrigger){
+    vTrigger.onclick = async () => {
+      const newVal = await showCustomMonthPicker(vTrigger.dataset.val || '', true);
+      if(newVal !== null){
+        vTrigger.dataset.val = newVal;
+        const t=$('fVenceText'); if(t) t.textContent = fmtMes(newVal) || 'Seleccionar mes';
+      }
+    };
+  }
 
   ['fObj','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
   const fTrigger = $('fFechaTrigger');
