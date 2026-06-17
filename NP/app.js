@@ -4024,6 +4024,7 @@ function renderLearnAhorro(body){
   const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
   const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
   const formatInt = n => (n || 0).toLocaleString('es-CO');
+  const CATS = ['Arriendo / hogar', 'Mercado / servicios', 'Transporte', 'Deudas', 'Gustos'];
 
   body.innerHTML = `
     <header style="padding-top:8px">
@@ -4046,6 +4047,13 @@ function renderLearnAhorro(body){
         </div>
         <input type="range" class="learn-slider" id="laSale" min="0" max="${POS}" step="1" value="${posFromMonto(S.sale)}">
       </div>
+      <details class="learn-calc" id="laCalc">
+        <summary>Ayúdame a calcular lo que sale</summary>
+        <div class="learn-calc-body">
+          ${CATS.map((c,i) => `<label class="learn-calc-row"><span>${c}</span><span class="learn-field-input"><span class="lfx" style="font-size:12px">$</span><input type="text" inputmode="numeric" class="learn-num calc" data-i="${i}" placeholder="0"></span></label>`).join('')}
+          <div class="hint" style="color:rgba(246,241,230,.5);margin-top:2px">Suma estas categorías y llena "lo que sale" arriba. Mover el slider a mano las reinicia.</div>
+        </div>
+      </details>
     </div>
 
     <div class="card" id="laResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);text-align:center;padding:16px 16px"></div>
@@ -4102,10 +4110,13 @@ function renderLearnAhorro(body){
   }
 
   // --- Wiring ---
+  const catInputs = [...body.querySelectorAll('.learn-num.calc')];
+  const clearCats = () => catInputs.forEach(i => { i.value = ''; });
   // Slider (posición no lineal) -> monto. Actualiza el campo editable.
   const fromSlider = (key, sliderId, numId) => {
     S[key] = montoFromPos(+$$(sliderId).value);
     $$(numId).value = formatInt(S[key]);
+    if (key === 'sale') clearCats(); // tomar control manual reinicia el desglose
     paint();
   };
   // Campo editable -> monto. Reposiciona el slider. Formatea con separadores.
@@ -4115,6 +4126,7 @@ function renderLearnAhorro(body){
     S[key] = n;
     $$(sliderId).value = posFromMonto(n);
     e.target.value = digits === '' ? '' : formatInt(n);
+    if (key === 'sale') clearCats();
     paint();
   };
   $$('laEntra').addEventListener('input', () => fromSlider('entra', 'laEntra', 'laEntraVal'));
@@ -4123,6 +4135,19 @@ function renderLearnAhorro(body){
   $$('laSaleVal').addEventListener('input',  e => fromNum('sale',  'laSale',  e));
   $$('laEntraVal').addEventListener('blur', e => { e.target.value = formatInt(S.entra); });
   $$('laSaleVal').addEventListener('blur',  e => { e.target.value = formatInt(S.sale);  });
+  // Categorías guiadas: su suma llena "lo que sale".
+  const sumCats = () => catInputs.reduce((a,inp) => a + (+inp.value.replace(/\D/g,'') || 0), 0);
+  catInputs.forEach(inp => {
+    inp.addEventListener('input', e => {
+      const digits = e.target.value.replace(/\D/g,'');
+      e.target.value = digits === '' ? '' : formatInt(+digits);
+      S.sale = Math.min(MAX, sumCats());
+      $$('laSale').value = posFromMonto(S.sale);
+      $$('laSaleVal').value = formatInt(S.sale);
+      paint();
+    });
+    inp.addEventListener('blur', e => { const d = e.target.value.replace(/\D/g,''); e.target.value = d === '' ? '' : formatInt(+d); });
+  });
 
   $$('laGo').onclick = () => {
     _learnHandoff = { monto: Math.max(0, S.entra - S.sale) };
