@@ -3833,11 +3833,12 @@ const LEARN_TOOLS = [
   { id:'simulador', icon:'trending',  color:'#d9a84a', title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
   { id:'quiz',      icon:'lightbulb', color:'#8f5dbb', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
   { id:'inflacion', icon:'alert',     color:'#d9534f', title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
+  { id:'aporte',    icon:'users',     color:'#2bb6a8', title:'Aporte justo en pareja',     hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
   { id:'invertir',  icon:'home',      color:'#4a90e2', title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.', wide:true },
 ];
 
 function renderAprender(){
-  const cards = LEARN_TOOLS.map(t => `
+  const cards = LEARN_TOOLS.filter(t => !t.pareja || state.config.modo === 'pareja').map(t => `
     <button class="learn-tool-btn${t.wide?' wide':''}" data-tool="${esc(t.id)}" style="--tool-accent:${t.color}">
       <span class="learn-tool-ic">${getSVG(t.icon)}</span>
       <span class="learn-tool-txt">
@@ -3880,7 +3881,7 @@ function openLearnTool(id){
   body.scrollTop = 0;
   ov.classList.add('open');
   $('mainnav').classList.add('hide');
-  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador, inflacion: renderLearnInflacion };
+  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador, inflacion: renderLearnInflacion, aporte: renderLearnAporte };
   (renderers[id] || renderLearnPlaceholder)(body, tool);
 }
 function closeLearnTool(){
@@ -4484,6 +4485,154 @@ function renderLearnInflacion(body){
     paint();
   });
   $$('lfGo').onclick = () => openLearnTool('simulador');
+
+  paint();
+}
+
+// --- Herramienta: Aporte justo en pareja (id aporte, SOLO modo pareja) ---
+// Conversación neutral: muestra 3 formas de repartir el gasto compartido, sin
+// favorita y sin guardar nada. Opera solo sobre gastos+planPareja.
+function renderLearnAporte(body){
+  const c = state.config;
+  if (c.modo !== 'pareja'){
+    body.innerHTML = `<header><h1>Aporte justo en pareja</h1></header>
+      <div class="card" style="text-align:center"><div class="muted" style="font-size:13.5px;line-height:1.5">Esta herramienta es para planes en pareja. Cámbialo en Ajustes si quieren usarla.</div></div>`;
+    return;
+  }
+  const SNAP = 10000, POS = 1000, P = 3, MAX = 50000000;
+  const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
+  const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
+  const formatInt = n => (n || 0).toLocaleString('es-CO');
+  const n1 = c.nombreP1 || 'Persona 1', n2 = c.nombreP2 || 'Persona 2';
+
+  const S = {
+    total: (gastosFijosTotal() + (c.planPareja||0)) || 2000000,
+    ing1:  c.nominaP1 || 0,
+    ing2:  c.nominaP2 || 0,
+    custP1: 50   // % del gasto compartido que pone P1 en el modo a medida
+  };
+
+  const numField = (id, val, ph) =>
+    `<span class="learn-field-input" style="border-bottom:1px dashed rgba(246,241,230,.4);width:100%"><span class="lfx" style="font-size:14px">$</span><input type="text" inputmode="numeric" class="learn-num" style="width:100%;text-align:left;border:none" id="${id}" value="${val ? formatInt(val) : ''}" placeholder="${ph}"></span>`;
+
+  body.innerHTML = `
+    <header style="padding-top:8px">
+      <div class="ey">Educación financiera</div>
+      <h1 style="margin:2px 0 0">Aporte justo en pareja</h1>
+      <p style="color:rgba(246,241,230,.65);font-size:13px;line-height:1.45;margin:6px 0 0">No hay una forma "correcta". Aquí están las tres más comunes para que ustedes conversen y decidan. Esto no toca su plan ni su dinero libre.</p>
+    </header>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12);margin-top:14px">
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Gasto compartido al mes</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="apTotalVal" value="${formatInt(S.total)}"></span>
+        </div>
+        <input type="range" class="learn-slider" id="apTotal" min="0" max="${POS}" step="1" value="${posFromMonto(S.total)}">
+      </div>
+      <div style="display:flex;gap:14px;margin-top:4px">
+        <div style="flex:1;min-width:0">
+          <div class="learn-field-lbl" style="margin-bottom:5px">Gana ${esc(n1)}</div>
+          ${numField('apIng1', S.ing1, '$ al mes')}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="learn-field-lbl" style="margin-bottom:5px">Gana ${esc(n2)}</div>
+          ${numField('apIng2', S.ing2, '$ al mes')}
+        </div>
+      </div>
+    </div>
+
+    <div class="stitle" style="margin-top:8px">Tres formas de repartirlo</div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <b style="font-size:14.5px;color:var(--cream)">Mitad y mitad (50 / 50)</b>
+      <div class="aporte-split" id="apSplit50"></div>
+      <div class="aporte-pc">
+        <div class="ap-pro">Lo más simple y parejo en pesos.</div>
+        <div class="ap-con">Pesa más sobre quien gana menos.</div>
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <b style="font-size:14.5px;color:var(--cream)">Proporcional al ingreso</b>
+      <div class="aporte-split" id="apSplitProp"></div>
+      <div class="aporte-pc">
+        <div class="ap-pro">Cada quien aporta según lo que gana; igual de "duro" para ambos.</div>
+        <div class="ap-con">Requiere transparencia de ingresos.</div>
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <b style="font-size:14.5px;color:var(--cream)">A su manera</b>
+      <div class="learn-field" style="margin:10px 0 0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">${esc(n1)} pone</span>
+          <span class="learn-field-val" id="apCustPct">50%</span>
+        </div>
+        <input type="range" class="learn-slider" id="apCust" min="0" max="100" step="5" value="${S.custP1}">
+      </div>
+      <div class="aporte-split" id="apSplitCust"></div>
+      <div class="aporte-pc">
+        <div class="ap-pro">El acuerdo que ustedes sientan justo.</div>
+        <div class="ap-con">Pónganlo a hablar: no hay número mágico.</div>
+      </div>
+    </div>
+  `;
+
+  const $$ = id => body.querySelector('#'+id);
+
+  function splitHtml(a, b, pa, pb){
+    return `
+      <div style="display:flex;gap:10px;margin:10px 0 4px">
+        <div style="flex:1;background:rgba(246,241,230,.05);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:11.5px;color:rgba(246,241,230,.6)">${esc(n1)} <span style="opacity:.7">· ${pa}%</span></div>
+          <div style="font-size:15px;font-weight:800;color:var(--cream);margin-top:3px">${fmt(a)}</div>
+        </div>
+        <div style="flex:1;background:rgba(246,241,230,.05);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:11.5px;color:rgba(246,241,230,.6)">${esc(n2)} <span style="opacity:.7">· ${pb}%</span></div>
+          <div style="font-size:15px;font-weight:800;color:var(--cream);margin-top:3px">${fmt(b)}</div>
+        </div>
+      </div>`;
+  }
+
+  function paint(){
+    const total = S.total, tot = S.ing1 + S.ing2;
+    // 50/50
+    $$('apSplit50').innerHTML = splitHtml(total/2, total/2, 50, 50);
+    // Proporcional
+    if (tot > 0){
+      const p1 = Math.round(S.ing1 / tot * 100);
+      $$('apSplitProp').innerHTML = splitHtml(total * S.ing1/tot, total * S.ing2/tot, p1, 100 - p1);
+    } else {
+      $$('apSplitProp').innerHTML = `<div class="muted" style="font-size:12.5px;margin:10px 0 4px;color:rgba(246,241,230,.6)">Escribe lo que gana cada uno arriba para ver este reparto.</div>`;
+    }
+    // A su manera
+    const pc = S.custP1;
+    $$('apCustPct').textContent = `${pc}%`;
+    $$('apSplitCust').innerHTML = splitHtml(total * pc/100, total * (100-pc)/100, pc, 100 - pc);
+  }
+
+  // --- Wiring ---
+  $$('apTotal').addEventListener('input', () => { S.total = montoFromPos(+$$('apTotal').value); $$('apTotalVal').value = formatInt(S.total); paint(); });
+  $$('apTotalVal').addEventListener('input', e => {
+    const digits = e.target.value.replace(/\D/g,'');
+    S.total = Math.max(0, Math.min(MAX, digits === '' ? 0 : +digits));
+    $$('apTotal').value = posFromMonto(S.total);
+    e.target.value = digits === '' ? '' : formatInt(S.total);
+    paint();
+  });
+  $$('apTotalVal').addEventListener('blur', e => { e.target.value = formatInt(S.total); });
+  const wireIng = (id, key) => {
+    $$(id).addEventListener('input', e => {
+      const digits = e.target.value.replace(/\D/g,'');
+      S[key] = digits === '' ? 0 : +digits;
+      e.target.value = digits === '' ? '' : formatInt(S[key]);
+      paint();
+    });
+  };
+  wireIng('apIng1', 'ing1');
+  wireIng('apIng2', 'ing2');
+  $$('apCust').addEventListener('input', () => { S.custP1 = +$$('apCust').value; paint(); });
 
   paint();
 }
