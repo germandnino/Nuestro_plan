@@ -3829,12 +3829,12 @@ function renderMiMes(){
    Cada tarjeta abre una pantalla-herramienta (overlay full-screen).
    ========================================================= */
 const LEARN_TOOLS = [
-  { id:'ahorro',    icon:'dollar',    color:'#14cb3c', title:'¿Cuánto puedo ahorrar?',     hook:'Juega con tus ingresos y gastos y mira cuánto te sobra al mes.' },
-  { id:'simulador', icon:'trending',  color:'#d9a84a', title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
-  { id:'quiz',      icon:'lightbulb', color:'#8f5dbb', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
-  { id:'inflacion', icon:'alert',     color:'#d9534f', title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
-  { id:'aporte',    icon:'users',     color:'#2bb6a8', title:'Aporte en pareja',           hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
-  { id:'invertir',  icon:'home',      color:'#4a90e2', title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.', wide:true },
+  { id:'ahorro',    icon:'dollar',    color:'#0f9b30', title:'¿Cuánto puedo ahorrar?',     hook:'Juega con tus ingresos y gastos y mira cuánto te sobra al mes.' },
+  { id:'simulador', icon:'trending',  color:'#a3741c', title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
+  { id:'quiz',      icon:'lightbulb', color:'#7e4fae', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
+  { id:'inflacion', icon:'alert',     color:'#c0392b', title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
+  { id:'aporte',    icon:'users',     color:'#178a7e', title:'Aporte en pareja',           hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
+  { id:'invertir',  icon:'home',      color:'#2f78c2', title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.', wide:true },
 ];
 
 function renderAprender(){
@@ -4665,13 +4665,13 @@ function renderLearnQuiz(body){
       { t:'Maximizar el retorno a largo plazo', s:3 } ] },
   ];
   const PERFILES = {
-    cons: { name:'Conservador', color:'#14cb3c',
+    cons: { name:'Conservador', color:'#0f9b30',
       desc:'Priorizas no perder y tener tu plata disponible. Tranquilidad antes que retorno.',
       instr:['Cuentas de alto rendimiento (~13% E.A., liquidez 24/7)','CDT a plazo fijo (10–12% E.A.)'] },
-    mod:  { name:'Moderado', color:'#d9a84a',
+    mod:  { name:'Moderado', color:'#a3741c',
       desc:'Buscas equilibrio: crecer un poco más sin perder el sueño. Mezclas seguridad y riesgo.',
       instr:['Base en CDT (medio plazo)','Una parte en fondos / ETFs mixtos para el largo plazo'] },
-    aud:  { name:'Audaz', color:'#4a90e2',
+    aud:  { name:'Audaz', color:'#2f78c2',
       desc:'Aguantas los vaivenes a cambio de más retorno en el largo plazo. El tiempo juega a tu favor.',
       instr:['ETFs globales y acciones (S&P 500, ~8–10% histórico USD)','Algo de CDT solo como colchón'] },
   };

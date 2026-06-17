@@ -571,10 +571,10 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 
 /* ── Aprender · Hub de herramientas ───────────────────── */
 .learn-hub{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
-.learn-tool-btn{display:flex;flex-direction:column;align-items:flex-start;gap:10px;background:var(--paper);border:1px solid var(--line);border-top:3px solid var(--tool-accent,var(--gb));border-radius:16px;padding:16px 14px;text-align:left;cursor:pointer;font-family:var(--sans);width:100%;transition:transform .14s ease,box-shadow .14s ease}
+.learn-tool-btn{display:flex;flex-direction:column;align-items:flex-start;gap:10px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px 14px;text-align:left;cursor:pointer;font-family:var(--sans);width:100%;transition:transform .14s ease,box-shadow .14s ease}
 .learn-tool-btn:active{transform:scale(.97);box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .learn-tool-btn.wide{grid-column:1 / -1;flex-direction:row;align-items:center;gap:14px}
-.learn-tool-ic{width:42px;height:42px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;background:rgba(28,58,44,.06);color:var(--tool-accent,var(--gb));flex-shrink:0}
+.learn-tool-ic{width:44px;height:44px;border-radius:13px;display:inline-flex;align-items:center;justify-content:center;background:var(--tool-accent,var(--gb));color:var(--cream);flex-shrink:0;box-shadow:0 2px 8px color-mix(in srgb,var(--tool-accent,var(--gb)) 40%,transparent)}
 .learn-tool-ic svg{width:21px;height:21px}
 .learn-tool-txt{display:flex;flex-direction:column;gap:3px;min-width:0}
 .learn-tool-tt{font-size:14.5px;font-weight:700;color:var(--ink);line-height:1.2}
