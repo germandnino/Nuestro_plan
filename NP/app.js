@@ -4525,7 +4525,7 @@ function renderLearnAporte(body){
     <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12);margin-top:14px">
       <div class="learn-field">
         <div class="learn-field-top">
-          <span class="learn-field-lbl">Gasto compartido al mes</span>
+          <span class="learn-field-lbl">Aporte total del mes</span>
           <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="apTotalVal" value="${formatInt(S.total)}"></span>
         </div>
         <input type="range" class="learn-slider" id="apTotal" min="0" max="${POS}" step="1" value="${posFromMonto(S.total)}">
@@ -4542,7 +4542,8 @@ function renderLearnAporte(body){
       </div>
     </div>
 
-    <div class="stitle" style="margin-top:8px">Tres formas de repartirlo</div>
+    <div class="hint" style="color:rgba(246,241,230,.6);margin:2px 0 0">Lo que suman los gastos que comparten (hogar, plan en pareja). Abajo, tres formas de repartir ese aporte entre los dos.</div>
+    <div class="stitle" style="margin-top:14px">Tres formas de repartir el aporte</div>
 
     <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
       <b style="font-size:14.5px;color:var(--cream)">Mitad y mitad (50 / 50)</b>
