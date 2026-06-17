@@ -36,6 +36,7 @@ let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámi
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
 let obMetaCreatedId = null; // id de la meta creada en onboarding, para reemplazarla (no duplicar) al navegar atrás/adelante
 let _pctFlashId = null; // id de meta cuyo % se auto-ajustó; dispara flash visual en el próximo render
+let _learnHandoff = null; // valor traspasado entre herramientas de Aprender (p.ej. ahorro -> simulador)
 
 // Sync Firebase
 let currentUser = null;       // firebase.User | null
@@ -3879,7 +3880,7 @@ function openLearnTool(id){
   body.scrollTop = 0;
   ov.classList.add('open');
   $('mainnav').classList.add('hide');
-  const renderers = { invertir: renderLearnInvertir };
+  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro };
   (renderers[id] || renderLearnPlaceholder)(body, tool);
 }
 function closeLearnTool(){
@@ -4070,6 +4071,213 @@ function renderLearnInvertir(body){
   // Estado vacío -> crear meta
   const btnCrear = body.querySelector('#aprCrearMeta');
   if (btnCrear) btnCrear.onclick = () => { closeLearnTool(); go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); };
+}
+
+// --- Herramienta: ¿Cuánto puedo ahorrar? (sliders entra/sale + chips opt-in + 50/30/20) ---
+const LEARN_AHORRO_INSIGHT_KEY = 'np_learn_ahorro_insight'; // 'off' cuando la pareja descarta la idea de separar gastos
+function renderLearnAhorro(body){
+  const c = state.config;
+  const isPareja = c.modo === 'pareja';
+
+  // Pre-llenado (solo lectura) desde el plan; si no hay plan, defaults jugables editables.
+  const entra0 = (c.nominaP1||0) + (c.nominaP2||0);
+  const sale0  = gastosFijosTotal() + repartoFijo();
+  // Estado interno de la simulación (no escribe nada al plan).
+  const S = {
+    entra: entra0 > 0 ? entra0 : 2000000,
+    sale:  sale0  > 0 ? sale0  : 1400000,
+    chips: [],          // [{label, monto}] — desglose opt-in de "lo que sale"
+    expanded: false
+  };
+  // Rango de los sliders: holgado respecto a los valores actuales.
+  const top = Math.max(S.entra, S.sale, 2500000);
+  const max = Math.ceil((top * 2) / 500000) * 500000; // múltiplo de 500k
+  const step = 50000;
+
+  const saleEff = () => S.chips.length ? S.chips.reduce((a,b)=>a+(b.monto||0),0) : S.sale;
+  const insightDismissed = () => { try { return localStorage.getItem(LEARN_AHORRO_INSIGHT_KEY) === 'off'; } catch(e){ return false; } };
+  const dismissInsight = () => { try { localStorage.setItem(LEARN_AHORRO_INSIGHT_KEY,'off'); } catch(e){} };
+
+  body.innerHTML = `
+    <header>
+      <div class="ey">Educación financiera</div>
+      <h1>¿Cuánto puedo ahorrar?</h1>
+      <p style="color:rgba(246,241,230,.65);font-size:13px;line-height:1.45;margin:6px 0 0;">Mueve lo que entra y lo que sale cada mes. Lo que sobra es tu ahorro. Es solo una simulación: nada de esto toca tu plan.</p>
+    </header>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Lo que entra al mes</span>
+          <span class="learn-field-val" id="laEntraVal">${fmt(S.entra)}</span>
+        </div>
+        <input type="range" class="learn-slider" id="laEntra" min="0" max="${max}" step="${step}" value="${S.entra}">
+      </div>
+      <div class="learn-field" id="laSaleField" style="margin-bottom:0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Lo que sale al mes</span>
+          <span class="learn-field-val" id="laSaleVal">${fmt(S.sale)}</span>
+        </div>
+        <input type="range" class="learn-slider" id="laSale" min="0" max="${max}" step="${step}" value="${S.sale}">
+      </div>
+      <div id="laSaleSummary" style="display:none;font-size:12.5px;color:rgba(246,241,230,.7);margin-top:2px"></div>
+    </div>
+
+    <div class="card" id="laResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);text-align:center;padding:18px 16px"></div>
+
+    <button type="button" class="learn-exp-btn" id="laExpBtn" aria-expanded="false">
+      <span>Ver a dónde se va la plata</span>
+      <span class="learn-exp-chev">▾</span>
+    </button>
+    <div id="laExp" style="display:none">
+      <div class="hint" style="color:rgba(246,241,230,.65);margin-top:2px">Suma tus gastos como quieras nombrarlos. Cuando agregas al menos uno, ese desglose reemplaza "lo que sale".</div>
+      <div id="laChips" class="learn-chips"></div>
+      <div class="learn-chip-add">
+        <input type="text" id="laChipName" placeholder="Nombre (ej: arriendo)" maxlength="24">
+        <input type="number" id="laChipMonto" placeholder="$ monto" inputmode="numeric" min="0">
+        <button type="button" id="laChipAdd" class="learn-chip-add-btn">${getSVG('plus')}</button>
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="k" style="color:var(--gb)">La regla 50 · 30 · 20</div>
+      <div style="font-size:12.5px;color:rgba(246,241,230,.8);line-height:1.5;margin-bottom:10px">Una guía simple: <b style="color:var(--cream)">50%</b> a lo necesario (hogar, deudas), <b style="color:var(--cream)">30%</b> a gustos, <b style="color:var(--cream)">20%</b> a ahorro e inversión.</div>
+      <div id="laRule" style="font-size:13px;line-height:1.5"></div>
+    </div>
+
+    <div id="laInsightSlot"></div>
+
+    <button type="button" class="btn" id="laGo" style="background:var(--gb);color:#231703;border-color:var(--gb);margin-top:18px">¿Y si lo inviertes? Simular →</button>
+  `;
+
+  const $$ = id => body.querySelector('#'+id);
+
+  // Pinta el bloque de resultado, la barra, la regla y el botón de handoff. NO recrea sliders.
+  function paint(){
+    const entra = S.entra, sale = saleEff();
+    const ahorro = entra - sale;
+    const pct = entra > 0 ? (ahorro / entra) * 100 : 0;
+    const res = $$('laResult');
+    if (ahorro >= 0){
+      res.style.background = 'rgba(192,138,45,.07)';
+      res.style.borderColor = 'rgba(192,138,45,.35)';
+      res.innerHTML = `
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700">Podrías ahorrar</div>
+        <div style="font-size:30px;font-weight:800;color:var(--gb);font-family:var(--sans);margin:4px 0">${fmt(ahorro)}</div>
+        <div style="font-size:13px;color:rgba(246,241,230,.8)">${pct.toFixed(0)}% de lo que entra cada mes</div>
+        <div class="learn-bar"><span style="width:${Math.max(2,Math.min(100,pct))}%"></span></div>`;
+    } else {
+      res.style.background = 'rgba(217,83,79,.1)';
+      res.style.borderColor = 'rgba(217,83,79,.45)';
+      res.innerHTML = `
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:#e98a86;font-weight:700">Gastas de más</div>
+        <div style="font-size:30px;font-weight:800;color:#e98a86;font-family:var(--sans);margin:4px 0">${fmt(Math.abs(ahorro))}</div>
+        <div style="font-size:13px;color:rgba(246,241,230,.8)">Estás gastando más de lo que entra. Baja algún gasto para empezar a ahorrar.</div>`;
+    }
+    // Regla 50/30/20
+    const objetivo = entra * 0.2;
+    const rule = $$('laRule');
+    if (entra <= 0){
+      rule.innerHTML = `<span style="color:rgba(246,241,230,.6)">Define lo que entra para comparar.</span>`;
+    } else if (pct >= 20){
+      rule.innerHTML = `<span style="color:#7fe39a;font-weight:700">Vas por encima del 20%.</span> <span style="color:rgba(246,241,230,.8)">Ahorras ${pct.toFixed(0)}% — la regla sugiere ${fmt(objetivo)}/mes y tú lo superas. Excelente base para invertir.</span>`;
+    } else if (ahorro >= 0){
+      rule.innerHTML = `<span style="color:var(--gb);font-weight:700">Vas en ${pct.toFixed(0)}%.</span> <span style="color:rgba(246,241,230,.8)">La regla sugiere ahorrar ${fmt(objetivo)}/mes (20%). Te faltan ${fmt(Math.max(0,objetivo-ahorro))} para llegar.</span>`;
+    } else {
+      rule.innerHTML = `<span style="color:#e98a86;font-weight:700">Hoy no llegas al ahorro.</span> <span style="color:rgba(246,241,230,.8)">La meta sería ${fmt(objetivo)}/mes (20% de lo que entra).</span>`;
+    }
+    // Botón handoff: deshabilitado si no hay ahorro positivo.
+    const go = $$('laGo');
+    go.disabled = ahorro <= 0;
+    go.style.opacity = ahorro <= 0 ? '.5' : '1';
+    go.style.pointerEvents = ahorro <= 0 ? 'none' : 'auto';
+  }
+
+  // Refleja el modo "desglose" (chips) en los controles de "lo que sale".
+  function syncSale(){
+    const hasChips = S.chips.length > 0;
+    $$('laSaleField').style.display = hasChips ? 'none' : 'block';
+    const sum = $$('laSaleSummary');
+    if (hasChips){
+      sum.style.display = 'block';
+      sum.innerHTML = `Lo que sale (desglosado): <b style="color:var(--cream)">${fmt(saleEff())}</b>`;
+    } else {
+      sum.style.display = 'none';
+    }
+  }
+
+  function renderChips(){
+    const box = $$('laChips');
+    box.innerHTML = S.chips.map((ch,i) => `
+      <span class="learn-chip">${esc(ch.label)} · <b>${fmt(ch.monto)}</b><button type="button" data-i="${i}" aria-label="Quitar">×</button></span>`).join('');
+    box.querySelectorAll('button[data-i]').forEach(b => {
+      b.onclick = () => { S.chips.splice(+b.dataset.i,1); renderChips(); syncSale(); paint(); };
+    });
+  }
+
+  // Tarjeta-insight de capas (SOLO pareja, descartable y persistente).
+  function renderInsight(){
+    const slot = $$('laInsightSlot');
+    if (!isPareja || insightDismissed()){ slot.innerHTML = ''; return; }
+    slot.innerHTML = `
+      <div class="card" style="background:rgba(74,144,226,.07);border-color:rgba(74,144,226,.35)">
+        <div class="k" style="color:#7fb6f0">Una idea, no una regla</div>
+        <div style="font-size:12.5px;color:rgba(246,241,230,.82);line-height:1.5;margin-bottom:12px">Si quieren más claridad, pueden separar lo que sale en tres: el <b style="color:var(--cream)">hogar</b> (compartido), las <b style="color:var(--cream)">salidas en pareja</b> y los <b style="color:var(--cream)">gustos de cada uno</b>. No es obligatorio — solo ayuda a ver de dónde viene cada gasto.</div>
+        <div class="seg dark-seg">
+          <button type="button" id="laSep">Separar lo de cada uno</button>
+          <button type="button" id="laSepNo">Así está bien</button>
+        </div>
+      </div>`;
+    $$('laSepNo').onclick = () => { dismissInsight(); renderInsight(); };
+    $$('laSep').onclick = () => {
+      // Siembra chips desde el plan (o etiquetas vacías si no hay datos) y abre el desglose.
+      const seeds = [
+        { label:'Hogar (compartido)', monto: gastosFijosTotal() + (c.planPareja||0) },
+        { label:'Gustos de '+(c.nombreP1||'P1'), monto: c.libreP1||0 },
+        { label:'Gustos de '+(c.nombreP2||'P2'), monto: c.libreP2||0 },
+      ].filter(s => s.monto > 0);
+      S.chips = seeds.length ? seeds : [
+        { label:'Hogar (compartido)', monto: 0 },
+        { label:'Gustos de '+(c.nombreP1||'P1'), monto: 0 },
+        { label:'Gustos de '+(c.nombreP2||'P2'), monto: 0 },
+      ];
+      S.expanded = true;
+      $$('laExp').style.display = 'block';
+      $$('laExpBtn').setAttribute('aria-expanded','true');
+      $$('laExpBtn').classList.add('open');
+      dismissInsight();
+      renderChips(); syncSale(); paint(); renderInsight();
+    };
+  }
+
+  // --- Wiring ---
+  $$('laEntra').addEventListener('input', e => { S.entra = +e.target.value; $$('laEntraVal').textContent = fmt(S.entra); paint(); });
+  $$('laSale').addEventListener('input',  e => { S.sale  = +e.target.value; $$('laSaleVal').textContent  = fmt(S.sale);  paint(); });
+
+  $$('laExpBtn').onclick = () => {
+    S.expanded = !S.expanded;
+    $$('laExp').style.display = S.expanded ? 'block' : 'none';
+    $$('laExpBtn').setAttribute('aria-expanded', String(S.expanded));
+    $$('laExpBtn').classList.toggle('open', S.expanded);
+  };
+  const addChip = () => {
+    const nameEl = $$('laChipName'), montoEl = $$('laChipMonto');
+    const label = (nameEl.value||'').trim() || 'Gasto';
+    const monto = Math.max(0, Math.round(+montoEl.value || 0));
+    if (monto <= 0){ flash('Ponle un monto al gasto'); montoEl.focus(); return; }
+    S.chips.push({ label, monto });
+    nameEl.value = ''; montoEl.value = '';
+    renderChips(); syncSale(); paint(); nameEl.focus();
+  };
+  $$('laChipAdd').onclick = addChip;
+  $$('laChipMonto').addEventListener('keydown', e => { if (e.key === 'Enter') addChip(); });
+
+  $$('laGo').onclick = () => {
+    _learnHandoff = { monto: Math.max(0, S.entra - saleEff()) };
+    openLearnTool('simulador');
+  };
+
+  syncSale(); renderChips(); renderInsight(); paint();
 }
 
 /* =========================================================
