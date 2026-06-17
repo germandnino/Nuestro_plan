@@ -3881,7 +3881,7 @@ function openLearnTool(id){
   body.scrollTop = 0;
   ov.classList.add('open');
   $('mainnav').classList.add('hide');
-  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador, inflacion: renderLearnInflacion, aporte: renderLearnAporte };
+  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador, inflacion: renderLearnInflacion, aporte: renderLearnAporte, quiz: renderLearnQuiz };
   (renderers[id] || renderLearnPlaceholder)(body, tool);
 }
 function closeLearnTool(){
@@ -4636,6 +4636,104 @@ function renderLearnAporte(body){
   $$('apCust').addEventListener('input', () => { S.custP1 = +$$('apCust').value; paint(); });
 
   paint();
+}
+
+// --- Herramienta: Quiz "¿Qué inversor eres?" (id quiz) ---
+function renderLearnQuiz(body){
+  const Q = [
+    { q:'¿Cuándo crees que vas a necesitar la plata que inviertas?', opts:[
+      { t:'En menos de 2 años', s:1 },
+      { t:'Entre 2 y 5 años', s:2 },
+      { t:'En más de 5 años', s:3 } ] },
+    { q:'Tu inversión cae 20% en un mes malo. ¿Qué haces?', opts:[
+      { t:'Vendo todo, no aguanto perder', s:1 },
+      { t:'Me preocupa, pero espero a que se recupere', s:2 },
+      { t:'Aprovecho y compro más, está barato', s:3 } ] },
+    { q:'¿Qué tan rápido podrías necesitar sacar ese dinero?', opts:[
+      { t:'En cualquier momento, sin avisar', s:1 },
+      { t:'Con algo de tiempo para planearlo', s:2 },
+      { t:'No pienso tocarlo en años', s:3 } ] },
+    { q:'¿Qué tan cómodo te sientes con la incertidumbre?', opts:[
+      { t:'Prefiero saber exactamente cuánto voy a ganar', s:1 },
+      { t:'Acepto algo de vaivén si el promedio es bueno', s:2 },
+      { t:'El riesgo no me asusta si el retorno vale la pena', s:3 } ] },
+    { q:'¿Qué buscas sobre todo con esta plata?', opts:[
+      { t:'Proteger lo que ya tengo', s:1 },
+      { t:'Crecer de forma estable', s:2 },
+      { t:'Maximizar el retorno a largo plazo', s:3 } ] },
+  ];
+  const PERFILES = {
+    cons: { name:'Conservador', color:'#14cb3c',
+      desc:'Priorizas no perder y tener tu plata disponible. Tranquilidad antes que retorno.',
+      instr:['Cuentas de alto rendimiento (~13% E.A., liquidez 24/7)','CDT a plazo fijo (10–12% E.A.)'] },
+    mod:  { name:'Moderado', color:'#d9a84a',
+      desc:'Buscas equilibrio: crecer un poco más sin perder el sueño. Mezclas seguridad y riesgo.',
+      instr:['Base en CDT (medio plazo)','Una parte en fondos / ETFs mixtos para el largo plazo'] },
+    aud:  { name:'Audaz', color:'#4a90e2',
+      desc:'Aguantas los vaivenes a cambio de más retorno en el largo plazo. El tiempo juega a tu favor.',
+      instr:['ETFs globales y acciones (S&P 500, ~8–10% histórico USD)','Algo de CDT solo como colchón'] },
+  };
+  const perfilDe = total => total <= 8 ? PERFILES.cons : total <= 12 ? PERFILES.mod : PERFILES.aud;
+
+  const answers = new Array(Q.length).fill(null);
+
+  function drawQuestion(i){
+    const q = Q[i];
+    const dots = Q.map((_,k) => `<i class="${k < i ? 'on' : ''}"></i>`).join('');
+    body.innerHTML = `
+      <header style="padding-top:8px">
+        <div class="ey">Educación financiera</div>
+        <h1 style="margin:2px 0 0">¿Qué inversor eres?</h1>
+      </header>
+      <div class="quiz-prog">Pregunta ${i+1} de ${Q.length}<div class="quiz-dots">${dots}</div></div>
+      <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+        <div class="quiz-q">${q.q}</div>
+        <div class="quiz-opts">${q.opts.map(o => `<button type="button" class="quiz-opt${answers[i]===o.s?' on':''}" data-s="${o.s}">${o.t}</button>`).join('')}</div>
+      </div>
+      ${i > 0 ? `<button type="button" class="quiz-back" id="qBack">‹ Anterior</button>` : ''}
+    `;
+    body.querySelectorAll('.quiz-opt').forEach(b => {
+      b.onclick = () => {
+        answers[i] = +b.dataset.s;
+        if (i + 1 < Q.length) drawQuestion(i + 1);
+        else drawResult();
+      };
+    });
+    const back = body.querySelector('#qBack');
+    if (back) back.onclick = () => drawQuestion(i - 1);
+    body.scrollTop = 0;
+  }
+
+  function drawResult(){
+    const total = answers.reduce((a,b) => a + (b||0), 0);
+    const p = perfilDe(total);
+    body.innerHTML = `
+      <header style="padding-top:8px">
+        <div class="ey">Tu resultado</div>
+        <h1 style="margin:2px 0 0">¿Qué inversor eres?</h1>
+      </header>
+      <div class="card" style="text-align:center;border-color:${p.color}55;background:${p.color}14;padding:22px 16px">
+        <div class="learn-tool-ic" style="--tool-accent:${p.color};margin:0 auto 10px;width:52px;height:52px">${getSVG('user')}</div>
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700">Eres un inversor</div>
+        <div style="font-size:26px;font-weight:800;color:${p.color};font-family:var(--sans);margin:2px 0 8px">${p.name}</div>
+        <div style="font-size:13px;color:rgba(246,241,230,.85);line-height:1.5">${p.desc}</div>
+      </div>
+      <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+        <div class="k" style="color:${p.color};margin-bottom:8px">Lo que suele encajarte</div>
+        <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:1.45;color:rgba(246,241,230,.85)">
+          ${p.instr.map(x => `<li>${x}</li>`).join('')}
+        </ul>
+        <div class="hint" style="color:rgba(246,241,230,.55);margin-top:12px">Es una guía, no un consejo financiero. Lo que importa es el plazo de cada meta.</div>
+      </div>
+      <button type="button" class="btn" id="qGo" style="background:var(--gb);color:#231703;border-color:var(--gb);margin-top:6px">Ver dónde invertir →</button>
+      <button type="button" class="quiz-back" id="qAgain" style="text-align:center;width:100%">Repetir el test</button>
+    `;
+    body.querySelector('#qGo').onclick = () => openLearnTool('invertir');
+    body.querySelector('#qAgain').onclick = () => { answers.fill(null); drawQuestion(0); };
+    body.scrollTop = 0;
+  }
+
+  drawQuestion(0);
 }
 
 /* =========================================================
