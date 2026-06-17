@@ -3880,7 +3880,7 @@ function openLearnTool(id){
   body.scrollTop = 0;
   ov.classList.add('open');
   $('mainnav').classList.add('hide');
-  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador };
+  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador, inflacion: renderLearnInflacion };
   (renderers[id] || renderLearnPlaceholder)(body, tool);
 }
 function closeLearnTool(){
@@ -4368,6 +4368,122 @@ function renderLearnSimulador(body){
   body.querySelectorAll('.learn-sugg').forEach(b => {
     b.onclick = () => { S.monto = Math.min(MAX, +b.dataset.v); $$('lsMonto').value = posFromMonto(S.monto); $$('lsMontoVal').value = formatInt(S.monto); paint(); };
   });
+
+  paint();
+}
+
+// --- Herramienta: El costo de no invertir / inflación (id inflacion) ---
+function renderLearnInflacion(body){
+  const SNAP = 10000, POS = 1000, P = 3;
+  const MAX = 100000000;
+  const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
+  const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
+  const formatInt = n => (n || 0).toLocaleString('es-CO');
+
+  const S = { monto: 10000000, years: 10, infl: 0.06 }; // inflación CO ~6%
+
+  body.innerHTML = `
+    <header style="padding-top:8px">
+      <div class="ey">Educación financiera</div>
+      <h1 style="margin:2px 0 0">El costo de no invertir</h1>
+    </header>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12);margin-top:14px">
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Plata guardada hoy</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="lfMontoVal" value="${formatInt(S.monto)}"></span>
+        </div>
+        <input type="range" class="learn-slider" id="lfMonto" min="0" max="${POS}" step="1" value="${posFromMonto(S.monto)}">
+      </div>
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Guardada bajo el colchón</span>
+          <span class="learn-field-val" id="lfYearsVal">${S.years} años</span>
+        </div>
+        <input type="range" class="learn-slider" id="lfYears" min="1" max="40" step="1" value="${S.years}">
+      </div>
+      <div class="learn-field" style="margin-bottom:0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Inflación anual</span>
+          <span class="learn-field-input"><input type="number" class="learn-num pct" id="lfRateVal" value="${(S.infl*100)}" min="0" max="30" step="0.5"><span class="lfx" style="font-size:13px">%</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="lfResult" style="background:rgba(217,83,79,.1);border-color:rgba(217,83,79,.45);padding:16px"></div>
+
+    <details class="learn-acc">
+      <summary>¿Qué es la inflación y por qué me roba?</summary>
+      <div class="learn-acc-body">
+        <p style="margin:0 0 8px">La inflación es la subida del costo de la vida. Cada año, lo que comprabas con $100.000 cuesta un poco más, así que el mismo billete <b style="color:var(--cream)">compra menos</b>.</p>
+        <p style="margin:0 0 8px">Si tu plata está quieta (efectivo, cuenta sin rendimiento), su número no cambia, pero su <b style="color:var(--cream)">poder de compra</b> se va achicando en silencio. No pierdes pesos: pierdes lo que esos pesos pueden comprar.</p>
+        <p style="margin:0;color:rgba(246,241,230,.6)">Por eso invertir a una tasa mayor que la inflación es lo que de verdad protege tu plata.</p>
+      </div>
+    </details>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="k" style="color:#e98a86;margin-bottom:8px">Poder de compra en el tiempo</div>
+      <div id="lfCurve"></div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:11.5px;color:rgba(246,241,230,.75)">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:3px;border-radius:2px;background:rgba(246,241,230,.4)"></span>Lo que dice el billete</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:3px;border-radius:2px;background:#e98a86"></span>Lo que de verdad compra</span>
+      </div>
+    </div>
+
+    <button type="button" class="btn" id="lfGo" style="background:var(--gb);color:#231703;border-color:var(--gb);margin-top:6px">Mejor ponla a crecer · Simular →</button>
+  `;
+
+  const $$ = id => body.querySelector('#'+id);
+
+  function curveSVG(monto, infl, years){
+    const W = 300, H = 110;
+    const nom = [], real = [];
+    for (let t = 0; t <= years; t++){
+      nom.push(monto);
+      real.push(monto * Math.pow(1/(1+infl), t));
+    }
+    const maxV = Math.max(monto, 1);
+    const pts = arr => arr.map((v,i) => `${(i/years*W).toFixed(1)},${(H - v/maxV*H).toFixed(1)}`).join(' ');
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="110" preserveAspectRatio="none" style="display:block">
+      <polyline fill="none" stroke="rgba(246,241,230,.4)" stroke-width="2" stroke-linecap="round" points="${pts(nom)}"></polyline>
+      <polyline fill="none" stroke="#e98a86" stroke-width="2.5" stroke-linecap="round" points="${pts(real)}"></polyline>
+    </svg>`;
+  }
+
+  function paint(){
+    const monto = S.monto, years = S.years, infl = S.infl;
+    const real = monto * Math.pow(1/(1+infl), years);
+    const perdida = monto - real;
+    const pct = monto > 0 ? (perdida / monto) * 100 : 0;
+    $$('lfResult').innerHTML = `
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:#e98a86;font-weight:700;text-align:center">En ${years} ${years===1?'año':'años'} esos ${fmt(monto)} valdrán como</div>
+      <div style="font-size:30px;font-weight:800;color:#e98a86;font-family:var(--sans);margin:4px 0;text-align:center">${fmt(real)}</div>
+      <div style="font-size:12.5px;color:rgba(246,241,230,.8);text-align:center">en poder de compra de hoy</div>
+      <div style="background:rgba(217,83,79,.12);border-radius:10px;padding:10px;text-align:center;margin-top:12px">
+        <div style="font-size:11px;color:#e98a86;text-transform:uppercase;letter-spacing:.1em">Poder de compra perdido</div>
+        <div style="font-size:17px;font-weight:800;color:#e98a86;margin-top:3px">−${fmt(perdida)} <span style="font-size:13px;opacity:.8">(${pct.toFixed(0)}%)</span></div>
+      </div>`;
+    $$('lfCurve').innerHTML = curveSVG(monto, infl, years);
+  }
+
+  // --- Wiring ---
+  $$('lfMonto').addEventListener('input', () => { S.monto = montoFromPos(+$$('lfMonto').value); $$('lfMontoVal').value = formatInt(S.monto); paint(); });
+  $$('lfMontoVal').addEventListener('input', e => {
+    const digits = e.target.value.replace(/\D/g,'');
+    S.monto = Math.max(0, Math.min(MAX, digits === '' ? 0 : +digits));
+    $$('lfMonto').value = posFromMonto(S.monto);
+    e.target.value = digits === '' ? '' : formatInt(S.monto);
+    paint();
+  });
+  $$('lfMontoVal').addEventListener('blur', e => { e.target.value = formatInt(S.monto); });
+  $$('lfYears').addEventListener('input', () => { S.years = +$$('lfYears').value; $$('lfYearsVal').textContent = `${S.years} ${S.years===1?'año':'años'}`; paint(); });
+  $$('lfRateVal').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    S.infl = Math.max(0, Math.min(30, isNaN(v) ? 0 : v)) / 100;
+    paint();
+  });
+  $$('lfGo').onclick = () => openLearnTool('simulador');
 
   paint();
 }
