@@ -3923,7 +3923,7 @@ function renderLearnInvertir(body){
       <details class="learn-acc invest-rung">
         <summary>
           <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
-            <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14.5px;font-weight:800;color:var(--ink)">${r.plazo}</span><span style="font-size:11.5px;color:var(--gs)">${r.time}</span></span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${r.color};flex-shrink:0"></span><span style="font-size:14.5px;font-weight:800;color:var(--ink)">${r.plazo}</span><span style="font-size:11.5px;color:var(--gs)">${r.time}</span></span>
             <span style="font-size:12px;font-weight:700;color:${r.color}">${r.tipo} · ${r.tasa}</span>
           </span>
         </summary>
