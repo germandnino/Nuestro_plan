@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.23'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.24'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -4766,7 +4766,7 @@ function renderOb(){
           <div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:rgba(246,241,230,0.08);flex-shrink:0;">${getSVG('calendar', '', 'color:var(--cream);')}</div>
           <div style="flex:1;">
             <div style="font-weight:600; font-size:13.5px; color:var(--cream);">Mi Mes</div>
-            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Confirma tu aporte mensual, añade ingresos extra y gestiona movimientos durante el mes.</div>
+            <div style="font-size:11.5px; color:rgba(246,241,230,.7); margin-top:2px;">Monitorea tus movimientos, registra ingresos o retiros y consulta el historial del mes.</div>
           </div>
         </div>
         
@@ -5100,16 +5100,30 @@ $('obBack').onclick=()=>{
   renderOb();
 };
 $('obSkip').onclick=()=>{
-  state.config.modo='pareja';
-  state.config.nombreP1='Persona 1';
-  state.config.nombreP2='Persona 2';
-  state.config.perfil='p1';
-  state.config.nominaP1=3000000;
-  state.config.nominaP2=3000000;
-  state.config.gastos=2500000;
-  state.config.planPareja=1000000;
-  state.config.libreP1=400000;
-  state.config.libreP2=400000;
+  if (obStep === 1) {
+    obSaveStep();
+  }
+  const c = state.config;
+  c.nombreP1 = c.nombreP1.trim() || 'Persona 1';
+  if (c.modo === 'individual') {
+    c.nombreP2 = '';
+    c.perfil = 'p1';
+  } else {
+    c.nombreP2 = c.nombreP2.trim() || 'Persona 2';
+  }
+  c.nominaP1 = 0;
+  c.nominaP2 = 0;
+  c.gastos = 0;
+  c.planPareja = 0;
+  c.libreP1 = 0;
+  c.libreP2 = 0;
+  
+  state.metas = [];
+  state.log = [];
+  state.ingresos = [];
+  state.gastos = [];
+  state.logros = [];
+  
   finishOnboarding();
 };
 function finishOnboarding(){
