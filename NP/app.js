@@ -49,7 +49,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.16'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.17'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -1439,7 +1439,7 @@ function renderInicio(){
   const _svgTip = (icon) => getSVG(icon, '', 'vertical-align:middle;margin-right:6px;color:var(--gold);');
 
   const metasActivas = metasCompartidas();
-  const currentLog = state.log.find(e => e.mes === curMonth());
+  const aportadoEsteMes = ahorroMesUI(curMonth()) > 0;
 
   let tipPool = [];
 
@@ -1472,13 +1472,13 @@ function renderInicio(){
         fn: () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); }
       },
     ];
-  } else if (!currentLog || !currentLog.aplicado) {
+  } else if (!aportadoEsteMes) {
     tipPool = [
       {
-        t: _svgTip('calendar') + ' Confirma tu aporte',
-        d: `Aún no ${_ind?'has':'han'} confirmado el aporte de <b>${fmtMes(curMonth())}</b>. Hazlo al inicio del mes para que vaya directo a ${_ind?'tus':'sus'} metas — el dinero que no se mueve, se gasta.`,
-        a: 'Confirmar aporte',
-        fn: () => go(2)
+        t: _svgTip('calendar') + ' Añade dinero este mes',
+        d: `Aún no ${_ind?'has':'han'} movido dinero al plan en <b>${fmtMes(curMonth())}</b>. Añádelo al inicio del mes para que vaya directo a ${_ind?'tus':'sus'} metas — el dinero que no se mueve, se gasta.`,
+        a: 'Añadir dinero',
+        fn: () => openAsistenteIngresoExtra()
       },
       {
         t: _svgTip('calendar') + ' Primero págate a ti mismo',
