@@ -4208,7 +4208,7 @@ const LEARN_INSTR = {
 };
 function renderLearnSimulador(body){
   const c = state.config;
-  const SNAP = 10000, POS = 1000, P = 2.5;
+  const SNAP = 10000, POS = 1000, P = 3;
 
   // Sugerencias de monto (solo lectura): handoff del Commit 2 y % del plan a inversión.
   const handoff = _learnHandoff; _learnHandoff = null;
@@ -4222,7 +4222,7 @@ function renderLearnSimulador(body){
     years: 10,
     instr: 'cdt'
   };
-  const MAX = Math.max(20000000, Math.ceil(S.monto / SNAP) * SNAP); // tope holgado, sube si el handoff es grande
+  const MAX = Math.max(100000000, Math.ceil(S.monto / SNAP) * SNAP); // hasta 100M; sube si el handoff es mayor
   const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
   const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
   const formatInt = n => (n || 0).toLocaleString('es-CO');
