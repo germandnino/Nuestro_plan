@@ -3902,36 +3902,44 @@ function renderLearnPlaceholder(body, tool){
 
 // --- Herramienta: ¿Dónde invertir en Colombia? (escalera + tus metas + catálogo) ---
 function renderLearnInvertir(body){
-  // --- Capa 1: El principio (escalera plazo -> instrumento) ---
+  // --- Capa 1: El principio (escalera plazo -> instrumento, acordeón) ---
+  // Cada peldaño revela los instrumentos reales de ESE plazo, condensados a 3 datos.
+  const RUNGS = [
+    { plazo:'Corto', time:'menos de 6 meses', tipo:'Cuenta de alto rendimiento', tasa:'~13% E.A.', color:'#0f9b30', instr:[
+      { nom:'Nu Cajitas', tag:'Alta liquidez', facts:['Rinde 13% E.A.','Disponible al instante, 24/7','Seguro Fogafín (hasta $50M)'] },
+      { nom:'Lulo Cuenta', sub:'Lulo Bank', tag:'Alta liquidez', facts:['Hasta 13% E.A. en bolsillos','Retiro inmediato','Superfinanciera + Fogafín'] },
+    ] },
+    { plazo:'Medio', time:'6 a 18 meses', tipo:'CDT (tasa fija)', tasa:'10–12% E.A.', color:'#a3741c', instr:[
+      { nom:'CDTs Digitales', sub:'Tuya, Bancolombia, MejorCDT', tag:'Plazo fijo', facts:['Rinde 10–12% E.A.','Bloqueado al plazo (90/180/360 días)','Tasa garantizada + Fogafín'] },
+    ] },
+    { plazo:'Largo', time:'más de 18 meses', tipo:'ETFs / fondos', tasa:'8–10%+ histórico', color:'#2f78c2', instr:[
+      { nom:'Tyba', sub:'Fondos colectivos y CDT', tag:'Híbrido', facts:['Rendimiento variable según riesgo','Retiros en 3–5 días hábiles','Riesgo medio · no garantizado'] },
+      { nom:'trii', sub:'Acciones y ETFs globales', tag:'Renta variable', facts:['S&P 500 ~8–10% anual USD (histórico)','Vendes en días de mercado (3–4 días)','Fluctúa · riesgo medio-alto'] },
+    ] },
+  ];
   const ladderHtml = `
     <div class="stitle" style="margin-top:4px;">El principio</div>
-    <div class="hint" style="color:rgba(246,241,230,.7); margin-bottom:10px;">No es qué producto es "mejor", es cuál encaja con <strong style="color:var(--gb)">cuándo</strong> vas a necesitar la plata. El plazo manda:</div>
-    <div class="ladder">
-      <div class="card" style="border-left:4px solid #14cb3c;margin-bottom:8px;padding:13px 14px">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
-          <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">Corto</span>
-          <span class="muted" style="font-size:11.5px">menos de 6 meses</span>
+    <div class="hint" style="color:rgba(246,241,230,.7); margin-bottom:10px;">No es qué producto es "mejor", es cuál encaja con <strong style="color:var(--gb)">cuándo</strong> vas a necesitar la plata. Toca un plazo para ver con qué invertir:</div>
+    ${RUNGS.map(r => `
+      <details class="learn-acc invest-rung" style="border-left:4px solid ${r.color}">
+        <summary>
+          <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14.5px;font-weight:800;color:var(--cream)">${r.plazo}</span><span style="font-size:11.5px;color:rgba(246,241,230,.5)">${r.time}</span></span>
+            <span style="font-size:12px;font-weight:700;color:${r.color}">${r.tipo} · ${r.tasa}</span>
+          </span>
+        </summary>
+        <div class="learn-acc-body">
+          ${r.instr.map((it,idx) => `
+            <div style="${idx?'border-top:1px solid rgba(246,241,230,.1);margin-top:12px;padding-top:12px':''}">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${it.sub?'2px':'5px'}">
+                <b style="font-size:13.5px;color:var(--cream)">${it.nom}</b>
+                <span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${r.color};background:${r.color}1f;border-radius:100px;padding:3px 8px;white-space:nowrap">${it.tag}</span>
+              </div>
+              ${it.sub?`<div style="font-size:11px;color:rgba(246,241,230,.5);margin:0 0 6px">${it.sub}</div>`:''}
+              ${it.facts.map(f => `<div style="font-size:12px;line-height:1.55;color:rgba(246,241,230,.78)">${f}</div>`).join('')}
+            </div>`).join('')}
         </div>
-        <div style="font-size:12.5px;font-weight:700;color:#0f8f2c">Cuenta de alto rendimiento</div>
-        <div class="muted" style="font-size:11.5px;margin-top:1px">~13% E.A. · riesgo bajo · liquidez 24/7</div>
-      </div>
-      <div class="card" style="border-left:4px solid var(--gold);margin-bottom:8px;padding:13px 14px">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
-          <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">Medio</span>
-          <span class="muted" style="font-size:11.5px">6 a 18 meses</span>
-        </div>
-        <div style="font-size:12.5px;font-weight:700;color:var(--gold)">CDT (tasa fija)</div>
-        <div class="muted" style="font-size:11.5px;margin-top:1px">10–12% E.A. · riesgo bajo · bloqueado al plazo</div>
-      </div>
-      <div class="card" style="border-left:4px solid #4a90e2;margin-bottom:0;padding:13px 14px">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
-          <span class="k" style="margin:0;text-transform:none;letter-spacing:.01em;font-size:14.5px;color:var(--ink)">Largo</span>
-          <span class="muted" style="font-size:11.5px">más de 18 meses</span>
-        </div>
-        <div style="font-size:12.5px;font-weight:700;color:#2f6fb0">ETFs / fondos</div>
-        <div class="muted" style="font-size:11.5px;margin-top:1px">8–10%+ histórico · riesgo medio-alto · le ganas a la inflación</div>
-      </div>
-    </div>
+      </details>`).join('')}
   `;
 
   // --- Capa 2: Tus metas, tu plan (personalizado) ---
@@ -3973,82 +3981,6 @@ function renderLearnInvertir(body){
     `;
   }
 
-  const catalogHtml = `
-    <div class="learn-container" style="display:flex; flex-direction:column; gap:16px;">
-      <div class="hint" style="color:rgba(246,241,230,.7); margin:0 0 4px;">Instrumentos financieros reales regulados en Colombia. Referencia para elegir según el plazo de tu meta.</div>
-
-      <!-- Instrument 1: Nu Cajitas -->
-      <div class="card" style="border-left:4px solid #8f5dbb; background:rgba(143,93,187,0.03); padding:14px; border-radius:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <b style="font-size:15px; color:#8f5dbb; font-family:var(--sans);">Nu Cajitas (Ahorro Inteligente)</b>
-          <span class="tag ok" style="background:rgba(143,93,187,0.15); color:#a779d4; font-size:10px; font-weight:700;">Alta Liquidez</span>
-        </div>
-        <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.45;">
-          <strong>Rendimiento:</strong> 13% E.A. (Efectivo Anual)<br>
-          <strong>Plazo recomendado:</strong> Corto plazo (Día a día, fondo de emergencias).<br>
-          <strong>Disponibilidad:</strong> Inmediata (24/7). Puedes retirar tu saldo en segundos.<br>
-          <strong>Seguridad:</strong> Muy alta. Cuenta con seguro de depósitos Fogafín (hasta $50 millones).
-        </div>
-      </div>
-
-      <!-- Instrument 2: Lulo Bank -->
-      <div class="card" style="border-left:4px solid #14cb3c; background:rgba(20,203,60,0.03); padding:14px; border-radius:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <b style="font-size:15px; color:#14cb3c; font-family:var(--sans);">Lulo Cuenta (Lulo Bank)</b>
-          <span class="tag ok" style="background:rgba(20,203,60,0.15); color:#14cb3c; font-size:10px; font-weight:700;">Alta Liquidez</span>
-        </div>
-        <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.45;">
-          <strong>Rendimiento:</strong> Hasta 13% E.A. en bolsillos acumulados.<br>
-          <strong>Plazo recomendado:</strong> Corto plazo (fondos líquidos).<br>
-          <strong>Beneficio extra:</strong> Devuelve el 4x1000 por consumos mensuales y ofrece 0.5% de cashback con tarjeta de débito.<br>
-          <strong>Seguridad:</strong> Muy alta. Regulado por la Superfinanciera y protegido por Fogafín.
-        </div>
-      </div>
-
-      <!-- Instrument 3: CDTs Digitales -->
-      <div class="card" style="border-left:4px solid var(--gold); background:rgba(192,138,45,0.03); padding:14px; border-radius:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <b style="font-size:15px; color:var(--gold); font-family:var(--sans);">CDTs Digitales (Tuya, Bancolombia, MejorCDT)</b>
-          <span class="tag" style="background:rgba(192,138,45,0.15); color:var(--gb); font-size:10px; font-weight:700;">Plazo Fijo</span>
-        </div>
-        <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.45;">
-          <strong>Rendimiento:</strong> 10% a 12% E.A. (varía según el plazo y la entidad).<br>
-          <strong>Plazo recomendado:</strong> Mediano plazo (6 a 18 meses).<br>
-          <strong>Disponibilidad:</strong> Al vencimiento del plazo pactado (ej: 90, 180, 360 días). No se puede retirar antes.<br>
-          <strong>Seguridad:</strong> Muy alta. Tasa garantizada desde el día uno y cobertura de Fogafín.
-        </div>
-      </div>
-
-      <!-- Instrument 4: Tyba (Fondos Colectivos) -->
-      <div class="card" style="border-left:4px solid #1a8cc3; background:rgba(26,140,195,0.03); padding:14px; border-radius:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <b style="font-size:15px; color:#1a8cc3; font-family:var(--sans);">Tyba (Fondos Colectivos y CDT)</b>
-          <span class="tag" style="background:rgba(26,140,195,0.15); color:#1a8cc3; font-size:10px; font-weight:700;">Híbrido / Renta Variable</span>
-        </div>
-        <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.45;">
-          <strong>Rendimiento:</strong> Variable según las condiciones del mercado y el nivel de riesgo elegido.<br>
-          <strong>Plazo recomendado:</strong> Mediano a largo plazo (> 1 año).<br>
-          <strong>Disponibilidad:</strong> Retiros de 3 a 5 días hábiles en FICs.<br>
-          <strong>Seguridad:</strong> Media. Respaldado por Credicorp Capital Colombia. Los fondos no están garantizados contra pérdidas del mercado.
-        </div>
-      </div>
-
-      <!-- Instrument 5: trii (ETFs y Acciones) -->
-      <div class="card" style="border-left:4px solid #4a90e2; background:rgba(74,144,226,0.03); padding:14px; border-radius:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <b style="font-size:15px; color:#4a90e2; font-family:var(--sans);">trii (Acciones de Bolsa y ETFs Globales)</b>
-          <span class="tag" style="background:rgba(74,144,226,0.15); color:#4a90e2; font-size:10px; font-weight:700;">Renta Variable / Largo Plazo</span>
-        </div>
-        <div style="font-size:12.5px; color:rgba(246,241,230,.85); line-height:1.45;">
-          <strong>Rendimiento:</strong> Históricamente, el S&P 500 rinde aprox. 8% a 10% anual en dólares a largo plazo.<br>
-          <strong>Plazo recomendado:</strong> Largo plazo (> 2-3 años).<br>
-          <strong>Disponibilidad:</strong> Puedes vender tus acciones o ETFs en días de mercado y transferir el dinero a tu cuenta bancaria (3-4 días).<br>
-          <strong>Seguridad:</strong> Baja a media (las acciones fluctúan de valor diariamente). Regulado por la Superfinanciera de Colombia.
-        </div>
-      </div>
-    </div>
-  `;
-
   body.innerHTML = `
     <header>
       <div class="ey">Educación financiera</div>
@@ -4056,8 +3988,6 @@ function renderLearnInvertir(body){
     </header>
     ${ladderHtml}
     ${coachHtml}
-    <div class="stitle" style="margin-top:18px;">Opciones reales en Colombia</div>
-    ${catalogHtml}
   `;
 
   // Filas de meta -> expandir recomendación completa inline (sin salir de la herramienta)
