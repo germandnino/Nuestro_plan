@@ -4024,7 +4024,7 @@ function renderLearnAhorro(body){
   const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
   const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
   const formatInt = n => (n || 0).toLocaleString('es-CO');
-  const CATS = ['Arriendo / hogar', 'Mercado / servicios', 'Transporte', 'Deudas', 'Gustos'];
+  const CATS = ['Arriendo / hogar', 'Mercado / servicios', 'Transporte', 'Deudas', 'Gustos', 'Otros'];
 
   body.innerHTML = `
     <header style="padding-top:8px">
