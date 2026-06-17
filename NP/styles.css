@@ -591,6 +591,9 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .learn-field{margin-bottom:16px}
 .learn-field-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
 .learn-field-lbl{font-size:13px;color:rgba(246,241,230,.8);font-weight:600}
+.learn-field-val{font-size:17px;font-weight:800;color:var(--cream);font-family:var(--sans);white-space:nowrap}
+.learn-sugg-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.learn-sugg{display:inline-flex;align-items:center;gap:6px;background:rgba(192,138,45,.14);border:1px solid rgba(192,138,45,.4);color:var(--gb);font-size:12px;font-weight:700;padding:7px 12px;border-radius:100px;cursor:pointer;font-family:var(--sans)}
 .learn-field-input{display:inline-flex;align-items:baseline;gap:1px}
 .learn-field-input .lfx{font-size:15px;font-weight:800;color:var(--cream)}
 .learn-num{width:8.5em;background:none;border:none;border-bottom:1px dashed rgba(246,241,230,.4);color:var(--cream);font-family:var(--sans);font-size:17px;font-weight:800;text-align:right;padding:0 0 2px;outline:none}

@@ -3880,7 +3880,7 @@ function openLearnTool(id){
   body.scrollTop = 0;
   ov.classList.add('open');
   $('mainnav').classList.add('hide');
-  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro };
+  const renderers = { invertir: renderLearnInvertir, ahorro: renderLearnAhorro, simulador: renderLearnSimulador };
   (renderers[id] || renderLearnPlaceholder)(body, tool);
 }
 function closeLearnTool(){
@@ -4196,6 +4196,155 @@ function renderLearnAhorro(body){
     _learnHandoff = { monto: Math.max(0, S.entra - S.sale) };
     openLearnTool('simulador');
   };
+
+  paint();
+}
+
+// --- Herramienta: Simulador de inversión (monto/mes + años + instrumento) ---
+const LEARN_INSTR = {
+  cdt: { label:'CDT',        rate:0.11, note:'~11% E.A. en pesos · riesgo bajo · plazo fijo.' },
+  sp:  { label:'S&P 500',    rate:0.09, note:'~9% anual histórico en dólares · riesgo medio-alto · largo plazo.' },
+  mix: { label:'Mixto 50/50',rate:0.10, note:'Mitad CDT, mitad S&P 500 · ~10% · equilibrio riesgo/retorno.' },
+};
+function renderLearnSimulador(body){
+  const c = state.config;
+  const SNAP = 10000, POS = 1000, P = 2.5;
+
+  // Sugerencias de monto (solo lectura): handoff del Commit 2 y % del plan a inversión.
+  const handoff = _learnHandoff; _learnHandoff = null;
+  const sugAhorro = handoff && handoff.monto > 0 ? Math.round(handoff.monto / SNAP) * SNAP : 0;
+  const pctInv = state.metas.filter(m => m.tipo === 'invertir').reduce((a,m) => a + (m.aportePct||0), 0);
+  const ahorroReal = Math.max(0, computeBase());
+  const sugPlan = ahorroReal > 0 && pctInv > 0 ? Math.round((ahorroReal * pctInv/100) / SNAP) * SNAP : 0;
+
+  const S = {
+    monto: sugAhorro || sugPlan || 500000,
+    years: 10,
+    instr: 'cdt'
+  };
+  const MAX = Math.max(20000000, Math.ceil(S.monto / SNAP) * SNAP); // tope holgado, sube si el handoff es grande
+  const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
+  const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
+  const formatInt = n => (n || 0).toLocaleString('es-CO');
+
+  const chips = [];
+  if (sugAhorro) chips.push({ v:sugAhorro, t:'Usar lo que simulaste' });
+  if (sugPlan && sugPlan !== sugAhorro) chips.push({ v:sugPlan, t:'Tu % del plan a inversión' });
+  const chipsHtml = chips.length
+    ? `<div class="learn-sugg-row">${chips.map(ch => `<button type="button" class="learn-sugg" data-v="${ch.v}">${ch.t}: $${formatInt(ch.v)}</button>`).join('')}</div>`
+    : '';
+
+  const segHtml = Object.entries(LEARN_INSTR).map(([k,v]) =>
+    `<button type="button" data-instr="${k}" class="${k===S.instr?'on':''}">${v.label}</button>`).join('');
+
+  body.innerHTML = `
+    <header style="padding-top:8px">
+      <div class="ey">Educación financiera</div>
+      <h1 style="margin:2px 0 0">Simulador de inversión</h1>
+    </header>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12);margin-top:14px">
+      <div class="learn-field" style="margin-bottom:0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Aporte cada mes</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="lsMontoVal" value="${formatInt(S.monto)}"></span>
+        </div>
+        <input type="range" class="learn-slider" id="lsMonto" min="0" max="${POS}" step="1" value="${posFromMonto(S.monto)}">
+      </div>
+      ${chipsHtml}
+    </div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Durante</span>
+          <span class="learn-field-val" id="lsYearsVal">${S.years} años</span>
+        </div>
+        <input type="range" class="learn-slider" id="lsYears" min="1" max="40" step="1" value="${S.years}">
+      </div>
+      <div class="learn-field-lbl" style="margin-bottom:6px">¿Dónde?</div>
+      <div class="seg dark-seg" id="lsInstr">${segHtml}</div>
+      <div id="lsNote" style="font-size:12px;color:rgba(246,241,230,.65);line-height:1.4;margin-top:8px"></div>
+    </div>
+
+    <div class="card" id="lsResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);padding:16px"></div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="k" style="color:var(--gb);margin-bottom:8px">Bajo el colchón vs. invertido</div>
+      <div id="lsCurve"></div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:11.5px;color:rgba(246,241,230,.75)">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:3px;border-radius:2px;background:rgba(246,241,230,.4)"></span>Bajo el colchón</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:3px;border-radius:2px;background:var(--gb)"></span>Invertido</span>
+      </div>
+    </div>
+  `;
+
+  const $$ = id => body.querySelector('#'+id);
+
+  function curveSVG(m, r, years){
+    const W = 300, H = 110;
+    const inv = [], col = [];
+    for (let t = 0; t <= years; t++){
+      const months = t * 12;
+      inv.push(r === 0 ? m*months : m*((Math.pow(1+r,months)-1)/r));
+      col.push(m*months);
+    }
+    const maxV = Math.max(inv[inv.length-1], 1);
+    const pts = arr => arr.map((v,i) => `${(i/years*W).toFixed(1)},${(H - v/maxV*H).toFixed(1)}`).join(' ');
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="110" preserveAspectRatio="none" style="display:block">
+      <polyline fill="none" stroke="rgba(246,241,230,.4)" stroke-width="2" stroke-linecap="round" points="${pts(col)}"></polyline>
+      <polyline fill="none" stroke="var(--gb)" stroke-width="2.5" stroke-linecap="round" points="${pts(inv)}"></polyline>
+    </svg>`;
+  }
+
+  function paint(){
+    const m = S.monto, years = S.years, annual = LEARN_INSTR[S.instr].rate;
+    const n = years * 12;
+    const r = Math.pow(1 + annual, 1/12) - 1;
+    const aportado = m * n;
+    const invertido = r === 0 ? aportado : m * ((Math.pow(1+r,n) - 1) / r);
+    const ganado = invertido - aportado;
+    const mult = aportado > 0 ? invertido / aportado : 1;
+
+    $$('lsNote').textContent = LEARN_INSTR[S.instr].note;
+    $$('lsResult').innerHTML = `
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700;text-align:center">En ${years} ${years===1?'año':'años'} tendrías</div>
+      <div style="font-size:30px;font-weight:800;color:var(--gb);font-family:var(--sans);margin:4px 0;text-align:center">${fmt(invertido)}</div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <div style="flex:1;background:rgba(246,241,230,.05);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:rgba(246,241,230,.6);text-transform:uppercase;letter-spacing:.1em">Tú pusiste</div>
+          <div style="font-size:15px;font-weight:800;color:var(--cream);margin-top:3px">${fmt(aportado)}</div>
+        </div>
+        <div style="flex:1;background:rgba(20,203,60,.08);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:#7fe39a;text-transform:uppercase;letter-spacing:.1em">Rindió</div>
+          <div style="font-size:15px;font-weight:800;color:#7fe39a;margin-top:3px">+${fmt(ganado)}</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:rgba(246,241,230,.8);text-align:center;margin-top:10px">Tu plata se multiplicó <b style="color:var(--gb)">${mult.toFixed(1)}x</b> sin que hicieras nada más.</div>`;
+    $$('lsCurve').innerHTML = curveSVG(m, r, years);
+  }
+
+  // --- Wiring ---
+  $$('lsMonto').addEventListener('input', () => { S.monto = montoFromPos(+$$('lsMonto').value); $$('lsMontoVal').value = formatInt(S.monto); paint(); });
+  $$('lsMontoVal').addEventListener('input', e => {
+    const digits = e.target.value.replace(/\D/g,'');
+    S.monto = Math.max(0, Math.min(MAX, digits === '' ? 0 : +digits));
+    $$('lsMonto').value = posFromMonto(S.monto);
+    e.target.value = digits === '' ? '' : formatInt(S.monto);
+    paint();
+  });
+  $$('lsMontoVal').addEventListener('blur', e => { e.target.value = formatInt(S.monto); });
+  $$('lsYears').addEventListener('input', () => { S.years = +$$('lsYears').value; $$('lsYearsVal').textContent = `${S.years} ${S.years===1?'año':'años'}`; paint(); });
+  $$('lsInstr').querySelectorAll('[data-instr]').forEach(b => {
+    b.onclick = () => {
+      S.instr = b.dataset.instr;
+      $$('lsInstr').querySelectorAll('[data-instr]').forEach(x => x.classList.toggle('on', x === b));
+      paint();
+    };
+  });
+  body.querySelectorAll('.learn-sugg').forEach(b => {
+    b.onclick = () => { S.monto = Math.min(MAX, +b.dataset.v); $$('lsMonto').value = posFromMonto(S.monto); $$('lsMontoVal').value = formatInt(S.monto); paint(); };
+  });
 
   paint();
 }
