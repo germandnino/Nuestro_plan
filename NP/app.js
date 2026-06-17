@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.19'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.20'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -631,6 +631,9 @@ function syncSubscribe(planId) {
       const remote = doc.data();
       // Aviso "tu pareja editó": ignora el eco de escrituras propias.
       const esEco = (doc.metadata && doc.metadata.hasPendingWrites) || remote.lastEditBy === state.config.perfil;
+      if (esEco && !_firstSyncSnapshot) {
+        return;
+      }
       const remoteUpdatedMs = (remote.updatedAt && remote.updatedAt.toMillis) ? remote.updatedAt.toMillis() : 0;
       if (_firstSyncSnapshot) {
         // Primera carga de la sesión: ¿hubo cambios del otro mientras no estabas?
@@ -695,11 +698,12 @@ async function saveLocalOnly(){
 }
 async function save(){
   normalize();
-  const ok=await store.set(JSON.stringify(state));
+  const stateClone = JSON.parse(JSON.stringify(state));
+  const ok=await store.set(JSON.stringify(stateClone));
   if(!ok)$('banner').style.display='block';
   
   if (currentUser && currentPlanId && canEditShared()) {
-    syncSaveShared(currentPlanId, state)
+    syncSaveShared(currentPlanId, stateClone)
       .then(() => {
         showSyncStatus('Sincronizado ✓');
       })
@@ -1218,8 +1222,17 @@ function openRetiroDinero(){
 
     if(dval==='fuera'){
       o.saldo-=monto;
-      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan',creadoPor:c.perfil});
-      flash('Retiro registrado ✓');
+      const gId = uid();
+      state.gastos.push({id:gId,meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan',creadoPor:c.perfil});
+      save();ov.remove();rerender();
+      flashUndo('Retiro registrado ✓', () => {
+        const mCurrent = metaById(o.id);
+        if (mCurrent) {
+          mCurrent.saldo += monto;
+          state.gastos = state.gastos.filter(g => g.id !== gId);
+          save(); rerender(); flash('Retiro deshecho ✓');
+        }
+      });
     }else{
       const d=metaById(dval);
       if(!d){flash('Destino inválido');return;}
@@ -1227,11 +1240,20 @@ function openRetiroDinero(){
       d.saldo+=monto;
       const tId=uid();
       const cruzaTerreno=!o.dueno&&o.tipo!=='personal'&&(d.dueno||d.tipo==='personal');
-      state.gastos.push({id:uid(),meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre)),creadoPor:c.perfil});
-      state.gastos.push({id:uid(),meta:d.id,fecha:today(),monto:monto,entrada:true,mov:'transfer-in',transferId:tId,nota:nota||('Transferencia desde '+o.nombre),creadoPor:c.perfil});
-      flash('Transferencia realizada ✓');
+      const gOutId = uid(), gInId = uid();
+      state.gastos.push({id:gOutId,meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre)),creadoPor:c.perfil});
+      state.gastos.push({id:gInId,meta:d.id,fecha:today(),monto:monto,entrada:true,mov:'transfer-in',transferId:tId,nota:nota||('Transferencia desde '+o.nombre),creadoPor:c.perfil});
+      save();ov.remove();rerender();
+      flashUndo('Transferencia realizada ✓', () => {
+        const mSrc = metaById(o.id), mDst = metaById(d.id);
+        if (mSrc && mDst) {
+          mSrc.saldo += monto;
+          mDst.saldo -= monto;
+          state.gastos = state.gastos.filter(g => g.id !== gOutId && g.id !== gInId);
+          save(); rerender(); flash('Transferencia deshecha ✓');
+        }
+      });
     }
-    save();ov.remove();rerender();
 
     if (wasCompleted && isWithdrawingAll) {
       const confirmDelete = await customConfirm(
@@ -1991,6 +2013,18 @@ function metaSub(m){
 }
 function renderMetas(){
   const isIndiv = state.config.modo === 'individual';
+  if (isIndiv && state.config.perfil) {
+    let corregido = false;
+    state.metas.forEach(m => {
+      if (m.tipo !== 'personal' && m.dueno !== state.config.perfil) {
+        m.dueno = state.config.perfil;
+        corregido = true;
+      }
+    });
+    if (corregido) {
+      save();
+    }
+  }
   const canEdit = canEditShared();
 
   // Empty-state CTA: el botón global del nav existe, pero un estado vacío sin acción
@@ -2102,13 +2136,19 @@ function renderMetas(){
     const adviceHtml = drawBucketBar(dueno);
 
     let chipsHtml = '';
+    let listHtml = '';
+    let indivHtml = '';
+    let allEmptyCTA = '';
+    let personalHtml = '';
+
     if (isIndiv) {
-      chipsHtml = `
-        <div class="filter-chips">
-          <button class="chip ${curAhorrosFilter==='all'?'on':''}" data-f="all">Todas</button>
-          <button class="chip ${curAhorrosFilter==='goals'?'on':''}" data-f="goals">Mis Metas</button>
-        </div>
-      `;
+      chipsHtml = '';
+      const metasIndivCount = metasIndividuales(state.config.perfil).length;
+      if (metasIndivCount > 0) {
+        listHtml = drawSeccionesPorBucket(state.config.perfil, card);
+      } else {
+        allEmptyCTA = emptyMetaCTA('sueno', 'Aún no tienes metas de ahorro. Crea la primera para empezar a repartir tu ahorro mensual.');
+      }
     } else {
       chipsHtml = `
         <div class="filter-chips">
@@ -2117,47 +2157,37 @@ function renderMetas(){
           <button class="chip ${curAhorrosFilter==='individual'?'on':''}" data-f="individual">Individuales</button>
         </div>
       `;
-    }
-
-    let listHtml = '';
-    const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-    const showShared = (isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'goals')) || (!isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'shared'));
-    if (showShared) {
-      if (nonDebtShared.length > 0) {
-        listHtml = drawSeccionesPorBucket(null, card);
-      } else if (curAhorrosFilter !== 'all') {
-        listHtml = `
-          <div class="stitle">${isIndiv ? 'Mis metas de ahorro' : 'Metas compartidas'}</div>
-          ${emptyMetaCTA('sueno', isIndiv ? 'Aún no tienes metas de ahorro.' : 'No tienes metas comunes creadas.')}
-        `;
+      const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+      const showShared = curAhorrosFilter === 'all' || curAhorrosFilter === 'shared';
+      if (showShared) {
+        if (nonDebtShared.length > 0) {
+          listHtml = drawSeccionesPorBucket(null, card);
+        } else if (curAhorrosFilter !== 'all') {
+          listHtml = `
+            <div class="stitle">Metas compartidas</div>
+            ${emptyMetaCTA('sueno', 'No tienes metas comunes creadas.')}
+          `;
+        }
       }
-    }
 
-    let indivHtml = '';
-    const showIndiv = !isIndiv && (curAhorrosFilter === 'all' || curAhorrosFilter === 'individual');
-    if (showIndiv) {
-      const indivs = metasIndividuales(state.config.perfil);
-      if (indivs.length > 0) {
-        indivHtml = `<div class="stitle">${isIndiv ? '' : 'Tus metas individuales (privadas)'}</div>` +
-                    drawSeccionesPorBucket(state.config.perfil, card);
-      } else if (curAhorrosFilter === 'individual') {
-        indivHtml += `
-          <div class="stitle">Mis metas individuales (Privadas)</div>
-          ${emptyMetaCTA('sueno', 'No tienes metas individuales privadas creadas.')}
-        `;
+      const showIndiv = curAhorrosFilter === 'all' || curAhorrosFilter === 'individual';
+      if (showIndiv) {
+        const indivs = metasIndividuales(state.config.perfil);
+        if (indivs.length > 0) {
+          indivHtml = `<div class="stitle">Tus metas individuales (privadas)</div>` +
+                      drawSeccionesPorBucket(state.config.perfil, card);
+        } else if (curAhorrosFilter === 'individual') {
+          indivHtml += `
+            <div class="stitle">Mis metas individuales (Privadas)</div>
+            ${emptyMetaCTA('sueno', 'No tienes metas individuales privadas creadas.')}
+          `;
+        }
       }
-    }
 
-    let personalHtml = '';
-
-    // Filtro "Todas" sin ninguna meta creada:
-    // sin esto el usuario nuevo ve la vista vacía sin acción.
-    let allEmptyCTA = '';
-    const indivCount = isIndiv ? 0 : metasIndividuales(state.config.perfil).length;
-    if (curAhorrosFilter === 'all' && nonDebtShared.length === 0 && indivCount === 0) {
-      allEmptyCTA = emptyMetaCTA('sueno', isIndiv
-        ? 'Aún no tienes metas de ahorro. Crea la primera para empezar a repartir tu ahorro mensual.'
-        : 'Aún no tienen metas de ahorro. Crea la primera para empezar a repartir el ahorro mensual.');
+      const indivCount = metasIndividuales(state.config.perfil).length;
+      if (curAhorrosFilter === 'all' && nonDebtShared.length === 0 && indivCount === 0) {
+        allEmptyCTA = emptyMetaCTA('sueno', 'Aún no tienen metas de ahorro. Crea la primera para empezar a repartir el ahorro mensual.');
+      }
     }
 
     contentHtml = `
@@ -2203,6 +2233,9 @@ function renderMetas(){
   // Attach change listener to inline percentage inputs (solo los de meta; los de la
   // barra de propósitos llevan data-bucket y se enganchan aparte).
   $('r1').querySelectorAll('.inline-pct-input[data-pctmid]').forEach(input => {
+    input.onclick = (e) => {
+      e.stopPropagation();
+    };
     input.onchange = (e) => {
       const mid = input.dataset.pctmid;
       const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
@@ -2220,6 +2253,20 @@ function renderMetas(){
     input.onkeydown = (e) => {
       if (e.key === 'Enter') {
         input.blur();
+      }
+    };
+  });
+
+  // Enfocar el input cuando se toca el contenedor de la píldora de porcentaje (facilidad táctil en móvil)
+  $('r1').querySelectorAll('.inline-pct-container').forEach(container => {
+    container.onclick = (e) => {
+      const input = container.querySelector('.inline-pct-input');
+      if (input && document.activeElement !== input) {
+        e.stopPropagation();
+        input.focus();
+        if (typeof input.select === 'function') {
+          input.select();
+        }
       }
     };
   });
@@ -2265,6 +2312,9 @@ function renderMetas(){
   });
 
   document.querySelectorAll('.inline-pct-input[data-bucket]').forEach(inp=>{
+    inp.onclick = (e) => {
+      e.stopPropagation();
+    };
     inp.onchange = () => {
       const t = inp.dataset.bucket;
       let v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
@@ -2400,8 +2450,10 @@ function openMetaForm(id, defaultTipo = 'sueno'){
     flash('No tienes permisos de editor');
     return;
   }
-  const existing=id?metaById(id):null;
   mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:metasCompartidas().length};
+  if (state.config.modo === 'individual') {
+    mForm.dueno = state.config.perfil;
+  }
   const ov=metaModalEl();
   ov.classList.add('open');
   $('metaModalCard').scrollTop=0;
