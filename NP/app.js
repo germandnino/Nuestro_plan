@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.22'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.23'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -1203,7 +1203,9 @@ function openRetiroDinero(){
     const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado);
     const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
     selD.innerHTML=`<option value="fuera">Fuera del plan (gasto real)</option>`
-      +og('Metas comunes',comp)+og('Mis metas (privadas)',indiv);
+      +(c.modo==='individual'
+        ? indiv.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
+        : og('Metas comunes',comp)+og('Mis metas (privadas)',indiv));
   };
   fillDestinos(); selO.onchange=fillDestinos;
   const mi=ov.querySelector('#rtMonto');
@@ -1480,7 +1482,7 @@ function renderInicio(){
   const _ind = c.modo === 'individual';
   const _svgTip = (icon) => getSVG(icon, '', 'vertical-align:middle;margin-right:6px;color:var(--gold);');
 
-  const metasActivas = metasCompartidas();
+  const metasActivas = _ind ? metasIndividuales(c.perfil) : metasCompartidas();
   const aportadoEsteMes = ahorroMesUI(curMonth()) > 0;
 
   let tipPool = [];
@@ -2451,9 +2453,12 @@ function openMetaForm(id, defaultTipo = 'sueno'){
     return;
   }
   const existing=id?metaById(id):null;
-  mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:metasCompartidas().length};
-  if (state.config.modo === 'individual') {
-    mForm.dueno = state.config.perfil;
+  const c = state.config;
+  const isIndiv = c.modo === 'individual';
+  const defaultPrio = isIndiv ? metasIndividuales(c.perfil).length : metasCompartidas().length;
+  mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:defaultPrio};
+  if (isIndiv) {
+    mForm.dueno = c.perfil;
   }
   const ov=metaModalEl();
   ov.classList.add('open');
@@ -2858,7 +2863,7 @@ function openAsistenteIngresoExtra(preFill = null) {
   const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
   const optionsHtml = c.modo === 'individual'
-    ? comp.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
+    ? indiv.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
     : og('Metas comunes', comp) + og('Mis metas (privadas)', indiv);
 
   const defaultConcepto = preFill ? preFill.concepto : '';
@@ -5059,7 +5064,8 @@ function obSaveStep(){
     const nom=$('obMetaNom')?$('obMetaNom').value.trim():'';
     if(nom){
       const obj=parse($('obMetaObj')?$('obMetaObj').value:'');
-      const prio=metasCompartidas().length;
+      const isIndiv = c.modo === 'individual';
+      const prio = isIndiv ? metasIndividuales(c.perfil).length : metasCompartidas().length;
       const nuevaId=uid();
       obMetaCreatedId=nuevaId;
       state.metas.push({
@@ -5071,7 +5077,8 @@ function obSaveStep(){
         aporteFijo:0,
         aportePct:0,
         fecha:null,
-        prioridad:prio
+        prioridad:prio,
+        dueno: isIndiv ? c.perfil : undefined
       });
     }
   }
