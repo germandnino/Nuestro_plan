@@ -762,10 +762,15 @@ function emergenciaPrincipal(){return emergencias()[0]||null;}
 // destino del sobrante (no perder la plata). Distribuir avisa cuando esto pasa.
 function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir'&&!m.colocado)||state.metas.find(m=>m.tipo==='invertir');}
 const BUCKETS=['imprevistos','sueno','invertir'];
-// Metas de un bucket en un scope (dueno=null → compartido) que admiten reparto.
+// Metas de un bucket en un scope (dueno=null → compartido) que admiten reparto (MOTOR: excluye fijas).
 function metasDeBucket(tipo,dueno){
   const base = dueno ? metasIndividuales(dueno) : metasCompartidas();
   return base.filter(m=>m.tipo===tipo && !m.colocado);
+}
+// Metas de un bucket para la VISTA: incluye las fijas (colocado). Plata real que debe verse.
+function metasBucketVista(tipo,dueno){
+  const base = dueno ? metasIndividuales(dueno) : metasCompartidas();
+  return base.filter(m=>m.tipo===tipo);
 }
 // Metas elegibles para recibir % en un bucket: no colocadas y no llenas.
 function metasElegiblesBucket(tipo,dueno){
@@ -778,7 +783,7 @@ function bucketsPresentes(dueno){
 // Buckets con al menos UNA meta (llena o no) en el scope — para la VISTA (barra de propósitos):
 // un colchón lleno sigue siendo un propósito que el usuario tiene y quiere ver/ponderar.
 function bucketsConMetas(dueno){
-  return BUCKETS.filter(t=>metasDeBucket(t,dueno).length>0);
+  return BUCKETS.filter(t=>metasBucketVista(t,dueno).length>0);
 }
 // Pesos normalizados (suma 100) de los buckets presentes; ausentes redistribuyen su parte.
 function pesosBuckets(dueno){
@@ -1711,7 +1716,7 @@ function drawSeccionesPorBucket(dueno, card){
   };
   let html='';
   BUCKETS.forEach(tipo=>{
-    const metas = metasDeBucket(tipo, dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
+    const metas = metasBucketVista(tipo, dueno).sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
     if(metas.length===0) return;
     const key=`${dueno||'shared'}:${tipo}`;
     const collapsed=_collapsedBuckets.has(key);
@@ -2041,7 +2046,7 @@ function renderMetas(){
             <div class="metacard-title"><span class="metacard-name">${m.nombre}</span>${typePill}</div>
             <div class="metacard-sub">${sub}</div>
           </div>
-          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : `${pctBadge}${editBtn}`)}
+          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${pctBadge}${editBtn}`))}
         </div>
       </div>`;
     };
