@@ -1165,6 +1165,32 @@ function registrarSobrantePendiente(monto, origenNombre){
   return ing;
 }
 function sobrantesPendientes(){return state.ingresos.filter(i=>i.sinAsignar);}
+function totalSinAsignar(){return sobrantesPendientes().reduce((s,i)=>s+(i.monto||0),0);}
+// Tarjeta reusable "sin asignar" (Inicio, Metas, Mi Mes). Botón [data-asignarpend].
+function drawSinAsignarCard(){
+  const sp=sobrantesPendientes();
+  if(!sp.length) return '';
+  return `<div class="card" style="border:1px solid var(--gold);padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <div style="font-size:13px;display:flex;align-items:center;gap:7px;">${getSVG('alert','', 'width:15px;height:15px;color:var(--gold);flex-shrink:0')}<span><b style="color:var(--gold)">${fmt(totalSinAsignar())}</b> sin asignar${sp.length>1?` · ${sp.length} pendientes`:''}</span></div>
+    <button class="btn sm gold" data-asignarpend style="margin:0;flex-shrink:0;">Asignar</button>
+  </div>`;
+}
+// Flujo "Asignar" del primer sobrante pendiente (reusable, rerender en cualquier vista).
+async function asignarSobrantePendiente(){
+  const p=sobrantesPendientes()[0];
+  if(!p)return;
+  const dec=await openModalSobrante(p.monto,{id:'_pend',nombre:p.nombre});
+  if(dec.accion==='pendiente')return;
+  const res=aplicarDecisionSobrante(dec,p.monto);
+  if(res.tipo==='pendiente')return;
+  state.ingresos=state.ingresos.filter(i=>i.id!==p.id);
+  save();rerender();flash('Sobrante asignado ✓');
+}
+// Delegación global del botón "Asignar" (cualquier vista que renderice drawSinAsignarCard).
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-asignarpend]');
+  if(b){ e.preventDefault(); e.stopPropagation(); asignarSobrantePendiente(); }
+});
 
 // Especiales visibles para el perfil activo: oculta movimientos privados de la pareja.
 function especialesVisibles(arr){
@@ -1382,11 +1408,13 @@ function renderInicio(){
   // Mi parte: metas individuales propias. Privada.
   const misIndividuales = state.metas.filter(m => m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
 
+  // "Sin asignar" es plata real del plan (sumidero del sobrante) → cuenta en patrimonio.
+  const sinAsig = totalSinAsignar();
   // Pareja: el número grande es SOLO lo compartido (mismo en ambos teléfonos).
   // Individual: una sola persona, se suma todo.
-  const patrimonioNeto = esPareja
+  const patrimonioNeto = (esPareja
     ? ahorrosCompartidos
-    : (ahorrosCompartidos + misIndividuales);
+    : (ahorrosCompartidos + misIndividuales)) + sinAsig;
   const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   const headerHtml = c.modo === 'individual'
@@ -1552,6 +1580,7 @@ function renderInicio(){
   $('r0').innerHTML=`
     ${headerHtml}
     ${patHtml}
+    ${drawSinAsignarCard()}
     ${shortcutsHtml}
     ${tipHtml}
   `;
@@ -2114,6 +2143,7 @@ function renderMetas(){
     }
 
     contentHtml = `
+      ${drawSinAsignarCard()}
       ${adviceHtml}
       ${chipsHtml}
       ${allEmptyCTA}
@@ -3575,10 +3605,7 @@ function renderMiMes(){
         <button id="btnNextMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">›</button>
       </div>
     </header>
-    ${sobrantesPendientes().length?`<div class="card" style="border:1px solid var(--gold);padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <div style="font-size:13px;"><b style="color:var(--gold)">${fmt(sobrantesPendientes().reduce((s,i)=>s+i.monto,0))}</b> sin asignar</div>
-      <button class="btn sm gold" id="btnAsignarPendiente" style="margin:0;">Asignar</button>
-    </div>`:''}
+    ${drawSinAsignarCard()}
     <div style="display:flex; flex-direction:column; gap:12px;">
       ${metricsHtml}
       ${donutHtml}
@@ -3653,17 +3680,7 @@ function renderMiMes(){
     };
   });
 
-  const btnPend=$('btnAsignarPendiente');
-  if(btnPend) btnPend.onclick=async()=>{
-    const p=sobrantesPendientes()[0];
-    if(!p)return;
-    const dec=await openModalSobrante(p.monto,{id:'_pend',nombre:p.nombre});
-    if(dec.accion==='pendiente')return;
-    const res=aplicarDecisionSobrante(dec,p.monto);
-    if(res.tipo==='pendiente')return;
-    state.ingresos=state.ingresos.filter(i=>i.id!==p.id);
-    save();renderMiMes();flash('Sobrante asignado ✓');
-  };
+  // El botón "Asignar" (data-asignarpend) se maneja por delegación global → asignarSobrantePendiente().
 
   if (openExtraFormOnLoad) {
     openExtraFormOnLoad = false;
