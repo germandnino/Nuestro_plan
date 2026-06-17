@@ -584,8 +584,8 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .learn-tool-overlay{position:fixed;inset:0;background:var(--gd);z-index:380;display:none;flex-direction:column}
 .learn-tool-overlay.open{display:flex;animation:learnToolIn .24s ease}
 @keyframes learnToolIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.learn-tool-head{flex-shrink:0;padding:max(env(safe-area-inset-top),8px) 16px 0}
-.learn-tool-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 18px calc(28px + env(safe-area-inset-bottom))}
+.learn-tool-head{flex-shrink:0;width:100%;max-width:480px;margin:0 auto;padding:max(env(safe-area-inset-top),8px) 16px 0}
+.learn-tool-scroll{flex:1;width:100%;max-width:480px;margin:0 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 18px calc(28px + env(safe-area-inset-bottom))}
 .learn-tool-scroll > header{padding-top:8px}
 /* Controles de las herramientas (sliders, chips, resultado) sobre fondo oscuro */
 .learn-field{margin-bottom:16px}
