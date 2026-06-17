@@ -4085,7 +4085,13 @@ function renderLearnAhorro(body){
     entra: entra0 > 0 ? entra0 : 2500000,
     sale:  sale0  > 0 ? sale0  : 1500000
   };
-  const MAX = 100000000, STEP = 100000; // hasta 100M para cubrir la realidad de las parejas en CO
+  // Escala no lineal: el slider tiene POS posiciones; la posición mapea al monto
+  // con una curva de potencia, así el extremo bajo (1-10M, lo común en CO) tiene
+  // mucha más resolución y el tope llega hasta 100M.
+  const MAX = 100000000, SNAP = 50000, POS = 1000, P = 3;
+  const montoFromPos = p => Math.round((MAX * Math.pow(p / POS, P)) / SNAP) * SNAP;
+  const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
+  const formatInt = n => (n || 0).toLocaleString('es-CO');
 
   body.innerHTML = `
     <header style="padding-top:8px">
@@ -4097,16 +4103,16 @@ function renderLearnAhorro(body){
       <div class="learn-field">
         <div class="learn-field-top">
           <span class="learn-field-lbl">Lo que entra al mes</span>
-          <span class="learn-field-val" id="laEntraVal">${fmt(S.entra)}</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="laEntraVal" value="${formatInt(S.entra)}"></span>
         </div>
-        <input type="range" class="learn-slider" id="laEntra" min="0" max="${MAX}" step="${STEP}" value="${S.entra}">
+        <input type="range" class="learn-slider" id="laEntra" min="0" max="${POS}" step="1" value="${posFromMonto(S.entra)}">
       </div>
       <div class="learn-field" style="margin-bottom:0">
         <div class="learn-field-top">
           <span class="learn-field-lbl">Lo que sale al mes</span>
-          <span class="learn-field-val" id="laSaleVal">${fmt(S.sale)}</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="laSaleVal" value="${formatInt(S.sale)}"></span>
         </div>
-        <input type="range" class="learn-slider" id="laSale" min="0" max="${MAX}" step="${STEP}" value="${S.sale}">
+        <input type="range" class="learn-slider" id="laSale" min="0" max="${POS}" step="1" value="${posFromMonto(S.sale)}">
       </div>
     </div>
 
@@ -4164,8 +4170,27 @@ function renderLearnAhorro(body){
   }
 
   // --- Wiring ---
-  $$('laEntra').addEventListener('input', e => { S.entra = +e.target.value; $$('laEntraVal').textContent = fmt(S.entra); paint(); });
-  $$('laSale').addEventListener('input',  e => { S.sale  = +e.target.value; $$('laSaleVal').textContent  = fmt(S.sale);  paint(); });
+  // Slider (posición no lineal) -> monto. Actualiza el campo editable.
+  const fromSlider = (key, sliderId, numId) => {
+    S[key] = montoFromPos(+$$(sliderId).value);
+    $$(numId).value = formatInt(S[key]);
+    paint();
+  };
+  // Campo editable -> monto. Reposiciona el slider. Formatea con separadores.
+  const fromNum = (key, sliderId, e) => {
+    const digits = e.target.value.replace(/\D/g, '');
+    const n = Math.max(0, Math.min(MAX, digits === '' ? 0 : +digits));
+    S[key] = n;
+    $$(sliderId).value = posFromMonto(n);
+    e.target.value = digits === '' ? '' : formatInt(n);
+    paint();
+  };
+  $$('laEntra').addEventListener('input', () => fromSlider('entra', 'laEntra', 'laEntraVal'));
+  $$('laSale').addEventListener('input',  () => fromSlider('sale',  'laSale',  'laSaleVal'));
+  $$('laEntraVal').addEventListener('input', e => fromNum('entra', 'laEntra', e));
+  $$('laSaleVal').addEventListener('input',  e => fromNum('sale',  'laSale',  e));
+  $$('laEntraVal').addEventListener('blur', e => { e.target.value = formatInt(S.entra); });
+  $$('laSaleVal').addEventListener('blur',  e => { e.target.value = formatInt(S.sale);  });
 
   $$('laGo').onclick = () => {
     _learnHandoff = { monto: Math.max(0, S.entra - S.sale) };
