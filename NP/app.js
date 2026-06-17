@@ -30,6 +30,7 @@ let state={config:{},metas:[],log:[],ingresos:[],gastos:[],logros:[]};
 let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
+let _distribucionCollapsed = true; // estado colapsado por defecto del acordeón de reparto de propósitos
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -49,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.17'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.18'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -79,7 +80,9 @@ function getSVG(name, cls='', style='') {
     drag: '<circle cx="9" cy="5" r="1.5"></circle><circle cx="9" cy="12" r="1.5"></circle><circle cx="9" cy="19" r="1.5"></circle><circle cx="15" cy="5" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="15" cy="19" r="1.5"></circle>',
     chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>',
     info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
-    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>'
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>',
+    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>'
   };
   const path = icons[name] || '';
   const cAttr = cls ? ` class="${cls}"` : '';
@@ -1344,22 +1347,39 @@ function showActionMenu(){
 // Formato de miles en vivo en los campos de plata (clase .money)
 document.addEventListener('input',e=>{
   const el=e.target;
-  if(!el||!el.classList||!el.classList.contains('money'))return;
-  const d=el.value.replace(/\D/g,'');
-  el.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+  if(!el||!el.classList)return;
+  if(el.classList.contains('money')){
+    const d=el.value.replace(/\D/g,'');
+    el.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+  } else if(el.classList.contains('pct')){
+    // Solo digits mientras escribe; el % se pone al perder foco.
+    const d=el.value.replace(/\D/g,'');
+    if(el.value!==d) el.value=d;
+  }
 });
 document.addEventListener('focusin',e=>{
   const el=e.target;
-  if(!el||!el.classList||!el.classList.contains('money'))return;
-  const val=parse(el.value);
-  el.value=val?String(val):'';
-  el.select();
+  if(!el||!el.classList)return;
+  if(el.classList.contains('money')){
+    const val=parse(el.value);
+    el.value=val?String(val):'';
+    el.select();
+  } else if(el.classList.contains('pct')){
+    const val=parseInt(el.value)||0;
+    el.value=val?String(val):'';
+    el.select();
+  }
 });
 document.addEventListener('focusout',e=>{
   const el=e.target;
-  if(!el||!el.classList||!el.classList.contains('money'))return;
-  const d=el.value.replace(/\D/g,'');
-  el.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+  if(!el||!el.classList)return;
+  if(el.classList.contains('money')){
+    const d=el.value.replace(/\D/g,'');
+    el.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+  } else if(el.classList.contains('pct')){
+    const d=el.value.replace(/\D/g,'');
+    el.value=d?d+' %':'';
+  }
 });
 
 /* =========================================================
@@ -1592,6 +1612,16 @@ function drawBucketBar(dueno){
     }
     save();
   }
+
+  const resumenParts = [];
+  todos.forEach(t => {
+    const val = cfg[t] || 0;
+    if (val > 0) {
+      resumenParts.push(`${meta[t].lbl} ${val}%`);
+    }
+  });
+  const resumenText = resumenParts.length > 0 ? resumenParts.join(' · ') : 'Sin asignar';
+
   const cells = todos.map(t=>{
     const full = !editables.includes(t);
     return `<div class="bucketcell${full?' full':''}">
@@ -1602,10 +1632,32 @@ function drawBucketBar(dueno){
       </div>
     </div>`;
   }).join('');
-  return `<div class="card dark" style="margin-bottom:12px;padding:12px 14px;">
-    <div class="k" style="margin:0 0 8px;color:var(--cream);">¿Cuánto a cada propósito?</div>
-    <div class="bucketgrid">${cells}</div>
-  </div>`;
+
+  if (_distribucionCollapsed) {
+    return `
+      <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:10px 14px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; transition: background 0.2s;">
+        <div style="display:flex; align-items:center; gap:8px; flex-grow:1; min-width:0;">
+          <span style="font-size:11px; font-weight:700; color:var(--gb); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">Reparto:</span>
+          <span style="font-size:12.5px; font-weight:600; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${resumenText}</span>
+        </div>
+        <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
+          ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card dark bucketbar-expanded" style="margin-bottom:12px; padding:12px 14px;">
+      <div class="bucketbar-toggle" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer;">
+        <div class="k" style="margin:0; color:var(--gb); flex-grow:1;">¿Cuánto a cada propósito?</div>
+        <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
+          ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7; transform: rotate(180deg);')}
+        </div>
+      </div>
+      <div class="bucketgrid">${cells}</div>
+    </div>
+  `;
 }
 
 function drawSavingsDonut() {
@@ -1953,9 +2005,8 @@ function renderMetas(){
       ${canEdit ? `<button class="btn" data-addmeta="${tipo}" style="margin:0;border:1.5px solid ${accent};color:${accent};background:${bg};display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px;padding:12px 18px;">${getSVG('target')} ${label}</button>` : ''}
     </div>`;
   };
-
   let subTabsHtml = `
-    <div class="seg dark-seg" style="margin-bottom:16px;">
+    <div class="seg dark-seg" style="margin-bottom:10px;">
       <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Resumen</button>
       <button id="btnTabAhorros" class="${curMetasSubTab===1?'on':''}">Mis metas</button>
       <button id="btnTabLogros" class="${curMetasSubTab===2?'on':''}">Logros</button>
@@ -2142,6 +2193,13 @@ function renderMetas(){
   if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
   const tabLogros = $('btnTabLogros');
   if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 2; rerender(); };
+
+  $('r1').querySelectorAll('.bucketbar-toggle').forEach(btn => {
+    btn.onclick = () => {
+      _distribucionCollapsed = !_distribucionCollapsed;
+      rerender();
+    };
+  });
 
   // Attach change listener to inline percentage inputs (solo los de meta; los de la
   // barra de propósitos llevan data-bucket y se enganchan aparte).
@@ -2345,41 +2403,56 @@ function openMetaForm(id, defaultTipo = 'sueno'){
   }
   const existing=id?metaById(id):null;
   mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:metasCompartidas().length};
-  ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
-  $('sf').classList.add('on');$('sf').scrollTop=0;
+  const ov=metaModalEl();
+  ov.classList.add('open');
+  $('metaModalCard').scrollTop=0;
+  $('metaModalCard').classList.remove('animate-in');void $('metaModalCard').offsetWidth;$('metaModalCard').classList.add('animate-in');
   $('mainnav').classList.add('hide');
   renderMetaForm(!!existing);
+}
+// Overlay flotante que contiene el form de meta (se crea una vez, perezoso).
+function metaModalEl(){
+  let ov=$('metaModal');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='metaModal';
+    ov.className='meta-modal-overlay';
+    ov.innerHTML='<div class="meta-modal-card" id="metaModalCard"><div id="mfBody"></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',e=>{ if(e.target===ov) closeMetaForm(); });
+  }
+  return ov;
+}
+// Cierra el modal sin cambiar de pestaña. cb opcional para navegar/refrescar tras cerrar.
+function closeMetaForm(cb){
+  mForm=null;
+  const ov=$('metaModal'); if(ov) ov.classList.remove('open');
+  $('mainnav').classList.remove('hide');
+  if(cb) cb(); else rerender();
 }
 
 function renderMetaForm(editing){
   const m=mForm;
-  const tipoBtns=`<div class="seg" style="display:flex;flex-wrap:wrap;gap:4px">
-    <button data-tipo="imprevistos" class="${m.tipo==='imprevistos'?'on':''}">Para imprevistos</button>
-    <button data-tipo="invertir" class="${m.tipo==='invertir'?'on':''}">Para invertir</button>
-    <button data-tipo="sueno" class="${m.tipo==='sueno'?'on':''}">Para un sueño</button>
-  </div>`;
-  
+  const tipoIco={imprevistos:'shield',invertir:'trending',sueno:'target'};
+  const tipoLbl={imprevistos:'Imprevistos',invertir:'Invertir',sueno:'Sueño'};
+  const tBtn=t=>`<button data-tipo="${t}" class="${m.tipo===t?'on':''}">${getSVG(tipoIco[t],'','')} ${tipoLbl[t]}</button>`;
+  const tipoBtns=`<div class="seg seg-sm">${tBtn('imprevistos')}${tBtn('invertir')}${tBtn('sueno')}</div>`;
+
   let visHtml = '';
   if (state.config.modo === 'pareja' && m.tipo !== 'personal') {
     visHtml = `
-      <div class="stitle" style="color:rgba(246,241,230,.65)">¿Quién ahorra para esto?</div>
-      <div class="card">
-        <div class="mode-cards" id="fVisibilidadSeg">
-          <div data-vis="compartida" class="mode-card ${!m.dueno?'on':''}">
-            <span class="icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-            <span class="title">Compartida</span>
-          </div>
-          <div data-vis="individual" class="mode-card ${m.dueno?'on':''}">
-            <span class="icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
-            <span class="title">Individual (Privada)</span>
-          </div>
-        </div>
-        <div class="hint" id="fVisHint" style="margin-top:10px;">
-          ${m.dueno ? '<b>Meta Individual (Privada):</b> Solo tú verás esta meta y la financiarás con tus aportes directos.' : '<b>Meta Compartida:</b> Ambos verán la meta y aportarán a ella desde el ahorro colectivo.'}
-        </div>
+      <label class="lbl" style="margin-top:9px">¿Quién ahorra para esto?</label>
+      <div class="seg seg-sm" id="fVisibilidadSeg">
+        <button data-vis="compartida" class="${!m.dueno?'on':''}">${getSVG('users','','')} Compartida</button>
+        <button data-vis="individual" class="${m.dueno?'on':''}">${getSVG('user','','')} Individual</button>
       </div>
-    `;
+      <div class="hint" id="fVisHint">${m.dueno ? 'Privada: solo tú la ves y la financias con tus aportes.' : 'Ambos la ven y aporta el ahorro colectivo.'}</div>`;
   }
+
+  // Columnas reutilizables (2-col).
+  const saldoCol=`<div><label class="lbl">Ya guardado (opc.)</label><input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0"></div>`;
+  const pctCol=`<div><label class="lbl">Aporte mes (%)</label>${aporteFields()}</div>`;
+  const pctHint=`<div class="hint">El % del ahorro mensual decide cuánto recibe esta meta.</div>`;
 
   let fields='';
   if(m.tipo==='imprevistos'){
@@ -2387,35 +2460,45 @@ function renderMetaForm(editing){
     const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
-      ${sug>0 ? `<div class="hint" style="margin-top:6px">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de tus gastos fijos':'~6 meses de tu ahorro mensual'}). Ajústalo a tu realidad. El ahorro sobrante completa este colchón antes de ir a inversión.</div>` : ''}
-      <label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}
-      <details style="margin-top:14px"${m.gastoRef?' open':''}>
+      ${sug>0 ? `<div class="hint">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de gastos fijos':'~6 meses de ahorro mensual'}). El ahorro sobrante lo completa antes de ir a inversión.</div>` : ''}
+      <div class="mf-grid" style="margin-top:10px">${pctCol}${saldoCol}</div>${pctHint}
+      <details style="margin-top:10px"${m.gastoRef?' open':''}>
         <summary style="font-size:12px;font-weight:700;color:var(--gs);cursor:pointer">Medir en meses de respaldo (opcional)</summary>
-        <div class="hint" style="margin:6px 0 8px">¿Cuánto gastan al mes, aprox? Así mostramos tu colchón en <b>meses de respaldo</b> en vez de solo un monto.</div>
+        <div class="hint" style="margin:6px 0 8px">¿Cuánto gastan al mes, aprox? Mostramos tu colchón en <b>meses de respaldo</b>.</div>
         <input class="amt money" id="fGastoRef" inputmode="numeric" value="${m.gastoRef?fmt(m.gastoRef):''}" placeholder="$0 / mes">
       </details>
-      <div class="deriv" id="fDeriv" style="margin-top:14px"></div></div>`;
+      <div class="deriv" id="fDeriv" style="margin-top:10px"></div></div>`;
+  }else if(m.tipo==='invertir'){
+    // Inversión = destino abierto del ahorro; sin objetivo en dinero ni fecha (se decide por %).
+    fields=`<div class="card">
+      <div class="mf-grid">${pctCol}${saldoCol}</div>${pctHint}
+      <div class="deriv" id="fDeriv" style="margin-top:10px"></div>
+    </div>`;
   }else{
     fields=`<div class="card">
-      <label class="lbl">Meta (opcional)</label>
-      <input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0">
-      <label class="lbl" style="margin-top:14px">¿Para cuándo? (opcional)</label>
-      <div class="sf" id="fFechaTrigger" data-val="${m.fecha||''}" style="margin-top:4px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
-        <span id="fFechaText">${m.fecha ? fmtMes(m.fecha) : 'Seleccionar mes'}</span>
-        <span style="color:var(--gs); display:inline-flex; align-items:center;">${getSVG('chevronDown', '', 'width:12px; height:12px;')}</span>
+      <div class="mf-grid">
+        <div><label class="lbl">Meta (opc.)</label><input class="amt money" id="fObj" inputmode="numeric" value="${m.objetivo?fmt(m.objetivo):''}" placeholder="$0"></div>
+        <div><label class="lbl">¿Para cuándo?</label>
+          <div class="sf" id="fFechaTrigger" data-val="${m.fecha||''}" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+            <span id="fFechaText">${m.fecha ? fmtMes(m.fecha) : 'Mes'}</span>
+            <span style="color:var(--gs); display:inline-flex; align-items:center;">${getSVG('chevronDown', '', 'width:12px; height:12px;')}</span>
+          </div>
+        </div>
       </div>
-      <label class="lbl" style="margin-top:14px">Aporte al mes (opcional)</label>${aporteFields()}
-      <div class="deriv" id="fDeriv"></div>
+      <div class="mf-grid" style="margin-top:10px">${pctCol}${saldoCol}</div>${pctHint}
+      <div class="deriv" id="fDeriv" style="margin-top:10px"></div>
     </div>`;
   }
-  $('rf').innerHTML=`
+  $('mfBody').innerHTML=`
 <button class="bk" id="fBack">‹ Cancelar</button>
-<header style="padding-top:6px"><div class="ey">${editing?'Editar':'Nueva'} meta</div><h1>${editing?m.nombre||'Objetivo':'¿Qué quieren lograr?'}</h1></header>
-<div class="card"><label class="lbl">Nombre</label><input class="sf" id="fNom" value="${(m.nombre||'').replace(/"/g,'&quot;')}" placeholder="Viaje a Japón, Carro, Fondo imprevistos…"></div>
-${m.tipo!=='personal'?'<div class="stitle" style="color:rgba(246,241,230,.65)">¿Para qué es?</div><div class="card">'+tipoBtns+'</div>':''}
-${visHtml}
+<div class="mf-head">${editing?'Editar':'Nueva'} meta</div>
+<div class="card">
+  <label class="lbl">Nombre</label>
+  <input class="sf" id="fNom" value="${(m.nombre||'').replace(/"/g,'&quot;')}" placeholder="Viaje a Japón, Carro, Fondo…">
+  ${m.tipo!=='personal'?`<label class="lbl" style="margin-top:9px">¿Para qué es?</label>${tipoBtns}`:''}
+  ${visHtml}
+</div>
 ${fields}
-${m.tipo!=='personal' ? `<div class="card"><label class="lbl">¿Ya tienes algo guardado aquí? (opcional)</label><input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0"></div>` : ''}
 ${m.tipo==='invertir' ? `<div class="card" id="fColocado" style="cursor:pointer;display:flex;align-items:center;gap:12px">
   <div style="width:22px;height:22px;border-radius:6px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:2px solid ${m.colocado?'var(--green)':'var(--line)'};background:${m.colocado?'var(--green)':'transparent'}">${m.colocado?'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--cream)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>':''}</div>
   <div style="flex:1;min-width:0">
@@ -2437,8 +2520,8 @@ ${editing?'<button class="btn danger" id="fDel">Eliminar</button>':''}`;
 
 function aporteFields(){
   const m=mForm;
-  return `<input class="sf" id="fPct" inputmode="numeric" value="${m.aportePct||''}" placeholder="0 %">
-    <div class="hint">Define qué porcentaje del ahorro mensual se destinará a esta meta.</div>`;
+  const v=m.aportePct?m.aportePct+' %':'';
+  return `<input class="sf pct" id="fPct" inputmode="numeric" value="${v}" placeholder="0 %">`;
 }
 function readMetaForm(){
   const m=mForm;
@@ -2453,6 +2536,10 @@ function readMetaForm(){
     if($('fGastoRef'))m.gastoRef=parse($('fGastoRef').value);
   }else{
     m.gastoRef=0; // gasto de referencia solo aplica a imprevistos
+  }
+  if(m.tipo==='invertir'){
+    // Inversión es destino abierto: sin objetivo en dinero ni fecha.
+    m.objetivo=0; m.fecha=null;
   }
   if(m.tipo!=='invertir'){
     m.colocado=false;
@@ -2493,7 +2580,7 @@ function updateDeriv(){
     }else if(obj){
       txt=`Meta de <b>${fmt(obj)}</b> sin aporte mensual definido. Se financiará mediante aportes manuales.`;
     }else{
-      txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
+      txt=''; // sin datos útiles: el recuadro se oculta (.deriv:empty)
     }
   } else {
     if(obj&&fecha){
@@ -2508,18 +2595,18 @@ function updateDeriv(){
     }else if(obj){
       txt=`Meta de <b>${fmt(obj)}</b> sin aporte definido: recibe lo que sobre del ahorro mensual.`;
     }else{
-      txt='Define un monto, un aporte (fijo y/o %) o ambos y te digo cuánto tardas.';
+      txt=''; // sin datos útiles: el recuadro se oculta (.deriv:empty)
     }
   }
   el.innerHTML=txt;
 }
 function attachMetaForm(editing){
-  $('fBack').onclick=()=>{mForm=null;go(1);};
-  $('rf').querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>{readMetaForm();mForm.tipo=b.dataset.tipo;renderMetaForm(editing);});
+  $('fBack').onclick=()=>closeMetaForm();
+  $('mfBody').querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>{readMetaForm();mForm.tipo=b.dataset.tipo;renderMetaForm(editing);});
 
   const visSeg = $('fVisibilidadSeg');
   if (visSeg) {
-    visSeg.querySelectorAll('.mode-card').forEach(card => {
+    visSeg.querySelectorAll('[data-vis]').forEach(card => {
       card.onclick = () => {
         readMetaForm();
         const vis = card.dataset.vis;
@@ -2587,7 +2674,7 @@ function attachMetaForm(editing){
         }
       }
     }
-    mForm=null;save();go(1);flash(editing?'Meta actualizada ✓':'Meta creada ✓');
+    save();closeMetaForm(()=>go(1));flash(editing?'Meta actualizada ✓':'Meta creada ✓');
   };
   const del=$('fDel');
   if(del)del.onclick=async()=>{
@@ -2602,7 +2689,7 @@ function attachMetaForm(editing){
     const gastosSnap=state.gastos.filter(g=>g.meta===metaSnap.id);
     state.gastos=state.gastos.filter(g=>g.meta!==metaSnap.id);
     state.metas=state.metas.filter(x=>x.id!==metaSnap.id);
-    mForm=null;save();go(1);
+    save();closeMetaForm(()=>go(1));
     flashUndo('Meta eliminada',()=>{
       // Restaura de forma idempotente (por si el sync ya la trajo de vuelta).
       if(!state.metas.some(x=>x.id===metaSnap.id))state.metas.push(metaSnap);
@@ -5168,8 +5255,8 @@ if (__inCapacitor) {
       if (obStep > 1) { obSaveStep(); obStep--; renderOb(); }
       return;
     }
-    if ($('sf') && $('sf').classList.contains('on')) {
-      mForm = null; go(1); return;
+    if ($('metaModal') && $('metaModal').classList.contains('open')) {
+      closeMetaForm(); return;
     }
     if ($('sd') && $('sd').classList.contains('on')) {
       go(1); return;
