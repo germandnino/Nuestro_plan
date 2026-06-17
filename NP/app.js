@@ -1508,7 +1508,6 @@ function renderInicio(){
     : `<header><div class="ey">${esc(c.nombreP1)} &amp; ${esc(c.nombreP2)}</div><h1>Nuestro plan</h1></header>`;
 
   // 1. Patrimonio Neto Card
-  const patColor = patrimonioNeto >= 0 ? 'var(--green)' : '#e06c75';
   // ¿Hay metas de ahorro creadas?
   const hayMetasAhorro = metasCompartidas().length > 0
     || metasIndividuales(perfil).length > 0;
