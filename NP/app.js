@@ -760,7 +760,9 @@ function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort
 function emergenciaPrincipal(){return emergencias()[0]||null;}
 // Inversión activa preferida; si no hay ninguna sin colocar, cae a la colocada como último
 // destino del sobrante (no perder la plata). Distribuir avisa cuando esto pasa.
-function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir'&&!m.colocado)||state.metas.find(m=>m.tipo==='invertir');}
+// Sumidero del sobrante: SOLO inversión abierta (no colocada). Una inversión fija (CDT) NO admite
+// aportes; si no hay abierta, el sobrante va a "sin asignar" (lo maneja colocarSobrante).
+function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir'&&!m.colocado)||null;}
 const BUCKETS=['imprevistos','sueno','invertir'];
 // Metas de un bucket en un scope (dueno=null → compartido) que admiten reparto (MOTOR: excluye fijas).
 function metasDeBucket(tipo,dueno){
