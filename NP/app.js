@@ -3838,8 +3838,10 @@ const LEARN_TOOLS = [
 ];
 
 function renderAprender(){
-  const cards = LEARN_TOOLS.filter(t => !t.pareja || state.config.modo === 'pareja').map(t => `
-    <button class="learn-tool-btn${t.wide?' wide':''}" data-tool="${esc(t.id)}" style="--tool-accent:${t.color}">
+  const visible = LEARN_TOOLS.filter(t => !t.pareja || state.config.modo === 'pareja');
+  const odd = visible.length % 2 === 1; // la ficha "wide" solo se ensancha si hay un slot impar que llenar
+  const cards = visible.map(t => `
+    <button class="learn-tool-btn${t.wide && odd ? ' wide' : ''}" data-tool="${esc(t.id)}" style="--tool-accent:${t.color}">
       <span class="learn-tool-ic">${getSVG(t.icon)}</span>
       <span class="learn-tool-txt">
         <span class="learn-tool-tt">${t.title}</span>
