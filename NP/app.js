@@ -1523,14 +1523,14 @@ function renderInicio(){
       </div>`;
   const patHtml = hayMetasAhorro
     ? `
-    <div class="card dark" style="border-left: 4px solid ${patColor};">
+    <div class="card dark">
       <div class="k">${esPareja ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
       <div class="num big" style="color:var(--cream);">${fmt(patrimonioNeto)}</div>
       ${desgloseHtml}
     </div>
   `
     : `
-    <div class="card dark" style="border-left: 4px solid var(--gold); text-align:center; padding:22px 18px;">
+    <div class="card dark" style="text-align:center; padding:22px 18px;">
       <div style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:12px;background:rgba(217,168,74,.12);margin:0 auto 12px;">${getSVG('target', '', 'width:24px;height:24px;color:var(--gb);')}</div>
       <div class="k" style="margin-bottom:4px;">${esPareja ? 'Su plan está listo para empezar' : 'Tu plan está listo para empezar'}</div>
       <div style="font-size:12.5px; color:rgba(246,241,230,.7); line-height:1.45; max-width:300px; margin:0 auto 14px;">Crea ${esPareja ? 'su' : 'tu'} primera meta y empieza a separar el ahorro. Aquí ${esPareja ? 'verán' : 'verás'} crecer ${esPareja ? 'sus' : 'tus'} ahorros e inversiones.</div>
@@ -3905,14 +3905,14 @@ function renderLearnInvertir(body){
   // --- Capa 1: El principio (escalera plazo -> instrumento, acordeón) ---
   // Cada peldaño revela los instrumentos reales de ESE plazo, condensados a 3 datos.
   const RUNGS = [
-    { plazo:'Corto', time:'menos de 6 meses', tipo:'Cuenta de alto rendimiento', tasa:'~13% E.A.', color:'#0f9b30', instr:[
+    { plazo:'Corto', time:'menos de 6 meses', tipo:'Cuenta de alto rendimiento', tasa:'~13% E.A.', color:'#0f8f2c', instr:[
       { nom:'Nu Cajitas', tag:'Alta liquidez', facts:['Rinde 13% E.A.','Disponible al instante, 24/7','Seguro Fogafín (hasta $50M)'] },
       { nom:'Lulo Cuenta', sub:'Lulo Bank', tag:'Alta liquidez', facts:['Hasta 13% E.A. en bolsillos','Retiro inmediato','Superfinanciera + Fogafín'] },
     ] },
-    { plazo:'Medio', time:'6 a 18 meses', tipo:'CDT (tasa fija)', tasa:'10–12% E.A.', color:'#a3741c', instr:[
+    { plazo:'Medio', time:'6 a 18 meses', tipo:'CDT (tasa fija)', tasa:'10–12% E.A.', color:'#c08a2d', instr:[
       { nom:'CDTs Digitales', sub:'Tuya, Bancolombia, MejorCDT', tag:'Plazo fijo', facts:['Rinde 10–12% E.A.','Bloqueado al plazo (90/180/360 días)','Tasa garantizada + Fogafín'] },
     ] },
-    { plazo:'Largo', time:'más de 18 meses', tipo:'ETFs / fondos', tasa:'8–10%+ histórico', color:'#2f78c2', instr:[
+    { plazo:'Largo', time:'más de 18 meses', tipo:'ETFs / fondos', tasa:'8–10%+ histórico', color:'#2f6fb0', instr:[
       { nom:'Tyba', sub:'Fondos colectivos y CDT', tag:'Híbrido', facts:['Rendimiento variable según riesgo','Retiros en 3–5 días hábiles','Riesgo medio · no garantizado'] },
       { nom:'trii', sub:'Acciones y ETFs globales', tag:'Renta variable', facts:['S&P 500 ~8–10% anual USD (histórico)','Vendes en días de mercado (3–4 días)','Fluctúa · riesgo medio-alto'] },
     ] },
@@ -3921,7 +3921,7 @@ function renderLearnInvertir(body){
     <div class="stitle" style="margin-top:4px;">El principio</div>
     <div class="hint" style="color:rgba(246,241,230,.7); margin-bottom:10px;">No es qué producto es "mejor", es cuál encaja con <strong style="color:var(--gb)">cuándo</strong> vas a necesitar la plata. Toca un plazo para ver con qué invertir:</div>
     ${RUNGS.map(r => `
-      <details class="learn-acc invest-rung" style="border-left:4px solid ${r.color}">
+      <details class="learn-acc invest-rung">
         <summary>
           <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
             <span style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14.5px;font-weight:800;color:var(--ink)">${r.plazo}</span><span style="font-size:11.5px;color:var(--gs)">${r.time}</span></span>
@@ -3933,7 +3933,7 @@ function renderLearnInvertir(body){
             <div style="${idx?'border-top:1px solid var(--line);margin-top:12px;padding-top:12px':''}">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${it.sub?'2px':'5px'}">
                 <b style="font-size:13.5px;color:var(--ink)">${it.nom}</b>
-                <span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${r.color};background:${r.color}1f;border-radius:100px;padding:3px 8px;white-space:nowrap">${it.tag}</span>
+                <span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gs);background:rgba(28,58,44,.07);border-radius:100px;padding:3px 8px;white-space:nowrap">${it.tag}</span>
               </div>
               ${it.sub?`<div style="font-size:11px;color:var(--gs);margin:0 0 6px">${it.sub}</div>`:''}
               ${it.facts.map(f => `<div style="font-size:12px;line-height:1.55;color:rgba(21,36,28,.82)">${f}</div>`).join('')}
