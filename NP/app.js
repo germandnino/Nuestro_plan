@@ -2351,7 +2351,7 @@ function openMetaForm(id, defaultTipo = 'sueno'){
     return;
   }
   const existing=id?metaById(id):null;
-  mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:metasCompartidas().length,reparto:null};
+  mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:metasCompartidas().length};
   ['s0','s1','s2','s3','s4','sd','sf','sh'].forEach(x=>$(x).classList.remove('on'));
   $('sf').classList.add('on');$('sf').scrollTop=0;
   $('mainnav').classList.add('hide');
@@ -2446,14 +2446,6 @@ function aporteFields(){
   const m=mForm;
   return `<input class="sf" id="fPct" inputmode="numeric" value="${m.aportePct||''}" placeholder="0 %">
     <div class="hint">Define qué porcentaje del ahorro mensual se destinará a esta meta.</div>`;
-}
-function repartoEditor(){
-  const r=(mForm.reparto||[]);
-  let h=r.map((x,i)=>`<div class="grow"><input data-rn="${i}" value="${(x.n||'').replace(/"/g,'&quot;')}" style="flex:1;font-family:var(--sans)"><input data-rp="${i}" inputmode="numeric" value="${x.pct}" style="width:56px;text-align:center"><button class="del" data-rdel="${i}">×</button></div>`).join('');
-  h+=`<button class="btn sm ghost" id="repAdd">+ Agregar categoría</button>`;
-  const sum=r.reduce((s,x)=>s+(+x.pct||0),0);
-  h+=`<div class="hint">Suma: ${sum}% ${sum!==100&&r.length?'· idealmente 100%':''}</div>`;
-  return h;
 }
 function readMetaForm(){
   const m=mForm;
@@ -4374,7 +4366,7 @@ function rerenderPlanKeepOpen(){renderPlan();}
 /* =========================================================
    ONBOARDING (bienvenida + 5 pasos)
    ========================================================= */
-let obStep=0,obMetaTipo='sueno',obReparto=[{n:'Renta variable',pct:50},{n:'Renta fija',pct:30},{n:'Reserva',pct:20}];
+let obStep=0,obMetaTipo='sueno';
 const OB_TOTAL=4;
 function startOnboarding(){
   if (currentUser) {
@@ -4935,8 +4927,7 @@ function obSaveStep(){
         aporteFijo:0,
         aportePct:0,
         fecha:null,
-        prioridad:prio,
-        reparto:null
+        prioridad:prio
       });
     }
   }
