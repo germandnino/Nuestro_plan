@@ -845,11 +845,6 @@ function colocarSobrante(rem, res){
   return { placements, rem };
 }
 
-/* Reparto del ahorro entre metas compartidas.
-   Orden: (1) prioritaria primero si es secuencial,
-          (2) prioritaria primero si es secuencial (recibe el remanente tras fijos),
-          (3) cada meta toma su % del resto (post-fijos y post-prioritaria),
-          (4) lo que sobre -> inversión abierta. */
 /* Reparto de dos niveles del ahorro compartido:
    nivel 1: el monto se parte entre los buckets presentes según pesosBuckets();
    nivel 2: dentro de cada bucket, repartirEnBucket() por aportePct;
@@ -914,8 +909,6 @@ function rebalancePct(eligible, editedId, newPct) {
   return target.id;
 }
 
-// Conjunto de metas que participan del reparto por % (mismo criterio que el motor).
-// Compartidas: en secuencial se exime la prioritaria (recibe el remanente). Individuales: las del perfil.
 // Metas que comparten bucket+scope con `meta` y reparten % entre sí (suma 100 por grupo).
 function eligiblesPct(meta){
   return metasElegiblesBucket(meta.tipo, meta.dueno || null);
@@ -1904,7 +1897,7 @@ function calcularTiempoRestante(m) {
   return Math.ceil(falta / aporteMes);
 }
 
-// Aporte mensual estimado a una meta según el ahorro distribuido por la estrategia actual.
+// Aporte mensual estimado a una meta según el reparto de dos niveles (propósito → meta).
 function aporteMensualEstimado(m){
   const est = Math.max(0, computeBase());
   const { dist } = distribuirAhorro(est);
@@ -2627,7 +2620,7 @@ function obtenerRecomendacionInversion(m) {
     const mr = horizonteMeses(m);
     let ideal = 'el instrumento que ya elegiste';
     if (mr !== null && mr > 0) ideal = mr < 6 ? 'una cuenta de alto rendimiento' : (mr <= 18 ? 'un CDT a término' : 'fondos o ETFs');
-    return `<strong>Dinero ya colocado:</strong> Registras esta meta solo para control, así que no te sugerimos moverla. Para su plazo lo habitual es <strong>${ideal}</strong>; si ya está ahí, perfecto — solo déjalo seguir su curso hasta que lo necesites.`;
+    return `<strong>Inversión fija (CDT / plazo fijo):</strong> No admite aportes y no recibe reparto; la registras para control. Para su plazo lo habitual es <strong>${ideal}</strong>; déjala seguir su curso hasta el vencimiento.`;
   }
   if (m.tipo === 'personal' || m.tipo === 'imprevistos') {
     return `<strong>Fondo de Emergencias / Corto Plazo:</strong> Para este tipo de fondos, la prioridad número uno es la <strong>liquidez y seguridad</strong>. Recomendamos usar <strong>Cajitas Nu</strong> (que ofrecen actualmente un 13% E.A. con disponibilidad 24/7) o la cuenta de ahorros de alto rendimiento de <strong>Lulo Bank</strong>.`;
@@ -2680,7 +2673,7 @@ function horizonteMeses(m){
 
 function clasificarHorizonte(m){
   if (m.colocado)
-    return {nivel:'colocado', etiqueta:'Ya colocado', instrumento:'Registrado para control', color:'var(--gs)'};
+    return {nivel:'colocado', etiqueta:'Fija (CDT)', instrumento:'No admite aportes', color:'var(--gs)'};
   if (m.tipo === 'imprevistos' || m.tipo === 'personal')
     return {nivel:'corto', etiqueta:'Liquidez', instrumento:'Cuenta alto rendimiento', color:'#14cb3c'};
   const mr = horizonteMeses(m);
