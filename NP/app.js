@@ -1174,7 +1174,7 @@ function drawSinAsignarCard(){
   if(!sp.length) return '';
   return `<div class="card" style="border:1px solid var(--gold);padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
     <div style="font-size:13px;display:flex;align-items:center;gap:7px;">${getSVG('alert','', 'width:15px;height:15px;color:var(--gold);flex-shrink:0')}<span><b style="color:var(--gold)">${fmt(totalSinAsignar())}</b> sin asignar${sp.length>1?` · ${sp.length} pendientes`:''}</span></div>
-    <button class="btn sm gold" data-asignarpend style="margin:0;flex-shrink:0;">Asignar</button>
+    <button class="btn sm gold" data-asignarpend style="margin:0;flex-shrink:0;width:auto;padding:8px 18px;">Asignar</button>
   </div>`;
 }
 // Flujo "Asignar" del primer sobrante pendiente (reusable, rerender en cualquier vista).
