@@ -263,6 +263,48 @@ function lanzarConfeti(){
   document.body.appendChild(cont);
   setTimeout(()=>cont.remove(), 2800);
 }
+/* ===== CDT / inversión fija vencida (Fase 3d) ===== */
+function resolverCDT(m){
+  if(!m.dueno && !canEditShared()){ flash('Solo un editor puede hacer esto'); return; }
+  let ov=$('cdt-overlay'); if(!ov){ov=document.createElement('div');ov.id='cdt-overlay';ov.className='modal-overlay';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="modal-card animate-in" style="max-width:340px">
+    <h3 class="modal-title">CDT vencido</h3>
+    <p style="font-size:15px;font-weight:700;color:var(--green);margin:0 0 4px">${esc(m.nombre)}</p>
+    <p class="modal-msg" style="margin-bottom:16px">Venció con <b>${fmt(m.saldo)}</b>. ¿Qué quieres hacer?</p>
+    <div class="modal-actions" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn ghost" id="cdtLiberar" style="margin:0">Liberar dinero</button>
+      <button class="btn" id="cdtRenovar" style="margin:0">Renovar</button>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  const close=()=>{ov.style.display='none';ov.innerHTML='';};
+  $('cdtLiberar').onclick=()=>{ close(); liberarCDT(m); };
+  $('cdtRenovar').onclick=()=>{ close(); renovarCDT(m); };
+}
+// Liberar: el dinero del CDT sale a "sin asignar" (sumidero visible); el CDT se cierra.
+function liberarCDT(m){
+  const snap=JSON.parse(JSON.stringify(m));
+  const monto=m.saldo;
+  state.metas=state.metas.filter(x=>x.id!==m.id);
+  const ing=registrarSobrantePendiente(monto, m.nombre);
+  save(); rerender();
+  flashUndo('CDT liberado → sin asignar ✓', ()=>{
+    state.ingresos=state.ingresos.filter(i=>i.id!==ing.id);
+    if(!state.metas.some(x=>x.id===snap.id)) state.metas.push(snap);
+    save(); rerender();
+  });
+}
+// Renovar: nueva fecha de vencimiento + ajuste opcional del monto (intereses ganados).
+async function renovarCDT(m){
+  const nueva=await showCustomMonthPicker(m.vencimiento||curMonth(), false);
+  if(nueva===null) return;
+  const txt=await customPrompt(`Tu CDT está en ${fmt(m.saldo)}. Si renovó con intereses, escribe el nuevo monto; si no, déjalo igual:`, fmt(m.saldo));
+  if(txt!==null){ const v=parse(txt); if(v>0) m.saldo=v; }
+  m.vencimiento=nueva;
+  save(); rerender();
+  flash('CDT renovado ✓');
+}
+
 /* ===== Hitos perpetuos de inversión (Fase 3c) =====
    La inversión nunca se "completa": celebra crecimiento. Escalera 1·2·5 ×10^n. */
 function hitosInversionLadder(){
@@ -1113,7 +1155,9 @@ function aplicarDecisionSobrante(dec, monto){
 
 // Sobrantes sin asignar viven en state.ingresos con flag sinAsignar (persisten y sincronizan).
 function registrarSobrantePendiente(monto, origenNombre){
-  state.ingresos.unshift({id:uid(),mes:selectedMonth||curMonth(),nombre:'Sobrante de '+origenNombre,monto:monto,meta:'sinAsignar',sinAsignar:true,persona:state.config.perfil});
+  const ing={id:uid(),mes:selectedMonth||curMonth(),nombre:'Sobrante de '+origenNombre,monto:monto,meta:'sinAsignar',sinAsignar:true,persona:state.config.perfil};
+  state.ingresos.unshift(ing);
+  return ing;
 }
 function sobrantesPendientes(){return state.ingresos.filter(i=>i.sinAsignar);}
 
@@ -1948,12 +1992,20 @@ function renderMetas(){
       }
       const generico = `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
       let sub;
+      const cdtVencido = m.tipo==='invertir' && m.colocado && m.vencimiento && m.vencimiento<=curMonth();
       if(m.tipo==='invertir'){
-        const {alcanzado, siguiente} = hitoInversion(m.saldo);
-        const h = !alcanzado
-          ? `primer hito ${fmtK(siguiente)}`
-          : `hito ${fmtK(alcanzado)}${siguiente?` → ${fmtK(siguiente)}`:''}`;
-        sub = `↗ ${fmt(m.saldo)} · ${h}`;
+        if(m.colocado){
+          // Inversión fija (CDT): no crece por aportes; muestra estado fija/vencida.
+          if(cdtVencido) sub = `${fmt(m.saldo)} · <b style="color:var(--gold)">Vencida · acción pendiente</b>`;
+          else if(m.vencimiento) sub = `${fmt(m.saldo)} · Fija · vence ${fmtMes(m.vencimiento)}`;
+          else sub = `${fmt(m.saldo)} · Fija`;
+        } else {
+          const {alcanzado, siguiente} = hitoInversion(m.saldo);
+          const h = !alcanzado
+            ? `primer hito ${fmtK(siguiente)}`
+            : `hito ${fmtK(alcanzado)}${siguiente?` → ${fmtK(siguiente)}`:''}`;
+          sub = `↗ ${fmt(m.saldo)} · ${h}`;
+        }
       } else if(m.tipo==='imprevistos'){
         // Estado terminal propio: "Protegido" (revolvente, no se "completa"). Unidad: meses de respaldo si hay gasto de referencia.
         const lleno = obj>0 && m.saldo>=obj;
@@ -1978,6 +2030,8 @@ function renderMetas(){
       const puedeConsumir = m.dueno ? true : canEdit;
       const consumirBtn = (suenoCumplido && puedeConsumir)
         ? `<button class="metacard-consumir" data-consumir="${m.id}">Gastar y guardar</button>` : '';
+      const resolverBtn = (cdtVencido && (m.dueno?true:canEdit))
+        ? `<button class="metacard-consumir" data-resolvercdt="${m.id}">Resolver</button>` : '';
       const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
@@ -1987,7 +2041,7 @@ function renderMetas(){
             <div class="metacard-title"><span class="metacard-name">${m.nombre}</span>${typePill}</div>
             <div class="metacard-sub">${sub}</div>
           </div>
-          ${suenoCumplido ? consumirBtn : `${pctBadge}${editBtn}`}
+          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : `${pctBadge}${editBtn}`)}
         </div>
       </div>`;
     };
@@ -2122,6 +2176,14 @@ function renderMetas(){
       e.stopPropagation();
       const m = metaById(btn.dataset.consumir);
       if (m) consumirSueno(m);
+    };
+  });
+
+  $('r1').querySelectorAll('[data-resolvercdt]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const m = metaById(btn.dataset.resolvercdt);
+      if (m) resolverCDT(m);
     };
   });
 
