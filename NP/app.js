@@ -4490,8 +4490,8 @@ function renderLearnInflacion(body){
 }
 
 // --- Herramienta: Aporte en pareja (id aporte, SOLO modo pareja) ---
-// Conversación neutral: muestra 3 formas de repartir el gasto compartido, sin
-// favorita y sin guardar nada. Opera solo sobre gastos+planPareja.
+// Conversación neutral: muestra 3 formas de repartir cuánto pone cada uno al
+// ahorro comunitario del mes, sin favorita y sin guardar nada.
 function renderLearnAporte(body){
   const c = state.config;
   if (c.modo !== 'pareja'){
@@ -4506,10 +4506,10 @@ function renderLearnAporte(body){
   const n1 = c.nombreP1 || 'Persona 1', n2 = c.nombreP2 || 'Persona 2';
 
   const S = {
-    total: (gastosFijosTotal() + (c.planPareja||0)) || 2000000,
+    total: Math.max(0, Math.round(computeBase())) || 1000000,  // ahorro en pareja al mes
     ing1:  c.nominaP1 || 0,
     ing2:  c.nominaP2 || 0,
-    custP1: 50   // % del gasto compartido que pone P1 en el modo a medida
+    custP1: 50   // % del ahorro en pareja que pone P1 en el modo a medida
   };
 
   const numField = (id, val, ph) =>
@@ -4519,13 +4519,13 @@ function renderLearnAporte(body){
     <header style="padding-top:8px">
       <div class="ey">Educación financiera</div>
       <h1 style="margin:2px 0 0">Aporte en pareja</h1>
-      <p style="color:rgba(246,241,230,.65);font-size:13px;line-height:1.45;margin:6px 0 0">No hay una forma "correcta". Aquí están las tres más comunes para que ustedes conversen y decidan. Esto no toca su plan ni su dinero libre.</p>
+      <p style="color:rgba(246,241,230,.65);font-size:13px;line-height:1.45;margin:6px 0 0">Cuánto pone cada uno al ahorro que construyen juntos. No hay una forma "correcta": aquí están las tres más comunes para que conversen y decidan. Es solo una conversación, no cambia su plan ni sus aportes reales.</p>
     </header>
 
     <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12);margin-top:14px">
       <div class="learn-field">
         <div class="learn-field-top">
-          <span class="learn-field-lbl">Aporte total del mes</span>
+          <span class="learn-field-lbl">Ahorro en pareja al mes</span>
           <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="apTotalVal" value="${formatInt(S.total)}"></span>
         </div>
         <input type="range" class="learn-slider" id="apTotal" min="0" max="${POS}" step="1" value="${posFromMonto(S.total)}">
@@ -4542,7 +4542,7 @@ function renderLearnAporte(body){
       </div>
     </div>
 
-    <div class="hint" style="color:rgba(246,241,230,.6);margin:2px 0 0">Lo que suman los gastos que comparten (hogar, plan en pareja). Abajo, tres formas de repartir ese aporte entre los dos.</div>
+    <div class="hint" style="color:rgba(246,241,230,.6);margin:2px 0 0">Lo que quieren guardar juntos cada mes para sus metas en pareja. Abajo, tres formas de repartir ese aporte entre los dos.</div>
     <div class="stitle" style="margin-top:14px">Tres formas de repartir el aporte</div>
 
     <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
