@@ -4344,9 +4344,9 @@ function renderLearnSimulador(body){
   function paint(){
     const m = S.monto, years = S.years, annual = S.rate;
     const n = years * 12;
-    const r = Math.pow(1 + annual, 1/12) - 1;
+    const r = tasaMensual(annual);
     const aportado = m * n;
-    const invertido = r === 0 ? aportado : m * ((Math.pow(1+r,n) - 1) / r);
+    const invertido = proyectarFuturo(0, m, 0, annual, n);
     const ganado = invertido - aportado;
     const mult = aportado > 0 ? invertido / aportado : 1;
 
