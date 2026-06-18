@@ -4252,12 +4252,50 @@ function renderLearnAhorro(body){
 }
 
 // --- Herramienta: Simulador de inversión (monto/mes + años + instrumento) ---
+let _simModo = null;        // 'metas' | 'libre' (null = decidir por metas elegibles)
+let _simMetaId = null;      // meta seleccionada en modo "Mis metas"
 const LEARN_INSTR = {
   cdt: { label:'CDT',        rate:0.11, note:'~11% E.A. en pesos · riesgo bajo · plazo fijo.' },
   sp:  { label:'S&P 500',    rate:0.09, note:'~9% anual histórico en dólares · riesgo medio-alto · largo plazo.' },
   mix: { label:'Mixto 50/50',rate:0.10, note:'Mitad CDT, mitad S&P 500 · ~10% · equilibrio riesgo/retorno.' },
 };
 function renderLearnSimulador(body){
+  const elegibles = metasSimulables();
+  if (_simModo === null) _simModo = elegibles.length > 0 ? 'metas' : 'libre';
+  if (_simModo === 'metas' && elegibles.length === 0) _simModo = 'libre';
+
+  const segHtml = [
+    ['metas','Mis metas'],
+    ['libre','Libre'],
+  ].map(([k,l]) => `<button type="button" data-simmodo="${k}" class="${k===_simModo?'on':''}"${k==='metas'&&elegibles.length===0?' disabled style="opacity:.4"':''}>${l}</button>`).join('');
+
+  body.innerHTML = `
+    <header style="padding-top:8px">
+      <div class="ey">Educación financiera</div>
+      <h1 style="margin:2px 0 0">Simulador de inversión</h1>
+    </header>
+    <div class="seg dark-seg" id="simModoSeg" style="margin-top:14px">${segHtml}</div>
+    <div id="simBody"></div>
+  `;
+
+  const host = body.querySelector('#simBody');
+  if (_simModo === 'metas') renderSimMetas(host); else renderSimLibre(host);
+
+  body.querySelectorAll('#simModoSeg [data-simmodo]').forEach(b => {
+    b.onclick = () => {
+      if (b.disabled) return;
+      _simModo = b.dataset.simmodo;
+      renderLearnSimulador(body);
+    };
+  });
+}
+
+// Placeholder: se completa en la Task 5.
+function renderSimMetas(body){
+  body.innerHTML = `<div class="card" style="margin-top:14px;background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)"><div class="empty" style="color:rgba(246,241,230,.7)">Modo "Mis metas" en construcción.</div></div>`;
+}
+
+function renderSimLibre(body){
   const c = state.config;
   const SNAP = 10000, POS = 1000, P = 3;
 
@@ -4290,11 +4328,6 @@ function renderLearnSimulador(body){
     `<button type="button" data-instr="${k}" class="${k===S.instr?'on':''}">${v.label}</button>`).join('');
 
   body.innerHTML = `
-    <header style="padding-top:8px">
-      <div class="ey">Educación financiera</div>
-      <h1 style="margin:2px 0 0">Simulador de inversión</h1>
-    </header>
-
     <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12);margin-top:14px">
       <div class="learn-field" style="margin-bottom:0">
         <div class="learn-field-top">
