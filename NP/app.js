@@ -2975,6 +2975,29 @@ function clasificarHorizonte(m){
   return               {nivel:'largo', etiqueta:'Largo', instrumento:'ETFs / fondos',            color:'#4a90e2'};
 }
 
+// Metas que el Simulador "Mis metas" puede simular: excluye sistema, inversiones fijas
+// (colocadas), sueños ya cumplidos y metas privadas de otro perfil.
+function metasSimulables(){
+  const perfil = state.config.perfil;
+  return state.metas.filter(m => {
+    if (m.tipo === 'personal') return false;
+    if (m.colocado) return false;
+    if (m.dueno && m.dueno !== perfil) return false;
+    if (m.tipo === 'sueno' && m.objetivo > 0 && m.saldo >= m.objetivo) return false;
+    return true;
+  });
+}
+
+// Tasa EA presembrada según el plazo de la meta (clasificarHorizonte).
+// corto/liquidez ~13% (cajita Nu / alto rendimiento), medio ~11% (CDT), largo ~10% (fondos).
+function tasaSugeridaMeta(m){
+  const nivel = clasificarHorizonte(m).nivel;
+  if (nivel === 'corto')  return 0.13;
+  if (nivel === 'medio')  return 0.11;
+  if (nivel === 'largo')  return 0.10;
+  return 0.11; // flexible u otros
+}
+
 function obtenerRecomendacionInversionCard(m) {
   const text = obtenerRecomendacionInversion(m);
   return `
