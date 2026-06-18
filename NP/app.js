@@ -4362,6 +4362,8 @@ function renderSimMetas(body){
     </div>
 
     <div class="card" id="smResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);padding:16px"></div>
+
+    <button type="button" class="btn ghost" id="smIrDist" style="margin-top:8px">Para llegar aún antes, sube el % de esta meta en tu reparto →</button>
   `;
 
   const $$ = id => body.querySelector('#'+id);
@@ -4429,6 +4431,7 @@ function renderSimMetas(body){
     paint();
   });
   $$('smMeta').addEventListener('change', e => { _simMetaId = e.target.value; renderSimMetas(body); });
+  if ($$('smIrDist')) $$('smIrDist').onclick = () => { curMetasSubTab = 1; go(1); };
 
   paint();
 }
