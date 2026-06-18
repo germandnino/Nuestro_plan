@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.31'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.32'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -4362,8 +4362,6 @@ function renderSimMetas(body){
     </div>
 
     <div class="card" id="smResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);padding:16px"></div>
-
-    <button type="button" class="btn ghost" id="smIrDist" style="margin-top:8px">Para llegar aún antes, sube el % de esta meta en tu reparto →</button>
   `;
 
   const $$ = id => body.querySelector('#'+id);
@@ -4445,7 +4443,6 @@ function renderSimMetas(body){
     paint();
   });
   $$('smMeta').addEventListener('change', e => { _simMetaId = e.target.value; renderSimMetas(body); });
-  if ($$('smIrDist')) $$('smIrDist').onclick = () => { curMetasSubTab = 1; go(1); };
 
   paint();
 }
