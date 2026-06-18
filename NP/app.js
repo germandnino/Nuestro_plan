@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.33'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.34'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -2195,12 +2195,17 @@ function renderMetas(){
       const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
-      const pctBadge = (canEdit && !isPersonal)
-        ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
+      // El % dentro del bucket solo tiene sentido con 2+ metas del mismo tipo; con una sola
+      // recibe el 100% y mostrarlo confunde.
+      const variasEnBucket = metasDeBucket(m.tipo, m.dueno||null).length > 1;
+      const pctBadge = (!isPersonal && variasEnBucket)
+        ? (canEdit
+            ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
              <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}">
              <span class="pct-sign">%</span>
            </div>`
-        : (!isPersonal ? `<span class="pill${flashCls}">${m.aportePct||0}%</span>` : '');
+            : `<span class="pill${flashCls}">${m.aportePct||0}%</span>`)
+        : '';
       // ETA útil (sueño/colchón con objetivo y aún no lleno).
       let eta='';
       if(m.tipo!=='invertir' && obj && m.saldo<obj){
@@ -2653,8 +2658,10 @@ function renderMetaForm(editing){
 
   // Columnas reutilizables (2-col).
   const saldoCol=`<div><label class="lbl">Ya guardado (opc.)</label><input class="amt money" id="fSaldo" inputmode="numeric" value="${m.saldo?fmt(m.saldo):''}" placeholder="$0"></div>`;
-  const pctCol=`<div><label class="lbl">Aporte mes (%)</label>${aporteFields()}</div>`;
-  const pctHint=`<div class="hint">El % del ahorro mensual decide cuánto recibe esta meta.</div>`;
+  // El % dentro del bucket solo aplica si ya hay otra meta del mismo tipo con la cual repartir.
+  const hayHermana = metasDeBucket(m.tipo, m.dueno||null).filter(x=>x.id!==m.id).length >= 1;
+  const pctCol=hayHermana?`<div><label class="lbl">Aporte mes (%)</label>${aporteFields()}</div>`:'';
+  const pctHint=hayHermana?`<div class="hint">El % del ahorro mensual decide cuánto recibe esta meta frente a las otras del mismo tipo.</div>`:'';
 
   let fields='';
   if(m.tipo==='imprevistos'){
@@ -2722,8 +2729,11 @@ ${editing?'<button class="btn danger" id="fDel">Eliminar</button>':''}`;
 
 function aporteFields(){
   const m=mForm;
-  const v=m.aportePct?m.aportePct+' %':'';
-  return `<input class="sf pct" id="fPct" inputmode="numeric" value="${v}" placeholder="0 %">`;
+  const val=Math.max(0,Math.min(100,m.aportePct||0));
+  return `<div class="pct-slider-row">
+    <input type="range" class="pct-slider" id="fPct" min="0" max="100" step="1" value="${val}" style="background-size:${val}% 100%">
+    <output id="fPctOut" class="pct-slider-out">${val}%</output>
+  </div>`;
 }
 function readMetaForm(){
   const m=mForm;
@@ -2835,6 +2845,7 @@ function attachMetaForm(editing){
   }
 
   ['fObj','fPct','fSaldo'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',updateDeriv);});
+  { const sl=$('fPct'), out=$('fPctOut'); if(sl&&out) sl.addEventListener('input',()=>{ out.textContent=`${sl.value}%`; sl.style.backgroundSize=`${sl.value}% 100%`; }); }
   const fTrigger = $('fFechaTrigger');
   if(fTrigger) {
     fTrigger.onclick = async () => {
