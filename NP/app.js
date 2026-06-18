@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.32'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.33'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -2192,6 +2192,7 @@ function renderMetas(){
     const card=(m)=>{
       const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
+      const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
       const pctBadge = (canEdit && !isPersonal)
@@ -2250,6 +2251,7 @@ function renderMetas(){
         ? `<button class="metacard-consumir" data-resolvercdt="${m.id}">Resolver</button>` : '';
       const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
       return `<div class="card metacard" data-mid="${m.id}">
+        ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
           ${dragHandle}
           <div class="metacard-main">
