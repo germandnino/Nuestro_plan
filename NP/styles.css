@@ -731,13 +731,25 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 
 
 /* ---- Fase 2.1: barra de propósitos compacta ---- */
-.bucketgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.bucketcell{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;background:var(--gd);border:1px solid rgba(246,241,230,.10);border-radius:12px;padding:9px 6px}
-.bucketcell.full{opacity:.45}
-.bucketcell-lbl{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:rgba(246,241,230,.75);white-space:nowrap}
-.bucketcell .inline-pct-container{background:transparent;border:none;padding:0;min-height:auto;gap:0}
-.bucketcell .inline-pct-input{width:auto;min-width:16px;text-align:center;color:var(--cream);font-size:19px;font-weight:800}
-.bucketcell .pct-sign{color:var(--cream);font-size:12px;font-weight:700}
+/* Reparto por propósito (nivel 1): barra segmentada + sliders */
+.bucketbar-seg{display:flex;gap:4px;height:9px;margin-bottom:8px}
+.bucketbar-seg .bseg{height:100%;border-radius:100px;min-width:3px;transition:width .15s ease}
+.bucketbar-suma{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:#5aa67e;margin-bottom:16px}
+.bucketbar-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:9px}
+.bucketbar-legend .blgnd{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:rgba(246,241,230,.78);white-space:nowrap}
+.bucketbar-legend .blgnd i{width:8px;height:8px;border-radius:50%;flex:none}
+.bucketsliders{display:flex;flex-direction:column;gap:18px}
+.bslider-row.full{opacity:.45}
+.bslider-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;gap:8px}
+.bslider-lbl{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:700;color:var(--cream)}
+.bslider-vals{display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap}
+.bslider-pct{font-family:var(--serif);font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.bslider-amt{font-size:12px;font-weight:600;color:rgba(246,241,230,.55);font-variant-numeric:tabular-nums}
+input.bucket-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:100px;background:rgba(246,241,230,.14);outline:none;margin:0;cursor:pointer;background-image:linear-gradient(var(--acc),var(--acc));background-repeat:no-repeat}
+input.bucket-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--cream);border:3px solid var(--acc);box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer}
+input.bucket-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--cream);border:3px solid var(--acc);box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:pointer}
+input.bucket-slider:disabled{opacity:.5;cursor:default}
+input.bucket-slider:disabled::-webkit-slider-thumb{cursor:default}
 
 /* ---- Fase 2.1: acordeón de secciones de propósito ---- */
 .seccion-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:none;border:none;padding:14px 2px 6px;margin:0;cursor:pointer;text-align:left}
@@ -749,7 +761,7 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 
 /* ---- Fase 2.1: tarjeta de meta compacta con progreso de fondo ---- */
 .metacard{position:relative;overflow:hidden;padding:0;cursor:default}
-.card-fill{position:absolute;top:0;bottom:0;left:0;background:rgba(192,138,45,.15);pointer-events:none;transition:width .3s ease;z-index:0}
+.plazo-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
 .metacard-row{position:relative;z-index:1;display:flex;align-items:center;gap:8px;padding:11px 12px}
 .metacard-main{flex:1;min-width:0}
 .metacard-title{display:flex;align-items:center;gap:8px}
@@ -757,7 +769,7 @@ textarea.bktx{width:100%;height:80px;font-family:monospace;font-size:11px;backgr
 .metacard-sub{font-size:11.5px;color:var(--gs);margin-top:2px}
 .metacard-edit{background:none;border:none;color:var(--gs);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;opacity:.55;flex-shrink:0;transition:color .2s,opacity .2s}
 .metacard-edit:hover{opacity:1;color:var(--gold)}
-.metacard .inline-pct-container{background:rgba(192,138,45,.10);border:1px solid rgba(192,138,45,.30);color:var(--gold);font-weight:800;padding:4px 9px;min-height:28px;flex-shrink:0}
+.metacard .inline-pct-container{background:rgba(28,58,44,.08);border:1px solid rgba(28,58,44,.22);color:var(--green);font-weight:800;padding:4px 9px;min-height:28px;flex-shrink:0}
 /* Confeti celebración de sueño cumplido (Fase 3b) */
 .confeti-cont{position:fixed;inset:0;pointer-events:none;z-index:500;overflow:hidden}
 .confeti{position:absolute;top:-14px;width:9px;height:14px;border-radius:2px;opacity:.95;animation:confeti-fall 2.6s cubic-bezier(.3,.6,.5,1) forwards}

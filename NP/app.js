@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.28'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.29'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -83,7 +83,8 @@ function getSVG(name, cls='', style='') {
     info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
     edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>',
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
-    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>'
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
+    check: '<polyline points="20 6 9 17 4 12"></polyline>'
   };
   const path = icons[name] || '';
   const cAttr = cls ? ` class="${cls}"` : '';
@@ -1719,26 +1720,42 @@ function drawBucketBar(dueno){
   });
   const resumenText = resumenParts.length > 0 ? resumenParts.join(' · ') : 'Sin asignar';
 
-  const cells = todos.map(t=>{
+  // Colores por propósito (barra + slider): teal colchón, oro sueños, verde inversión.
+  const col = { imprevistos:'#3f8a8a', sueno:'var(--gb)', invertir:'#5aa67e' };
+  // Base para proyectar el monto en $ por propósito (ahorro del mes actual). Si 0, solo %.
+  const base = (typeof ahorroMesUI==='function') ? ahorroMesUI(curMonth()) : 0;
+
+  // Barra segmentada proporcional: los propósitos llenos quedan en 0% → no ocupan ancho.
+  const segs = todos.filter(t=>(cfg[t]||0)>0).map(t=>
+    `<span class="bseg" data-seg="${t}" style="width:${cfg[t]||0}%;background:${col[t]}"></span>`
+  ).join('');
+
+  const rows = todos.map(t=>{
     const full = !editables.includes(t);
-    return `<div class="bucketcell${full?' full':''}">
-      <span class="bucketcell-lbl">${getSVG(meta[t].ic,'', 'width:13px;height:13px;opacity:.8;')} ${meta[t].lbl}</span>
-      <div class="inline-pct-container" title="${full?'Propósito lleno: no recibe ahorro hasta que agregues una meta con cupo':'% del ahorro a este propósito'}">
-        <input type="number" class="inline-pct-input" min="0" max="100" value="${cfg[t]||0}" data-bucket="${t}"${full?' disabled':''} aria-label="Porcentaje para ${meta[t].lbl}">
-        <span class="pct-sign">%</span>
+    const val = cfg[t]||0;
+    const amt = base>0 ? `<span class="bslider-amt" data-amt="${t}">${fmt(Math.round(base*val/100))}</span>` : '';
+    return `<div class="bslider-row${full?' full':''}" data-row="${t}"${full?' title="Propósito lleno: no recibe ahorro hasta que agregues una meta con cupo"':''}>
+      <div class="bslider-head">
+        <span class="bslider-lbl">${getSVG(meta[t].ic,'', 'width:14px;height:14px;opacity:.85;')} ${meta[t].lbl}</span>
+        <span class="bslider-vals"><span class="bslider-pct" data-pct="${t}" style="color:${col[t]}">${val}%</span>${amt}</span>
       </div>
+      <input type="range" class="bucket-slider" data-bucket="${t}" min="0" max="100" step="1" value="${val}"${full?' disabled':''} style="--acc:${col[t]};background-size:${val}% 100%" aria-label="Porcentaje para ${meta[t].lbl}">
     </div>`;
   }).join('');
   if (_distribucionCollapsed) {
+    const legend = todos.filter(t=>(cfg[t]||0)>0).map(t=>
+      `<span class="blgnd"><i style="background:${col[t]}"></i>${meta[t].lbl} ${cfg[t]||0}%</span>`
+    ).join('');
     return `
-      <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:10px 14px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; transition: background 0.2s;">
-        <div style="display:flex; align-items:center; gap:8px; flex-grow:1; min-width:0;">
-          <span style="font-family:var(--serif); font-size:13.5px; font-weight:700; color:var(--gb); white-space:nowrap;">Reparto:</span>
-          <span style="font-family:var(--serif); font-size:14px; font-weight:500; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${resumenText}</span>
+      <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:11px 14px; cursor:pointer; transition: background 0.2s;">
+        <div class="k" style="margin-bottom:7px;">Distribución del ahorro</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="bucketbar-seg" style="flex-grow:1; margin-bottom:0;">${segs}</div>
+          <div style="color:var(--cream); display:flex; align-items:center;">
+            ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}
+          </div>
         </div>
-        <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
-          ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}
-        </div>
+        <div class="bucketbar-legend">${legend || '<span class="blgnd" style="opacity:.6">Sin asignar</span>'}</div>
       </div>
     `;
   }
@@ -1751,7 +1768,9 @@ function drawBucketBar(dueno){
           ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7; transform: rotate(180deg);')}
         </div>
       </div>
-      <div class="bucketgrid">${cells}</div>
+      <div class="bucketbar-seg">${segs}</div>
+      <div class="bucketbar-suma">${getSVG('check','','width:13px;height:13px;')} Suma 100%</div>
+      <div class="bucketsliders">${rows}</div>
     </div>
   `;
 }
@@ -2135,7 +2154,6 @@ function renderMetas(){
     const card=(m)=>{
       const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
-      const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
       const pctBadge = (canEdit && !isPersonal)
@@ -2194,7 +2212,6 @@ function renderMetas(){
         ? `<button class="metacard-consumir" data-resolvercdt="${m.id}">Resolver</button>` : '';
       const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
       return `<div class="card metacard" data-mid="${m.id}">
-        ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
           ${dragHandle}
           <div class="metacard-main">
@@ -2385,36 +2402,52 @@ function renderMetas(){
     };
   });
 
-  document.querySelectorAll('.inline-pct-input[data-bucket]').forEach(inp=>{
-    inp.onclick = (e) => {
-      e.stopPropagation();
+  // Sliders de reparto por propósito (nivel 1). Aplica el % editado y deja que UN
+  // amortiguador absorba la diferencia, manteniendo la suma en 100. Devuelve la lista
+  // de propósitos editables (para refrescar la UI en vivo durante el arrastre).
+  const applyBucketEdit = (t, v) => {
+    const dueno = (state.config.modo==='individual') ? state.config.perfil : null;
+    const pres = bucketsPresentes(dueno); // normaliza solo entre los editables (con cupo)
+    if(!pres.includes(t)) return null;     // propósito lleno: no editable
+    const cfg = state.config.buckets || (state.config.buckets={});
+    v = Math.max(0, Math.min(100, v|0));
+    // Memoria: marca t como el más recién editado.
+    _bucketEditOrder = _bucketEditOrder.filter(x=>x!==t); _bucketEditOrder.push(t);
+    const otros = pres.filter(x=>x!==t);
+    if(otros.length===0){ cfg[t]=100; }
+    else {
+      // Solo UN amortiguador absorbe el cambio: el editado hace más tiempo (o nunca).
+      // Desempate entre no-editados: el último en el orden de la barra.
+      const orden = BUCKETS.filter(x=>otros.includes(x)); // orden visual de la barra
+      const rank = x => { const i=_bucketEditOrder.indexOf(x); return i<0?-1:i; };
+      const absorber = orden.slice().sort((a,b)=> (rank(a)-rank(b)) || (orden.indexOf(b)-orden.indexOf(a)) )[0];
+      const fijos = otros.filter(x=>x!==absorber);
+      const sumFijos = fijos.reduce((s,x)=>s+(cfg[x]||0),0);
+      const maxEdit = Math.max(0, 100 - sumFijos); // t no puede pasar de lo que deja libre lo fijo
+      cfg[t] = Math.min(v, maxEdit);
+      cfg[absorber] = Math.max(0, 100 - sumFijos - cfg[t]);
+    }
+    return pres;
+  };
+  // Refresca en vivo (sin rerender) % , monto, ancho de la barra y el slider amortiguado.
+  const baseAhorroSlider = (typeof ahorroMesUI==='function') ? ahorroMesUI(curMonth()) : 0;
+  const refreshBucketUI = (root) => {
+    const cfg = state.config.buckets || {};
+    root.querySelectorAll('.bucket-slider[data-bucket]').forEach(s=>{
+      const t = s.dataset.bucket, val = cfg[t]||0;
+      if(parseInt(s.value)!==val) s.value = val;
+      s.style.backgroundSize = `${val}% 100%`;
+      const pctEl = root.querySelector(`.bslider-pct[data-pct="${t}"]`); if(pctEl) pctEl.textContent = `${val}%`;
+      const amtEl = root.querySelector(`.bslider-amt[data-amt="${t}"]`); if(amtEl && baseAhorroSlider>0) amtEl.textContent = fmt(Math.round(baseAhorroSlider*val/100));
+      const segEl = root.querySelector(`.bseg[data-seg="${t}"]`); if(segEl) segEl.style.width = `${val}%`;
+    });
+  };
+  $('r1').querySelectorAll('.bucket-slider[data-bucket]').forEach(sl=>{
+    sl.onclick = (e) => { e.stopPropagation(); };
+    sl.oninput = () => {
+      if(applyBucketEdit(sl.dataset.bucket, parseInt(sl.value)||0)) refreshBucketUI($('r1'));
     };
-    inp.onchange = () => {
-      const t = inp.dataset.bucket;
-      let v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
-      const dueno = (state.config.modo==='individual') ? state.config.perfil : null;
-      const pres = bucketsPresentes(dueno); // normaliza solo entre los editables (con cupo)
-      if(!pres.includes(t)) return;          // propósito lleno: no editable
-      const cfg = state.config.buckets || (state.config.buckets={});
-      // Memoria: marca t como el más recién editado.
-      _bucketEditOrder = _bucketEditOrder.filter(x=>x!==t); _bucketEditOrder.push(t);
-      const otros = pres.filter(x=>x!==t);
-      if(otros.length===0){ cfg[t]=100; }
-      else {
-        // Solo UN amortiguador absorbe el cambio: el editado hace más tiempo (o nunca).
-        // Desempate entre no-editados: el último en el orden de la barra.
-        const orden = BUCKETS.filter(x=>otros.includes(x)); // orden visual de la barra
-        const rank = x => { const i=_bucketEditOrder.indexOf(x); return i<0?-1:i; };
-        const absorber = orden.slice().sort((a,b)=> (rank(a)-rank(b)) || (orden.indexOf(b)-orden.indexOf(a)) )[0];
-        const fijos = otros.filter(x=>x!==absorber);
-        const sumFijos = fijos.reduce((s,x)=>s+(cfg[x]||0),0);
-        const maxEdit = Math.max(0, 100 - sumFijos); // t no puede pasar de lo que deja libre lo fijo
-        cfg[t] = Math.min(v, maxEdit);
-        cfg[absorber] = Math.max(0, 100 - sumFijos - cfg[t]);
-      }
-      save();
-      rerender();
-    };
+    sl.onchange = () => { save(); rerender(); };
   });
 
   // empty-state CTA -> abrir formulario de nueva meta
