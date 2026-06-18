@@ -393,6 +393,44 @@ function hitoInversion(saldo){
   for(const v of hitosInversionLadder()){ if(saldo>=v) alcanzado=v; else { siguiente=v; break; } }
   return {alcanzado, siguiente};
 }
+
+// --- Motor de proyección (interés compuesto mensual). Funciones puras, sin DOM ni estado.
+//     Compartidas por el Simulador (modos "Libre" y "Mis metas"). ---
+
+// Tasa mensual equivalente a una tasa efectiva anual.
+function tasaMensual(tasaEA){
+  return Math.pow(1 + (tasaEA||0), 1/12) - 1;
+}
+
+// Valor futuro tras `meses`: saldo inicial + monto único (hoy, t=0) capitalizados,
+// más una anualidad ordinaria del aporte mensual. tasaEA = efectiva anual.
+function proyectarFuturo(saldo0, aporteMensual, montoUnico, tasaEA, meses){
+  const r = tasaMensual(tasaEA);
+  const principal = Math.max(0, (saldo0||0) + (montoUnico||0));
+  const ap = Math.max(0, aporteMensual||0);
+  const n = Math.max(0, Math.round(meses||0));
+  if (r === 0) return principal + ap * n;
+  const factor = Math.pow(1 + r, n);
+  return principal * factor + ap * ((factor - 1) / r);
+}
+
+// Meses hasta que el saldo alcance el objetivo, capitalizando mes a mes.
+// Devuelve 0 si ya está, un entero de meses, o null si no alcanza (tope 600 meses / 50 años).
+function mesesParaObjetivo(saldo0, objetivo, aporteMensual, montoUnico, tasaEA){
+  const obj = objetivo||0;
+  let bal = Math.max(0, (saldo0||0) + (montoUnico||0));
+  if (obj <= 0) return null;
+  if (bal >= obj) return 0;
+  const r = tasaMensual(tasaEA);
+  const ap = Math.max(0, aporteMensual||0);
+  if (ap <= 0 && r <= 0) return null; // sin aporte ni rendimiento nunca llega
+  const TOPE = 600;
+  for (let mes = 1; mes <= TOPE; mes++){
+    bal = bal * (1 + r) + ap;
+    if (bal >= obj) return mes;
+  }
+  return null;
+}
 // Flash (no confeti) al cruzar un hito nuevo. Inicializa silencioso (sin celebrar retroactivo).
 function checkHitosInversion(){
   let cambio=false;
