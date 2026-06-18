@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.30'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.31'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -4398,10 +4398,24 @@ function renderSimMetas(body){
       const proyBase = proyectarFuturo(mm.saldo, base, 0, rate, meses);
       const proyFast = proyectarFuturo(mm.saldo, base + extra, unico, rate, meses);
       const delta = proyFast - proyBase;
+      const aportado = mm.saldo + unico + (base + extra) * meses; // todo lo que pusiste
+      const ganado = Math.max(0, proyFast - aportado);
+      const mult = aportado > 0 ? proyFast / aportado : 1;
       $$('smResult').innerHTML = `
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700;text-align:center">En ${S.years} ${S.years===1?'año':'años'} tendrías</div>
         <div style="font-size:30px;font-weight:800;color:var(--gb);font-family:var(--sans);margin:4px 0;text-align:center">${fmt(proyFast)}</div>
-        ${(delta>0.5)?`<div style="background:rgba(20,203,60,.08);border-radius:10px;padding:10px;text-align:center;margin-top:12px"><div style="font-size:11px;color:#7fe39a;text-transform:uppercase;letter-spacing:.1em">Gracias a la plata extra</div><div style="font-size:17px;font-weight:800;color:#7fe39a;margin-top:3px">+${fmt(delta)}</div></div>`:`<div style="font-size:12.5px;color:rgba(246,241,230,.6);text-align:center;margin-top:10px">Agrega un aporte extra y mira cuánto crece.</div>`}`;
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <div style="flex:1;background:rgba(246,241,230,.05);border-radius:10px;padding:10px;text-align:center">
+            <div style="font-size:11px;color:rgba(246,241,230,.6);text-transform:uppercase;letter-spacing:.1em">Pusiste</div>
+            <div style="font-size:15px;font-weight:800;color:var(--cream);margin-top:3px">${fmt(aportado)}</div>
+          </div>
+          <div style="flex:1;background:rgba(20,203,60,.08);border-radius:10px;padding:10px;text-align:center">
+            <div style="font-size:11px;color:#7fe39a;text-transform:uppercase;letter-spacing:.1em">Rindió</div>
+            <div style="font-size:15px;font-weight:800;color:#7fe39a;margin-top:3px">+${fmt(ganado)}</div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;color:rgba(246,241,230,.8);text-align:center;margin-top:10px">Tu plata se multiplicó <b style="color:var(--gb)">${mult.toFixed(1)}x</b>.</div>
+        ${(delta>0.5)?`<div style="font-size:12.5px;color:#7fe39a;text-align:center;margin-top:6px">De esos, <b>+${fmt(delta)}</b> son por la plata extra que simulaste.</div>`:''}`;
     }
   }
 
