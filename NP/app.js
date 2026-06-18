@@ -4290,9 +4290,147 @@ function renderLearnSimulador(body){
   });
 }
 
-// Placeholder: se completa en la Task 5.
 function renderSimMetas(body){
-  body.innerHTML = `<div class="card" style="margin-top:14px;background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)"><div class="empty" style="color:rgba(246,241,230,.7)">Modo "Mis metas" en construcción.</div></div>`;
+  const elegibles = metasSimulables();
+  // Guardia defensiva: el wrapper solo llama aquí con elegibles>0, pero por si acaso.
+  if (elegibles.length === 0){
+    body.innerHTML = `<div class="card" style="margin-top:14px;background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)"><div class="empty" style="color:rgba(246,241,230,.7)">Crea una meta para simularla aquí.</div></div>`;
+    return;
+  }
+
+  // Meta seleccionada (persiste si sigue siendo elegible; si no, primera).
+  if (!_simMetaId || !elegibles.some(m => m.id === _simMetaId)) _simMetaId = elegibles[0].id;
+  const m = elegibles.find(x => x.id === _simMetaId);
+
+  const formatInt = n => (n || 0).toLocaleString('es-CO');
+  const usaMeses = m.objetivo > 0 && m.tipo !== 'invertir'; // sueño/colchón con objetivo → meses
+  const aporteBase = Math.round(aporteMensualEstimado(m));   // línea base desde la distribución
+  const tasaInit = Math.round(tasaSugeridaMeta(m) * 100);
+
+  // Estado local de la simulación.
+  const S = { extra: 0, unico: 0, base: aporteBase, rate: tasaInit/100, years: 10 };
+
+  const opciones = elegibles.map(x =>
+    `<option value="${x.id}"${x.id===_simMetaId?' selected':''}>${esc(x.nombre)}${x.objetivo>0?` · meta ${fmtK(x.objetivo)}`:''}</option>`).join('');
+
+  const aniosHtml = usaMeses ? '' : `
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Durante</span>
+          <span class="learn-field-val" id="smYearsVal">${S.years} años</span>
+        </div>
+        <input type="range" class="learn-slider" id="smYears" min="1" max="40" step="1" value="${S.years}">
+      </div>`;
+
+  body.innerHTML = `
+    <div class="card" style="margin-top:14px;background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="learn-field-lbl" style="margin-bottom:6px">¿Qué meta quieres simular?</div>
+      <select class="sf" id="smMeta" style="background:rgba(246,241,230,.08);border-color:rgba(246,241,230,.22);color:var(--cream)">${opciones}</select>
+      <div style="font-size:12px;color:rgba(246,241,230,.6);margin-top:8px">Hoy llevas <b style="color:var(--cream)">${fmt(m.saldo)}</b>${m.objetivo>0?` de ${fmt(m.objetivo)}`:''}.</div>
+    </div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Aporte mensual actual</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="smBaseVal" value="${formatInt(S.base)}"></span>
+        </div>
+      </div>
+      <div class="learn-field">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Aporte extra cada mes</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="smExtraVal" value="${formatInt(S.extra)}"></span>
+        </div>
+      </div>
+      <div class="learn-field" style="margin-bottom:0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Monto único, de una</span>
+          <span class="learn-field-input"><span class="lfx">$</span><input type="text" inputmode="numeric" class="learn-num" id="smUnicoVal" value="${formatInt(S.unico)}"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(246,241,230,.04);border-color:rgba(246,241,230,.12)">
+      ${aniosHtml}
+      <div class="learn-field" style="margin-bottom:0">
+        <div class="learn-field-top">
+          <span class="learn-field-lbl">Rendimiento anual</span>
+          <span class="learn-field-input"><input type="number" class="learn-num pct" id="smRateVal" value="${tasaInit}" min="0" max="50" step="0.5"><span class="lfx" style="font-size:13px">% E.A.</span></span>
+        </div>
+        <div style="font-size:11.5px;color:rgba(246,241,230,.55);margin-top:6px">Sugerida por el plazo de la meta. Súbela si la tienes en algo de más rendimiento, bájala si está en una cajita.</div>
+      </div>
+    </div>
+
+    <div class="card" id="smResult" style="background:rgba(192,138,45,.07);border-color:rgba(192,138,45,.35);padding:16px"></div>
+  `;
+
+  const $$ = id => body.querySelector('#'+id);
+
+  function paint(){
+    const mm = elegibles.find(x => x.id === _simMetaId);
+    const base = S.base, extra = S.extra, unico = S.unico, rate = S.rate;
+    if (usaMeses){
+      const mesesBase = mesesParaObjetivo(mm.saldo, mm.objetivo, base, 0, rate);
+      const mesesFast = mesesParaObjetivo(mm.saldo, mm.objetivo, base + extra, unico, rate);
+      const fmtPlazo = n => {
+        if (n == null) return null;
+        if (n === 0) return 'ya la lograste';
+        const a = Math.floor(n/12), me = n%12;
+        return (a>0?`${a} año${a!==1?'s':''}`:'') + (a>0&&me>0?' y ':'') + (me>0?`${me} mes${me!==1?'es':''}`:'') || `${n} meses`;
+      };
+      if (mesesFast == null){
+        $$('smResult').innerHTML = `<div style="text-align:center;color:rgba(246,241,230,.85);font-size:13.5px">Con este aporte no llegas a la meta. Sube el aporte mensual o agrega un monto único.</div>`;
+        return;
+      }
+      const delta = (mesesBase != null) ? (mesesBase - mesesFast) : null;
+      const heroNum = fmtPlazo(mesesFast);
+      const deltaHtml = (delta != null && delta > 0)
+        ? `<div style="background:rgba(20,203,60,.08);border-radius:10px;padding:10px;text-align:center;margin-top:12px"><div style="font-size:11px;color:#7fe39a;text-transform:uppercase;letter-spacing:.1em">Te adelantas</div><div style="font-size:17px;font-weight:800;color:#7fe39a;margin-top:3px">${fmtPlazo(delta)}</div></div>`
+        : ((extra>0||unico>0) ? '' : `<div style="font-size:12.5px;color:rgba(246,241,230,.6);text-align:center;margin-top:10px">Agrega un aporte extra y mira cuánto te adelantas.</div>`);
+      $$('smResult').innerHTML = `
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700;text-align:center">Llegas a "${esc(mm.nombre)}" en</div>
+        <div style="font-size:26px;font-weight:800;color:var(--gb);font-family:var(--sans);margin:4px 0;text-align:center">${heroNum}</div>
+        ${deltaHtml}`;
+    } else {
+      const meses = S.years * 12;
+      const proyBase = proyectarFuturo(mm.saldo, base, 0, rate, meses);
+      const proyFast = proyectarFuturo(mm.saldo, base + extra, unico, rate, meses);
+      const delta = proyFast - proyBase;
+      $$('smResult').innerHTML = `
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700;text-align:center">En ${S.years} ${S.years===1?'año':'años'} tendrías</div>
+        <div style="font-size:30px;font-weight:800;color:var(--gb);font-family:var(--sans);margin:4px 0;text-align:center">${fmt(proyFast)}</div>
+        ${(delta>0.5)?`<div style="background:rgba(20,203,60,.08);border-radius:10px;padding:10px;text-align:center;margin-top:12px"><div style="font-size:11px;color:#7fe39a;text-transform:uppercase;letter-spacing:.1em">Gracias a la plata extra</div><div style="font-size:17px;font-weight:800;color:#7fe39a;margin-top:3px">+${fmt(delta)}</div></div>`:`<div style="font-size:12.5px;color:rgba(246,241,230,.6);text-align:center;margin-top:10px">Agrega un aporte extra y mira cuánto crece.</div>`}`;
+    }
+  }
+
+  // Campos de plata: parsean dígitos y repintan.
+  const bindMoney = (inputId, key) => {
+    const el = $$(inputId);
+    el.addEventListener('input', e => {
+      const digits = e.target.value.replace(/\D/g,'');
+      S[key] = digits === '' ? 0 : +digits;
+      e.target.value = digits === '' ? '' : formatInt(S[key]);
+      paint();
+    });
+    el.addEventListener('blur', e => { e.target.value = formatInt(S[key]); });
+  };
+  bindMoney('smBaseVal', 'base');
+  bindMoney('smExtraVal', 'extra');
+  bindMoney('smUnicoVal', 'unico');
+
+  $$('smRateVal').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    S.rate = Math.max(0, Math.min(50, isNaN(v) ? 0 : v)) / 100;
+    paint();
+  });
+  if ($$('smYears')) $$('smYears').addEventListener('input', () => {
+    S.years = +$$('smYears').value;
+    $$('smYearsVal').textContent = `${S.years} ${S.years===1?'año':'años'}`;
+    paint();
+  });
+  $$('smMeta').addEventListener('change', e => { _simMetaId = e.target.value; renderSimMetas(body); });
+
+  paint();
 }
 
 function renderSimLibre(body){
