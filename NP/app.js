@@ -27,7 +27,7 @@ function metasEjemplo(){
 }
 
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[],logros:[]};
-let curTab=0, firstFlow=true, curMetasSubTab=1, curAhorrosFilter='all';
+let curTab=0, firstFlow=true, curMetasSubTab=1, curMetasScope='shared';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
 let _distribucionCollapsed = true; // estado colapsado por defecto del acordeón de reparto de propósitos
@@ -2335,9 +2335,7 @@ function renderMetas(){
       </div>`;
     };
 
-    const dueno = isIndiv ? state.config.perfil : null;
-    const adviceHtml = drawBucketBar(dueno);
-
+    let adviceHtml = '';
     let chipsHtml = '';
     let listHtml = '';
     let indivHtml = '';
@@ -2345,7 +2343,8 @@ function renderMetas(){
     let personalHtml = '';
 
     if (isIndiv) {
-      chipsHtml = '';
+      // Modo individual: un solo scope (el perfil). Sin toggle.
+      adviceHtml = drawBucketBar(state.config.perfil);
       const metasIndivCount = metasIndividuales(state.config.perfil).length;
       if (metasIndivCount > 0) {
         listHtml = drawSeccionesPorBucket(state.config.perfil, card);
@@ -2353,50 +2352,38 @@ function renderMetas(){
         allEmptyCTA = emptyMetaCTA('sueno', 'Aún no tienes metas de ahorro. Crea la primera para empezar a repartir tu ahorro mensual.');
       }
     } else {
+      // Modo pareja: toggle deslizante Compartidas | Individuales (sin "Todas").
+      const scope = curMetasScope === 'indiv' ? 'indiv' : 'shared';
       chipsHtml = `
-        <div class="filter-chips">
-          <button class="chip ${curAhorrosFilter==='all'?'on':''}" data-f="all">Todas</button>
-          <button class="chip ${curAhorrosFilter==='shared'?'on':''}" data-f="shared">Compartidas</button>
-          <button class="chip ${curAhorrosFilter==='individual'?'on':''}" data-f="individual">Individuales</button>
+        <div class="scope-switch ${scope==='indiv'?'indiv':'shared'}" id="scopeSwitch">
+          <span class="scope-thumb"></span>
+          <button type="button" class="scope-opt ${scope==='shared'?'on':''}" data-scope="shared">Compartidas</button>
+          <button type="button" class="scope-opt ${scope==='indiv'?'on':''}" data-scope="indiv">Individuales</button>
         </div>
       `;
-      const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
-      const showShared = curAhorrosFilter === 'all' || curAhorrosFilter === 'shared';
-      if (showShared) {
+      if (scope === 'shared') {
+        adviceHtml = drawBucketBar(null);
+        const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
         if (nonDebtShared.length > 0) {
           listHtml = drawSeccionesPorBucket(null, card);
-        } else if (curAhorrosFilter !== 'all') {
-          listHtml = `
-            <div class="stitle">Metas compartidas</div>
-            ${emptyMetaCTA('sueno', 'No tienes metas comunes creadas.')}
-          `;
+        } else {
+          listHtml = emptyMetaCTA('sueno', 'No tienen metas comunes creadas.');
         }
-      }
-
-      const showIndiv = curAhorrosFilter === 'all' || curAhorrosFilter === 'individual';
-      if (showIndiv) {
+      } else {
+        adviceHtml = drawBucketBar(state.config.perfil);
         const indivs = metasIndividuales(state.config.perfil);
         if (indivs.length > 0) {
-          indivHtml = `<div class="stitle">Tus metas individuales (privadas)</div>` +
-                      drawSeccionesPorBucket(state.config.perfil, card);
-        } else if (curAhorrosFilter === 'individual') {
-          indivHtml += `
-            <div class="stitle">Mis metas individuales (Privadas)</div>
-            ${emptyMetaCTA('sueno', 'No tienes metas individuales privadas creadas.', canCreateIndividual())}
-          `;
+          indivHtml = drawSeccionesPorBucket(state.config.perfil, card);
+        } else {
+          indivHtml = emptyMetaCTA('sueno', 'No tienes metas individuales privadas creadas.', canCreateIndividual());
         }
-      }
-
-      const indivCount = metasIndividuales(state.config.perfil).length;
-      if (curAhorrosFilter === 'all' && nonDebtShared.length === 0 && indivCount === 0) {
-        allEmptyCTA = emptyMetaCTA('sueno', 'Aún no tienen metas de ahorro. Crea la primera para empezar a repartir el ahorro mensual.', canCreateIndividual());
       }
     }
 
     contentHtml = `
       ${drawSinAsignarCard()}
-      ${adviceHtml}
       ${chipsHtml}
+      ${adviceHtml}
       ${allEmptyCTA}
       ${listHtml}
       ${indivHtml}
@@ -2497,11 +2484,15 @@ function renderMetas(){
     };
   });
 
-  // filter chips click handlers
-  $('r1').querySelectorAll('.filter-chips .chip').forEach(btn => {
+  // toggle deslizante Compartidas | Individuales: anima el thumb y luego re-renderiza.
+  $('r1').querySelectorAll('#scopeSwitch .scope-opt').forEach(btn => {
     btn.onclick = () => {
-      curAhorrosFilter = btn.dataset.f;
-      rerender();
+      const next = btn.dataset.scope === 'indiv' ? 'indiv' : 'shared';
+      if (next === curMetasScope) return;
+      curMetasScope = next;
+      const sw = $('scopeSwitch');
+      if (sw) { sw.classList.toggle('indiv', next==='indiv'); sw.classList.toggle('shared', next==='shared'); }
+      setTimeout(rerender, 220); // deja correr el slide del thumb antes de swap de contenido
     };
   });
 
