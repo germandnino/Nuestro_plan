@@ -2608,16 +2608,21 @@ function initReorder(){
 }
 
 function openMetaForm(id, defaultTipo = 'sueno'){
-  if (!canEditShared()) {
-    flash('No tienes permisos de editor');
+  const existing=id?metaById(id):null;
+  if (existing) {
+    // Editar: una meta individual propia se puede aunque seas Lector; lo conjunto requiere editor.
+    if (!canEditMeta(existing)) { flash('No tienes permisos para editar esta meta'); return; }
+  } else if (!canEditShared() && !canCreateIndividual()) {
+    flash('No tienes permisos');
     return;
   }
-  const existing=id?metaById(id):null;
   const c = state.config;
   const isIndiv = c.modo === 'individual';
+  // El Lector en pareja solo puede crear metas individuales: se fuerza el perfil como dueño.
+  const lectorIndividual = c.modo === 'pareja' && !canEditShared();
   const defaultPrio = isIndiv ? metasIndividuales(c.perfil).length : metasCompartidas().length;
   mForm=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),nombre:'',tipo:defaultTipo,saldo:0,objetivo:0,aporteFijo:0,aportePct:0,fecha:null,creado:today(),prioridad:defaultPrio};
-  if (isIndiv) {
+  if (isIndiv || (lectorIndividual && !existing)) {
     mForm.dueno = c.perfil;
   }
   const ov=metaModalEl();
@@ -2657,13 +2662,24 @@ function renderMetaForm(editing){
 
   let visHtml = '';
   if (state.config.modo === 'pareja' && m.tipo !== 'personal') {
-    visHtml = `
-      <label class="lbl" style="margin-top:9px">¿Quién ahorra para esto?</label>
-      <div class="seg seg-sm" id="fVisibilidadSeg">
-        <button data-vis="compartida" class="${!m.dueno?'on':''}">${getSVG('users','','')} Compartida</button>
-        <button data-vis="individual" class="${m.dueno?'on':''}">${getSVG('user','','')} Individual</button>
-      </div>
-      <div class="hint" id="fVisHint">${m.dueno ? 'Privada: solo tú la ves y la financias con tus aportes.' : 'Ambos la ven y aporta el ahorro colectivo.'}</div>`;
+    if (!canEditShared()) {
+      // Lector: no elige visibilidad; sus metas son siempre individuales privadas.
+      visHtml = `
+        <label class="lbl" style="margin-top:9px">¿Quién ahorra para esto?</label>
+        <div class="card" style="display:flex;align-items:center;gap:8px;padding:10px 12px;margin-top:4px;">
+          ${getSVG('user','','width:15px;height:15px;flex-shrink:0;')}
+          <span style="font-size:13px;font-weight:700;color:var(--ink)">Individual (privada)</span>
+        </div>
+        <div class="hint">Como Lector, solo puedes crear metas individuales: solo tú la ves y la financias con tus aportes.</div>`;
+    } else {
+      visHtml = `
+        <label class="lbl" style="margin-top:9px">¿Quién ahorra para esto?</label>
+        <div class="seg seg-sm" id="fVisibilidadSeg">
+          <button data-vis="compartida" class="${!m.dueno?'on':''}">${getSVG('users','','')} Compartida</button>
+          <button data-vis="individual" class="${m.dueno?'on':''}">${getSVG('user','','')} Individual</button>
+        </div>
+        <div class="hint" id="fVisHint">${m.dueno ? 'Privada: solo tú la ves y la financias con tus aportes.' : 'Ambos la ven y aporta el ahorro colectivo.'}</div>`;
+    }
   }
 
   // Columnas reutilizables (2-col).
