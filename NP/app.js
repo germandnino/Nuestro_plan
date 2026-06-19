@@ -3064,19 +3064,23 @@ function openAsistenteIngresoExtra(preFill = null) {
   overlay.id = 'modalAsistente';
   overlay.style.display = 'flex';
 
-  const comp = metasCompartidas().filter(m => !m.colocado);
+  // El Lector solo aporta a sus metas individuales: se le ocultan las comunes y el motor compartido.
+  const soloIndividual = c.modo === 'pareja' && !canEditShared();
+  const comp = soloIndividual ? [] : metasCompartidas().filter(m => !m.colocado);
   const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
   const optionsHtml = c.modo === 'individual'
     ? indiv.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
-    : og('Metas comunes', comp) + og('Mis metas (privadas)', indiv);
+    : (soloIndividual ? og('Mis metas (privadas)', indiv) : og('Metas comunes', comp) + og('Mis metas (privadas)', indiv));
 
   const defaultConcepto = preFill ? preFill.concepto : '';
   const defaultMonto = preFill && preFill.monto ? '$' + Number(preFill.monto).toLocaleString('es-CO') : '';
 
   let selectOptionsHtml = '';
   if (c.modo === 'pareja') {
-    selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes (según el plan)</option>';
+    if (!soloIndividual) {
+      selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes (según el plan)</option>';
+    }
     selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas individuales (según el plan)</option>';
   } else {
     selectOptionsHtml += '<option value="distribuir">Repartir entre mis metas (según el plan)</option>';
