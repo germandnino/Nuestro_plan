@@ -641,6 +641,17 @@ function normalize(){
   if(!state.config.buckets || typeof state.config.buckets!=='object'){
     state.config.buckets={ imprevistos:50, sueno:30, invertir:20 };
   }
+  // Pesos de bucket por perfil para las metas individuales (independientes del reparto
+  // de la pareja). Se siembran con copia del reparto compartido actual.
+  if(!state.config.bucketsIndiv || typeof state.config.bucketsIndiv!=='object'){
+    state.config.bucketsIndiv = {};
+  }
+  ['p1','p2'].forEach(pf=>{
+    const b = state.config.bucketsIndiv[pf];
+    if(!b || typeof b!=='object' || typeof b.imprevistos!=='number'){
+      state.config.bucketsIndiv[pf] = Object.assign({}, state.config.buckets);
+    }
+  });
   if(state.config.modo==='individual'){
     state.config.perfil='p1';
     state.config.planPareja=0;
@@ -947,9 +958,18 @@ function bucketsPresentes(dueno){
 function bucketsConMetas(dueno){
   return BUCKETS.filter(t=>metasBucketVista(t,dueno).length>0);
 }
+// Objeto de pesos de bucket del scope: compartido (dueno null) o individual de un perfil.
+function bucketsCfg(dueno){
+  if(dueno){
+    state.config.bucketsIndiv = state.config.bucketsIndiv || {};
+    state.config.bucketsIndiv[dueno] = state.config.bucketsIndiv[dueno] || Object.assign({}, state.config.buckets||{});
+    return state.config.bucketsIndiv[dueno];
+  }
+  return state.config.buckets || (state.config.buckets={});
+}
 // Pesos normalizados (suma 100) de los buckets presentes; ausentes redistribuyen su parte.
 function pesosBuckets(dueno){
-  const pres=bucketsPresentes(dueno), cfg=state.config.buckets||{}, w={};
+  const pres=bucketsPresentes(dueno), cfg=bucketsCfg(dueno), w={};
   const sum=pres.reduce((s,t)=>s+(cfg[t]||0),0);
   if(sum<=0){ const each=100/(pres.length||1); pres.forEach(t=>w[t]=each); }
   else pres.forEach(t=>w[t]=(cfg[t]||0)/sum*100);
