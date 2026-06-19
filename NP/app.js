@@ -729,6 +729,33 @@ async function syncSaveShared(planId, stateToSave) {
     });
 }
 
+// El Lector solo persiste SUS porciones (metas/movimientos/logros con su perfil).
+// Read-modify-write: relee el doc compartido y sobrepone solo lo propio, sin pisar lo conjunto.
+async function syncSaveSharedAsViewer(planId, localState, perfil){
+  const ref = db.collection('planes').doc(planId).collection('shared').doc('data');
+  const snap = await ref.get();
+  const remote = snap.exists ? snap.data() : { config:{}, metas:[], log:[], ingresos:[], gastos:[], logros:[] };
+  const esMiMov = x => !!(x && x.privado && x.duenoPriv === perfil);
+  const metas = (remote.metas || []).filter(m => m.dueno !== perfil)
+    .concat((localState.metas || []).filter(m => m.dueno === perfil && m.tipo !== 'personal'));
+  const ingresos = (remote.ingresos || []).filter(x => !esMiMov(x))
+    .concat((localState.ingresos || []).filter(esMiMov));
+  const gastos = (remote.gastos || []).filter(x => !esMiMov(x))
+    .concat((localState.gastos || []).filter(esMiMov));
+  const logros = (remote.logros || []).filter(l => (l && l.dueno) !== perfil)
+    .concat((localState.logros || []).filter(l => l && l.dueno === perfil));
+  await ref.set({
+    config: remote.config || {},
+    metas,
+    log: remote.log || [],
+    ingresos,
+    gastos,
+    logros,
+    lastEditBy: perfil,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
 async function syncRegisterOwner(planId, uid) {
   await db.collection('meta').doc(planId).set({
     ownerUid: uid,
@@ -825,15 +852,18 @@ async function save(){
   const ok=await store.set(JSON.stringify(stateClone));
   if(!ok)$('banner').style.display='block';
   
-  if (currentUser && currentPlanId && canEditShared()) {
-    syncSaveShared(currentPlanId, stateClone)
-      .then(() => {
-        showSyncStatus('Sincronizado ✓');
-      })
-      .catch(e => {
-        console.warn('Firestore shared save failed, local only:', e.message);
-        showSyncStatus('Solo local (sin conexión)', true);
-      });
+  if (currentUser && currentPlanId) {
+    const onOk = () => showSyncStatus('Sincronizado ✓');
+    const onErr = (e) => {
+      console.warn('Firestore shared save failed, local only:', e.message);
+      showSyncStatus('Solo local (sin conexión)', true);
+    };
+    if (canEditShared()) {
+      syncSaveShared(currentPlanId, stateClone).then(onOk).catch(onErr);
+    } else {
+      // Lector: persiste solo sus porciones sin pisar lo conjunto.
+      syncSaveSharedAsViewer(currentPlanId, stateClone, state.config.perfil).then(onOk).catch(onErr);
+    }
   }
 }
 
