@@ -2517,11 +2517,11 @@ function renderMetas(){
   // Sliders de reparto por propósito (nivel 1). Aplica el % editado y deja que UN
   // amortiguador absorba la diferencia, manteniendo la suma en 100. Devuelve la lista
   // de propósitos editables (para refrescar la UI en vivo durante el arrastre).
-  const applyBucketEdit = (t, v) => {
-    const dueno = (state.config.modo==='individual') ? state.config.perfil : null;
+  const applyBucketEdit = (t, v, scope) => {
+    const dueno = scope || null;
     const pres = bucketsPresentes(dueno); // normaliza solo entre los editables (con cupo)
     if(!pres.includes(t)) return null;     // propósito lleno: no editable
-    const cfg = state.config.buckets || (state.config.buckets={});
+    const cfg = bucketsCfg(dueno);
     v = Math.max(0, Math.min(100, v|0));
     // Memoria: marca t como el más recién editado.
     _bucketEditOrder = _bucketEditOrder.filter(x=>x!==t); _bucketEditOrder.push(t);
@@ -2544,7 +2544,8 @@ function renderMetas(){
   // Refresca en vivo (sin rerender) % , monto, ancho de la barra y el slider amortiguado.
   const baseAhorroSlider = (typeof ahorroMesUI==='function') ? ahorroMesUI(curMonth()) : 0;
   const refreshBucketUI = (root) => {
-    const cfg = state.config.buckets || {};
+    const anySlider = root.querySelector('.bucket-slider[data-bucket]');
+    const cfg = bucketsCfg(anySlider ? (anySlider.dataset.scope || null) : null);
     root.querySelectorAll('.bucket-slider[data-bucket]').forEach(s=>{
       const t = s.dataset.bucket, val = cfg[t]||0;
       if(parseInt(s.value)!==val) s.value = val;
@@ -2557,7 +2558,7 @@ function renderMetas(){
   $('r1').querySelectorAll('.bucket-slider[data-bucket]').forEach(sl=>{
     sl.onclick = (e) => { e.stopPropagation(); };
     sl.oninput = () => {
-      if(applyBucketEdit(sl.dataset.bucket, parseInt(sl.value)||0)) refreshBucketUI($('r1'));
+      if(applyBucketEdit(sl.dataset.bucket, parseInt(sl.value)||0, sl.dataset.scope || null)) refreshBucketUI($('r1'));
     };
     sl.onchange = () => { save(); rerender(); };
   });
