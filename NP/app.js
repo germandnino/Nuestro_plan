@@ -2171,13 +2171,13 @@ function renderMetas(){
 
   // Empty-state CTA: el botón global del nav existe, pero un estado vacío sin acción
   // es un callejón. Aquí enseñamos dónde crear. tipo = defaultTipo para openMetaForm.
-  const emptyMetaCTA = (tipo, msg) => {
+  const emptyMetaCTA = (tipo, msg, allowCreate = canEdit) => {
     const accent = 'var(--green)';
     const bg = 'rgba(28,58,44,0.06)';
     const label = 'Crear primera meta';
     return `<div class="card" style="text-align:center;padding:22px 16px;">
-      <div class="empty" style="${canEdit?'margin-bottom:14px;':'margin:0;'}">${msg}</div>
-      ${canEdit ? `<button class="btn" data-addmeta="${tipo}" style="margin:0;border:1.5px solid ${accent};color:${accent};background:${bg};display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px;padding:12px 18px;">${getSVG('target')} ${label}</button>` : ''}
+      <div class="empty" style="${allowCreate?'margin-bottom:14px;':'margin:0;'}">${msg}</div>
+      ${allowCreate ? `<button class="btn" data-addmeta="${tipo}" style="margin:0;border:1.5px solid ${accent};color:${accent};background:${bg};display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px;padding:12px 18px;">${getSVG('target')} ${label}</button>` : ''}
     </div>`;
   };
   let subTabsHtml = `
@@ -2264,7 +2264,11 @@ function renderMetas(){
         ? `<button class="metacard-consumir" data-consumir="${m.id}">Gastar y guardar</button>` : '';
       const resolverBtn = (cdtVencido && (m.dueno?true:canEdit))
         ? `<button class="metacard-consumir" data-resolvercdt="${m.id}">Resolver</button>` : '';
-      const editBtn = (canEdit && !isPersonal) ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>` : '';
+      const editBtn = (canEditMeta(m) && !isPersonal)
+        ? `<button class="btn-card-edit metacard-edit" data-editmid="${m.id}" aria-label="Editar meta">${getSVG('edit', '', 'width:14px;height:14px;pointer-events:none;')}</button>`
+        : ((!m.dueno && !isPersonal && !canEditShared())
+            ? `<span class="btn-card-edit metacard-lock" title="Solo el Editor puede modificar metas compartidas" aria-label="Bloqueado: solo el Editor" style="opacity:.45;cursor:not-allowed;display:inline-flex;align-items:center;justify-content:center;">${getSVG('lock', '', 'width:13px;height:13px;pointer-events:none;')}</span>`
+            : '');
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
@@ -2325,14 +2329,14 @@ function renderMetas(){
         } else if (curAhorrosFilter === 'individual') {
           indivHtml += `
             <div class="stitle">Mis metas individuales (Privadas)</div>
-            ${emptyMetaCTA('sueno', 'No tienes metas individuales privadas creadas.')}
+            ${emptyMetaCTA('sueno', 'No tienes metas individuales privadas creadas.', canCreateIndividual())}
           `;
         }
       }
 
       const indivCount = metasIndividuales(state.config.perfil).length;
       if (curAhorrosFilter === 'all' && nonDebtShared.length === 0 && indivCount === 0) {
-        allEmptyCTA = emptyMetaCTA('sueno', 'Aún no tienen metas de ahorro. Crea la primera para empezar a repartir el ahorro mensual.');
+        allEmptyCTA = emptyMetaCTA('sueno', 'Aún no tienen metas de ahorro. Crea la primera para empezar a repartir el ahorro mensual.', canCreateIndividual());
       }
     }
 
@@ -2344,7 +2348,7 @@ function renderMetas(){
       ${listHtml}
       ${indivHtml}
       ${personalHtml}
-      ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector (Solo Lectura)</div>' : ''}
+      ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector — gestionas solo tus metas individuales. Las comunes las maneja el Editor.</div>' : ''}
       <div style="height:24px;flex-shrink:0;"></div>
     `;
   } else if (curMetasSubTab === 2) {
