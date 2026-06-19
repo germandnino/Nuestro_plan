@@ -1795,7 +1795,10 @@ function drawBucketBar(dueno){
   if(todos.length <= 1) return '';                 // con 0-1 propósitos no hay nada que repartir a nivel 1
   const editables = bucketsPresentes(dueno);       // solo los que tienen cupo (no llenos) → reciben %
   const meta = { imprevistos:{ic:'shield', lbl:'Colchón'}, sueno:{ic:'target', lbl:'Sueños'}, invertir:{ic:'trending', lbl:'Inversión'} };
-  const cfg = state.config.buckets || (state.config.buckets={});
+  const cfg = bucketsCfg(dueno);
+  const titulo = dueno ? 'Distribución del ahorro individual' : 'Distribución del ahorro compartido';
+  // Editable: lo compartido solo por el Editor; lo individual por el dueño del perfil.
+  const editable = dueno ? true : canEditShared();
   // Propósitos llenos → 0% fijo (no reciben ahorro hasta tener una meta con cupo).
   todos.forEach(t=>{ if(!editables.includes(t)) cfg[t]=0; });
   // Auto-normaliza a 100 SOLO sobre los editables (con cupo). Se auto-cura cuando un
@@ -1837,7 +1840,7 @@ function drawBucketBar(dueno){
         <span class="bslider-lbl">${getSVG(meta[t].ic,'', 'width:14px;height:14px;opacity:.85;')} ${meta[t].lbl}</span>
         <span class="bslider-vals"><span class="bslider-pct" data-pct="${t}" style="color:${col[t]}">${val}%</span>${amt}</span>
       </div>
-      <input type="range" class="bucket-slider" data-bucket="${t}" min="0" max="100" step="1" value="${val}"${full?' disabled':''} style="--acc:${col[t]};background-size:${val}% 100%" aria-label="Porcentaje para ${meta[t].lbl}">
+      <input type="range" class="bucket-slider" data-bucket="${t}" data-scope="${dueno||''}" min="0" max="100" step="1" value="${val}"${(full||!editable)?' disabled':''} style="--acc:${col[t]};background-size:${val}% 100%" aria-label="Porcentaje para ${meta[t].lbl}">
     </div>`;
   }).join('');
   if (_distribucionCollapsed) {
@@ -1846,7 +1849,7 @@ function drawBucketBar(dueno){
     ).join('');
     return `
       <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:11px 14px; cursor:pointer; transition: background 0.2s;">
-        <div class="k" style="margin-bottom:7px;">Distribución del ahorro</div>
+        <div class="k" style="margin-bottom:7px;">${titulo}</div>
         <div style="display:flex; align-items:center; gap:10px;">
           <div class="bucketbar-seg" style="flex-grow:1; margin-bottom:0;">${segs}</div>
           <div style="color:var(--cream); display:flex; align-items:center;">
@@ -1861,7 +1864,7 @@ function drawBucketBar(dueno){
   return `
     <div class="card dark bucketbar-expanded" style="margin-bottom:12px; padding:12px 14px;">
       <div class="bucketbar-toggle" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer;">
-        <div style="font-family:var(--serif); font-size:16px; font-weight:450; color:var(--gb); flex-grow:1;">¿Cuánto a cada propósito?</div>
+        <div style="font-family:var(--serif); font-size:16px; font-weight:450; color:var(--gb); flex-grow:1;">${titulo}</div>
         <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
           ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7; transform: rotate(180deg);')}
         </div>
