@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.37'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.38'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -704,6 +704,7 @@ function getPlanId() {
   const urlPlan = params.get('plan');
   if (urlPlan) {
     localStorage.setItem('planId', urlPlan);
+    localStorage.setItem('isInvited', 'true');
     window.history.replaceState({}, '', window.location.pathname);
     return urlPlan;
   }
@@ -822,6 +823,13 @@ function syncSubscribe(planId) {
       state.logros = remote.logros || [];
       normalize();
       saveLocalOnly();
+      // Si el invitado estaba en espera (spinner) y el owner acaba de terminar el onboarding,
+      // entrar a la app directamente sin que el invitado tenga que hacer nada.
+      if ($('onb').classList.contains('on') && state.config.onboarded && localStorage.getItem('isInvited') === 'true') {
+        $('onb').classList.remove('on');
+        go(0);
+        return;
+      }
       scheduleRerender();
     });
 
@@ -6320,12 +6328,18 @@ auth.onAuthStateChanged(async user => {
   if (user) {
     try {
       let planIdToUse = getPlanId();
+      const isJoiningByInvite = localStorage.getItem('isInvited') === 'true';
 
-      // Buscamos siempre si este usuario ya tiene un plan existente en Firestore para cargarlo.
+      // Buscamos si este usuario ya tiene un plan existente en Firestore.
+      // Si llegó con un link de invitación (?plan=), NO sobrescribir ese planId con el propio.
       const ownerQuery = await db.collection('meta').where('ownerUid', '==', user.uid).limit(1).get();
       if (!ownerQuery.empty) {
-        planIdToUse = ownerQuery.docs[0].id;
-        localStorage.setItem('planId', planIdToUse);
+        const ownerPlanId = ownerQuery.docs[0].id;
+        if (!isJoiningByInvite || ownerPlanId === planIdToUse) {
+          planIdToUse = ownerPlanId;
+          localStorage.setItem('planId', planIdToUse);
+          if (ownerPlanId === planIdToUse) localStorage.removeItem('isInvited');
+        }
       } else {
         const partnerQuery = await db.collection('meta').where('partnerUid', '==', user.uid).limit(1).get();
         if (!partnerQuery.empty) {
@@ -6367,27 +6381,32 @@ auth.onAuthStateChanged(async user => {
             updates.partnerName = user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario');
           }
           await db.collection('meta').doc(currentPlanId).update(updates).catch(e => {});
-          if (!state.config.onboarded) {
-            obStep = 2;
-          }
         }
       } else {
-        isOwner = true;
-        state.config.perfil = 'p1';
-        if (user.displayName && (state.config.nombreP1 === 'Persona 1' || !state.config.nombreP1)) {
-          state.config.nombreP1 = user.displayName;
+        if (localStorage.getItem('isInvited') === 'true') {
+          // Llegó por invite pero el doc del plan aún no existe (race condition).
+          // No crear doc como owner — eso corrompería el plan ajeno.
+          isOwner = false;
+          state.config.perfil = 'p2';
+          showSyncStatus('El plan compartido aún no está listo. Vuelve a intentarlo en un momento.', true);
+        } else {
+          isOwner = true;
+          state.config.perfil = 'p1';
+          if (user.displayName && (state.config.nombreP1 === 'Persona 1' || !state.config.nombreP1)) {
+            state.config.nombreP1 = user.displayName;
+          }
+          const initialOwnerName = (state.config.nombreP1 && state.config.nombreP1 !== 'Persona 1' && state.config.nombreP1 !== 'Usuario')
+            ? state.config.nombreP1
+            : (user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario'));
+          await db.collection('meta').doc(currentPlanId).set({
+            ownerUid: user.uid,
+            ownerEmail: user.email || 'Usuario de Google',
+            ownerName: initialOwnerName,
+            partnerRole: 'editor',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          await syncSaveShared(currentPlanId, state);
         }
-        const initialOwnerName = (state.config.nombreP1 && state.config.nombreP1 !== 'Persona 1' && state.config.nombreP1 !== 'Usuario')
-          ? state.config.nombreP1
-          : (user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario'));
-        await db.collection('meta').doc(currentPlanId).set({
-          ownerUid: user.uid,
-          ownerEmail: user.email || 'Usuario de Google',
-          ownerName: initialOwnerName,
-          partnerRole: 'editor',
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        await syncSaveShared(currentPlanId, state);
       }
       
       // Intentar cargar datos de Firestore
@@ -6411,8 +6430,14 @@ auth.onAuthStateChanged(async user => {
           } else {
             rerender();
           }
+        } else if (localStorage.getItem('isInvited') === 'true') {
+          // Invitado: el owner aún no terminó el onboarding. Mostrar spinner de espera.
+          // syncSubscribe notificará cuando el owner termine y onboarded pase a true.
+          obStep = 0;
+          $('onb').classList.add('on');
+          renderOb();
         } else {
-          // Plan remoto cargado pero no está marcado como onboarded
+          // Owner: plan propio no está onboarded → continuar onboarding
           obStep = 1;
           $('onb').classList.add('on');
           renderOb();
@@ -6420,7 +6445,11 @@ auth.onAuthStateChanged(async user => {
       } else {
         // No se pudo cargar remote o es un plan nuevo/vacío sin datos
         if (!state.config.onboarded) {
-          obStep = 1;
+          if (localStorage.getItem('isInvited') === 'true') {
+            obStep = 0; // Invitado en espera
+          } else {
+            obStep = 1;
+          }
           $('onb').classList.add('on');
           renderOb();
         }
