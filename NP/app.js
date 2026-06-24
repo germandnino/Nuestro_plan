@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.38'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.39'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -1252,7 +1252,7 @@ function openModalSobrante(monto, metaLlena){
         <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! 🎉</h3>
         <div class="hint" style="margin:0; font-size:13px; color:var(--gs); line-height:1.45;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
         <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
-          <button class="btn sm" id="sobMotor" style="margin:0; width:100%;">Repartir con el motor (según tu plan)</button>
+          <button class="btn sm" id="sobMotor" style="margin:0; width:100%;">Repartir con el motor</button>
           
           ${showDejar ? `
             <button class="btn sm ghost" id="sobDejar" style="margin:0; width:100%; border-color:var(--line); color:var(--ink);">
@@ -1383,7 +1383,7 @@ function openRetiroDinero(){
     const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado);
     const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado);
     const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
-    selD.innerHTML=`<option value="fuera">Fuera del plan (gasto real)</option>`
+    selD.innerHTML=`<option value="fuera">Fuera de tus metas (gasto real)</option>`
       +(c.modo==='individual'
         ? indiv.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
         : og('Metas comunes',comp)+og('Mis metas (privadas)',indiv));
@@ -1406,7 +1406,7 @@ function openRetiroDinero(){
     if(dval==='fuera'){
       o.saldo-=monto;
       const gId = uid();
-      state.gastos.push({id:gId,meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro del plan',creadoPor:c.perfil});
+      state.gastos.push({id:gId,meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro de una meta',creadoPor:c.perfil});
       save();ov.remove();rerender();
       flashUndo('Retiro registrado ✓', () => {
         const mCurrent = metaById(o.id);
@@ -1522,7 +1522,7 @@ function showActionMenu(){
     document.body.appendChild(ov);
   }
   const items = [
-    { svg:'plus',     label:'Añadir dinero',    sub:'Aporta al plan y decide a dónde va',  act:()=>openAsistenteIngresoExtra() },
+    { svg:'plus',     label:'Añadir dinero',    sub:'Aporta y decide a dónde va',  act:()=>openAsistenteIngresoExtra() },
     { svg:'trending', label:'Retirar dinero',   sub:'Saca o mueve dinero entre metas',     act:()=>openRetiroDinero() },
     { svg:'calendar', label:'Ver Mi Mes',       sub:'Gráficos y distribución del mes',     act:()=>go(2) },
     { svg:'target',   label:'Crear nueva meta', sub:'Define tu próximo objetivo',      act:()=>openMetaForm() },
@@ -3125,6 +3125,14 @@ function openAsistenteIngresoExtra(preFill = null) {
   const soloIndividual = c.modo === 'pareja' && !canEditShared();
   const comp = soloIndividual ? [] : metasCompartidas().filter(m => !m.colocado);
   const indiv = metasIndividuales(c.perfil).filter(m => !m.colocado);
+
+  // Sin metas accesibles no hay destino posible: no abrir el modal.
+  const metaCount = (c.modo === 'individual' || soloIndividual) ? indiv.length : comp.length + indiv.length;
+  if (metaCount === 0) {
+    flash('Crea una meta primero para poder aportar');
+    return;
+  }
+
   const og = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>` : '';
   const optionsHtml = c.modo === 'individual'
     ? indiv.map(m => `<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
@@ -3133,21 +3141,28 @@ function openAsistenteIngresoExtra(preFill = null) {
   const defaultConcepto = preFill ? preFill.concepto : '';
   const defaultMonto = preFill && preFill.monto ? '$' + Number(preFill.monto).toLocaleString('es-CO') : '';
 
+  // El motor solo aporta valor si reparte entre 2+ metas; con una sola es redundante con el aporte directo.
+  const motorComun = c.modo === 'pareja' && !soloIndividual && comp.length >= 2;
+  const motorIndiv = c.modo === 'pareja' && indiv.length >= 2;
+  const motorUnico = c.modo === 'individual' && indiv.length >= 2;
+
   let selectOptionsHtml = '';
-  if (c.modo === 'pareja') {
-    if (!soloIndividual) {
-      selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes (según el plan)</option>';
-    }
-    selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas individuales (según el plan)</option>';
-  } else {
-    selectOptionsHtml += '<option value="distribuir">Repartir entre mis metas (según el plan)</option>';
-  }
+  if (motorComun) selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes</option>';
+  if (motorIndiv) selectOptionsHtml += '<option value="distribuir-individual">Repartir entre mis metas individuales</option>';
+  if (motorUnico) selectOptionsHtml += '<option value="distribuir">Repartir entre mis metas</option>';
   selectOptionsHtml += optionsHtml;
+
+  // Un solo destino real: ocultar el selector y autoseleccionar esa meta.
+  const motorCount = (motorComun ? 1 : 0) + (motorIndiv ? 1 : 0) + (motorUnico ? 1 : 0);
+  const destinoUnico = (motorCount + metaCount) === 1;
+  const metaUnica = destinoUnico
+    ? ((c.modo === 'individual' || soloIndividual) ? indiv[0] : (comp[0] || indiv[0]))
+    : null;
 
   overlay.innerHTML = `
     <div class="modal-card animate-in" style="max-width:400px;">
-      <h3 class="modal-title" style="font-size:20px;">Añadir dinero al plan</h3>
-      <div class="hint" style="font-size:12.5px; line-height:1.4; margin:0;">Registra dinero que entra al plan y decide a dónde va.</div>
+      <h3 class="modal-title" style="font-size:20px;">Añadir dinero</h3>
+      <div class="hint" style="font-size:12.5px; line-height:1.4; margin:0;">Registra dinero que entra y decide a dónde va.</div>
 
       <div>
         <label class="lbl">Concepto / Fuente</label>
@@ -3161,9 +3176,14 @@ function openAsistenteIngresoExtra(preFill = null) {
 
       <div>
         <label class="lbl">¿A dónde va?</label>
-        <select class="sf" id="aeMetaDestino">
-          ${selectOptionsHtml}
-        </select>
+        ${destinoUnico ? `
+          <div class="sf" style="display:flex; align-items:center; gap:6px; color:var(--ink);">Va a: <b>${esc(metaUnica.nombre)}</b></div>
+          <select id="aeMetaDestino" style="display:none;"><option value="${metaUnica.id}" selected>${esc(metaUnica.nombre)}</option></select>
+        ` : `
+          <select class="sf" id="aeMetaDestino">
+            ${selectOptionsHtml}
+          </select>
+        `}
       </div>
 
       <div id="aePreviewContainer" style="display:none; margin-top:10px; background:rgba(246,241,230,0.04); border:1px dashed var(--line); border-radius:12px; padding:10px 12px; font-size:12.5px; flex-direction:column; gap:6px;"></div>
@@ -3282,7 +3302,7 @@ function openAsistenteIngresoExtra(preFill = null) {
         } else if (totalOverfill > 0.5) {
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              💡 ${c.modo === 'individual' ? 'El plan de metas' : 'El plan de metas comunes'} está completo. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
+              💡 ${c.modo === 'individual' ? 'Tus metas' : 'Tus metas comunes'} están completas. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
             </div>
           `;
         }
