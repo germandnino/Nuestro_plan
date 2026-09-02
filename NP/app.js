@@ -3686,6 +3686,13 @@ function revertirGasto(id) {
 
   const m = metaById(g.meta);
 
+  // Ninguna vista debe poder mutar el saldo de una meta individual de la pareja.
+  const patas = g.transferId ? state.gastos.filter(x => x.transferId === g.transferId) : [g];
+  if (patas.some(x => gastoDeMetaAjena(x, state.config.perfil))) {
+    flash('Este movimiento toca una meta individual de tu pareja: no puedes eliminarlo');
+    return;
+  }
+
   if (g.transferId) {
     const tId = g.transferId;
     const related = state.gastos.filter(x => x.transferId === tId);
