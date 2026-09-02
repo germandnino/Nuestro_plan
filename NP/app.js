@@ -929,6 +929,8 @@ function gastoDeMetaAjena(g, perfil){
   const m=metaById(g.meta);
   return !!(m && m.dueno && m.dueno!==perfil);
 }
+// Una meta con cupo puede recibir plata del motor. objetivo 0 = abierta, nunca se llena.
+function metaConCupo(m){ return !!m && !(m.objetivo>0 && (m.saldo||0)>=m.objetivo); }
 function metasVisiblesEnFondos(){
   // todas las compartidas + individuales de este teléfono
   return metasCompartidas().concat(metasIndividuales(state.config.perfil));
@@ -991,7 +993,7 @@ function metasBucketVista(tipo,dueno){
 }
 // Metas elegibles para recibir % en un bucket: no colocadas y no llenas.
 function metasElegiblesBucket(tipo,dueno){
-  return metasDeBucket(tipo,dueno).filter(m=>!(m.objetivo>0 && m.saldo>=m.objetivo));
+  return metasDeBucket(tipo,dueno).filter(metaConCupo);
 }
 // Buckets con al menos una meta elegible (no llena) en el scope — para el MOTOR de reparto.
 function bucketsPresentes(dueno){
@@ -3213,9 +3215,11 @@ function openAsistenteIngresoExtra(preFill = null) {
   const defaultMonto = preFill && preFill.monto ? '$' + Number(preFill.monto).toLocaleString('es-CO') : '';
 
   // El motor solo aporta valor si reparte entre 2+ metas; con una sola es redundante con el aporte directo.
-  const motorComun = c.modo === 'pareja' && !soloIndividual && comp.length >= 2;
-  const motorIndiv = c.modo === 'pareja' && indiv.length >= 2;
-  const motorUnico = c.modo === 'individual' && indiv.length >= 2;
+  const compConCupo = comp.filter(metaConCupo);
+  const indivConCupo = indiv.filter(metaConCupo);
+  const motorComun = c.modo === 'pareja' && !soloIndividual && compConCupo.length >= 2;
+  const motorIndiv = c.modo === 'pareja' && indivConCupo.length >= 2;
+  const motorUnico = c.modo === 'individual' && indivConCupo.length >= 2;
 
   let selectOptionsHtml = '';
   if (motorComun) selectOptionsHtml += '<option value="distribuir">Repartir entre metas comunes</option>';
