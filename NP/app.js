@@ -3591,19 +3591,16 @@ function revertirAporte(id) {
 
   // Sin el reparto guardado no se puede revertir: recalcularlo hoy usaría porcentajes
   // y saldos distintos a los del día del movimiento y dejaría los saldos corruptos.
-  const eraDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
-  const eraDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
-  const faltaDistMovimiento = (eraDistComun || eraDistIndiv) && !ep.dist;
+  const esDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
+  const esDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
+  const faltaDistMovimiento = (esDistComun || esDistIndiv) && !ep.dist;
   const faltaDistSobrante = !!(ep.sobranteRes && ep.sobranteRes.tipo === 'motor' && !ep.sobranteRes.dist);
   if (faltaDistMovimiento || faltaDistSobrante) {
-    flash('Este movimiento es de una versión anterior y no guardó cómo se repartió. Ajusta los saldos a mano desde cada meta.');
+    flash('No pudimos eliminar este movimiento: es de una versión anterior y no guardó cómo se repartió. Ajusta los saldos a mano desde cada meta.');
     return;
   }
 
   if (toSave > 0.5) {
-    const esDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
-    const esDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
-
     if (esDistComun) {
       const dist = ep.dist;
       state.metas.forEach(m => {
