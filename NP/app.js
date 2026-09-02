@@ -32,6 +32,7 @@ let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósi
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
 let _distribucionCollapsed = true; // estado colapsado por defecto del acordeón de reparto de propósitos
 let _barrasMesCollapsed = true;    // barras por meta de Mi Mes plegadas: las cifras quedan, el detalle se pide
+let _verTodasLasMetas = false;     // lista de metas en Distribución de Ahorros: top 5 y el resto a pedido
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -52,7 +53,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.49'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.50'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -1968,104 +1969,85 @@ function drawBucketBar(dueno){
 
 function drawSavingsDonut() {
   const perfil = state.config.perfil;
-  const metasConSaldo = state.metas.filter(m => {
+  // Privacidad: nada del otro perfil (sus metas individuales).
+  const visibles = state.metas.filter(m => {
     if (m.tipo === 'personal') return false;
-    // Privacidad: nada del otro perfil (sus metas individuales).
     if (m.dueno && m.dueno !== perfil) return false;
-    return true;
-  }).map(m => {
-    let nombre = m.nombre;
-    if (m.dueno) {
-      nombre = `${m.nombre} (Individual)`;
-    }
-    return {
-      id: m.id,
-      nombre: nombre,
-      saldo: m.saldo,
-      tipo: m.tipo,
-      dueno: m.dueno
-    };
-  }).filter(m => m.saldo > 0);
-
-  // La plata sin asignar también es plata del plan: sin ella el total de la dona no
-  // cuadraba con el patrimonio de Inicio ni con el acumulado de Mi Mes.
+    return (m.saldo || 0) > 0;
+  });
   const sinAsignar = totalSinAsignar();
-  if (sinAsignar > 0.5) {
-    metasConSaldo.push({ id: '_sinAsignar', nombre: 'Sin asignar', saldo: sinAsignar, tipo: null, dueno: null, esSinAsignar: true });
-  }
+  const total = visibles.reduce((s, m) => s + m.saldo, 0) + sinAsignar;
 
-  const total = metasConSaldo.reduce((s, m) => s + m.saldo, 0);
-
-  if (total === 0 || metasConSaldo.length === 0) {
+  if (total <= 0.5) {
     return `<div class="card dark" style="padding:18px 16px;">
       <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
-      <div style="display:flex; align-items:center; gap:20px;">
-        <div style="width:128px; height:128px; flex-shrink:0;">
-          <svg viewBox="0 0 100 100" style="width:100%; height:100%; overflow:visible;">
-            <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(246,241,230,.08)" stroke-width="11" />
-            <text x="50" y="53" text-anchor="middle" font-family="var(--sans)" font-size="8" fill="rgba(246,241,230,.3)" font-weight="600">Vacío</text>
-          </svg>
-        </div>
-        <div style="flex:1; color:rgba(246,241,230,.5); font-size:12.5px; line-height:1.4;">
-          Aún no hay ahorros acumulados. Los saldos que agreguen a sus metas aparecerán aquí.
-        </div>
+      <div style="font-size:12.5px; color:rgba(246,241,230,.55); line-height:1.45;">
+        Aún no hay ahorros acumulados. Los saldos que agreguen a sus metas aparecerán aquí.
       </div>
     </div>`;
   }
 
-  const segments = [];
-  let accumPct = 0;
-  
-  metasConSaldo.sort((a,b) => b.saldo - a.saldo);
+  // Nivel 1: propósitos. Son siempre 3 (más lo sin asignar), así que este bloque
+  // no crece por más metas que se agreguen. Los colores son los mismos de la barra
+  // de propósitos en Metas y van pegados al propósito, nunca a la posición.
+  const COL = { imprevistos:'#3f8a8a', sueno:'#d9a84a', invertir:'#5aa67e' };
+  const LBL = { imprevistos:'Colchón', sueno:'Sueños', invertir:'Inversión' };
+  const grupos = BUCKETS.map(t => ({
+    id: t, nombre: LBL[t], color: COL[t],
+    monto: visibles.filter(m => m.tipo === t).reduce((s, m) => s + m.saldo, 0)
+  })).filter(g => g.monto > 0.5);
+  if (sinAsignar > 0.5) {
+    grupos.push({ id:'_sin', nombre:'Sin asignar', color:'rgba(246,241,230,.28)', monto:sinAsignar });
+  }
 
-  metasConSaldo.forEach((m, i) => {
-    const pct = (m.saldo / total) * 100;
-    // "Sin asignar" no es una meta: se pinta apagado para que se lea como pendiente.
-    const color = m.esSinAsignar ? 'rgba(246,241,230,.28)' : DONUT_PALETTE[i % DONUT_PALETTE.length];
-
-    segments.push({
-      ...m,
-      pct,
-      color,
-      startAngle: (accumPct / 100) * 360 - 90
-    });
-    accumPct += pct;
-  });
-
-  const C = 219.91;
-  let svgCircles = '';
-  segments.forEach(seg => {
-    const offset = C - (seg.pct / 100) * C;
-    svgCircles += `<circle cx="50" cy="50" r="35" fill="none" stroke="${seg.color}" stroke-width="11" stroke-dasharray="${C} ${C}" stroke-dashoffset="${offset}" transform="rotate(${seg.startAngle} 50 50)" stroke-linecap="butt" />`;
-  });
-
-  const legend = segments.map(seg => `
-    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px; font-size:12.5px; color:rgba(246,241,230,.85)">
-      <div style="display:flex; align-items:flex-start; gap:6px; min-width:0; flex:1;">
-        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${seg.color}; flex-shrink:0; margin-top:4px;"></span>
-        <span style="min-width:0; line-height:1.3;">${seg.nombre}</span>
-      </div>
-      <div style="font-variant-numeric:tabular-nums; flex-shrink:0;">
-        <b style="color:var(--cream);">${fmtK(seg.saldo)}</b>
-        <span style="font-size:10px; color:rgba(246,241,230,.45); margin-left:2px;">(${Math.round(seg.pct)}%)</span>
-      </div>
-    </div>
+  // 2px de separación entre segmentos, para que se lean como piezas y no como un continuo.
+  const segmentos = grupos.map(g => `
+    <div style="width:${(g.monto / total * 100).toFixed(2)}%; background:${g.color}; border-radius:3px;" title="${esc(g.nombre)}"></div>
   `).join('');
 
+  const leyenda = grupos.map(g => `
+    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:rgba(246,241,230,.75); white-space:nowrap;">
+      <i style="width:8px; height:8px; border-radius:50%; background:${g.color}; flex-shrink:0;"></i>
+      ${esc(g.nombre)} ${Math.round(g.monto / total * 100)}%
+    </span>
+  `).join('');
+
+  // Nivel 2: las metas, ordenadas por saldo. Barra horizontal para que el nombre
+  // tenga toda la línea y la lista crezca hacia abajo sin deformar la tarjeta.
+  const orden = visibles.slice().sort((a, b) => b.saldo - a.saldo);
+  const TOPE = 5;
+  const recorta = !_verTodasLasMetas && orden.length > TOPE;
+  const mostradas = recorta ? orden.slice(0, TOPE) : orden;
+
+  const filas = mostradas.map(m => {
+    const pct = m.saldo / total * 100;
+    const nombre = m.dueno ? `${m.nombre} (Individual)` : m.nombre;
+    return `
+      <div style="margin-bottom:11px;">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:5px;">
+          <span style="font-size:13px; font-weight:600; color:var(--cream); min-width:0; line-height:1.3;">${esc(nombre)}</span>
+          <span class="num" style="font-size:12.5px; font-weight:700; color:var(--cream); flex-shrink:0; white-space:nowrap;">${fmtK(m.saldo)} <span style="color:rgba(246,241,230,.55); font-weight:600; font-size:11px;">${Math.round(pct)}%</span></span>
+        </div>
+        <div style="height:8px; background:rgba(246,241,230,0.08); border-radius:5px; overflow:hidden;">
+          <div style="height:100%; width:${pct.toFixed(1)}%; background:${COL[m.tipo] || 'var(--gb)'}; border-radius:5px;"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const verMas = orden.length > TOPE ? `
+    <button class="metas-vertodas" style="width:100%; margin-top:2px; background:none; border:none; color:var(--gb); font-family:var(--sans); font-size:12px; font-weight:700; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; gap:6px;">
+      ${recorta ? `Ver las ${orden.length} metas` : 'Ver menos'}
+      <span style="display:inline-flex; transform:rotate(${recorta ? '0' : '180'}deg);">${getSVG('chevronDown', '', 'width:14px; height:14px;')}</span>
+    </button>` : '';
+
   return `<div class="card dark" style="padding:18px 16px;">
-    <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
-    <div style="display:flex; align-items:center; gap:14px;">
-      <div style="width:112px; height:112px; flex-shrink:0;">
-        <svg viewBox="0 0 100 100" style="width:100%; height:100%; overflow:visible;">
-          ${svgCircles}
-          <text x="50" y="46" text-anchor="middle" font-family="var(--sans)" font-size="7" fill="rgba(246,241,230,.5)" font-weight="700" letter-spacing="0.05em">TOTAL</text>
-          <text x="50" y="58" text-anchor="middle" font-family="var(--serif)" font-size="13" fill="var(--cream)" font-weight="600">${fmtK(total)}</text>
-        </svg>
-      </div>
-      <div style="flex:1; display:flex; flex-direction:column; gap:7px; overflow:hidden;">
-        ${legend}
-      </div>
-    </div>
+    <div class="k" style="margin-bottom:10px;">Distribución de Ahorros</div>
+    <div style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:rgba(246,241,230,.5);">Total acumulado</div>
+    <div class="num" style="font-family:var(--serif); font-size:28px; font-weight:600; color:var(--cream); line-height:1.1; margin-bottom:12px;">${fmtK(total)}</div>
+    <div style="display:flex; gap:2px; height:12px; margin-bottom:9px;">${segmentos}</div>
+    <div style="display:flex; flex-wrap:wrap; gap:6px 14px; margin-bottom:16px;">${leyenda}</div>
+    ${filas}
+    ${verMas}
   </div>`;
 }
 
@@ -2527,6 +2509,13 @@ function renderMetas(){
   if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
   const tabLogros = $('btnTabLogros');
   if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 2; rerender(); };
+
+  $('r1').querySelectorAll('.metas-vertodas').forEach(btn => {
+    btn.onclick = () => {
+      _verTodasLasMetas = !_verTodasLasMetas;
+      rerender();
+    };
+  });
 
   $('r1').querySelectorAll('.bucketbar-toggle').forEach(btn => {
     btn.onclick = () => {
