@@ -365,7 +365,7 @@ function liberarCDT(m){
   const snap=JSON.parse(JSON.stringify(m));
   const monto=m.saldo;
   state.metas=state.metas.filter(x=>x.id!==m.id);
-  const ing=registrarSobrantePendiente(monto, m.nombre);
+  const ing=registrarSobrantePendiente(monto, m.nombre, { dueno: m.dueno || null });
   save(); rerender();
   flashUndo('CDT liberado → sin asignar ✓', ()=>{
     state.ingresos=state.ingresos.filter(i=>i.id!==ing.id);
@@ -1315,8 +1315,21 @@ function aplicarDecisionSobrante(dec, monto){
 }
 
 // Sobrantes sin asignar viven en state.ingresos con flag sinAsignar (persisten y sincronizan).
-function registrarSobrantePendiente(monto, origenNombre){
-  const ing={id:uid(),mes:selectedMonth||curMonth(),nombre:'Sobrante de '+origenNombre,monto:monto,meta:'sinAsignar',sinAsignar:true,persona:state.config.perfil};
+// opts.dueno ('p1'|'p2') marca el sobrante como privado de ese perfil: solo él lo ve y lo asigna.
+// opts.mes fija el mes del movimiento que lo originó (si falta, el mes en curso).
+function registrarSobrantePendiente(monto, origenNombre, opts){
+  const o = opts || {};
+  const ing = {
+    id: uid(),
+    mes: o.mes || curMonth(),
+    nombre: 'Sobrante de ' + origenNombre,
+    monto: monto,
+    meta: 'sinAsignar',
+    sinAsignar: true,
+    persona: state.config.perfil,
+    privado: o.dueno ? true : undefined,
+    duenoPriv: o.dueno || undefined
+  };
   state.ingresos.unshift(ing);
   return ing;
 }
@@ -3469,7 +3482,7 @@ function aplicarIngresoInmediatoActivo(ep) {
 
     if (esDistComun) {
       const { dist, rem: remDist } = distribuirAhorro(toSave);
-      if(remDist>0.5) registrarSobrantePendiente(remDist, 'reparto');
+      if(remDist>0.5) registrarSobrantePendiente(remDist, 'reparto', { mes: mes });
       distInmediato = Object.assign({}, dist);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
@@ -3486,7 +3499,7 @@ function aplicarIngresoInmediatoActivo(ep) {
         }
       });
       if (rem > 0.5) {
-        registrarSobrantePendiente(rem, 'reparto individual');
+        registrarSobrantePendiente(rem, 'reparto individual', { dueno: profile, mes: mes });
       }
     } else {
       const m = metaById(ep.meta);
@@ -3521,11 +3534,11 @@ function aplicarIngresoInmediatoActivo(ep) {
   if (ep._sobra) {
     openModalSobrante(ep._sobra, ep._metaLlena).then(dec => {
       if (dec.accion === 'pendiente') {
-        registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
+        registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
       } else {
-        const res = aplicarDecisionSobrante(dec, ep._sobra);
+        const res = aplicarDecisionSobrante(dec, ep._sobra, ep._metaLlena.dueno || null);
         if (res.tipo === 'pendiente') {
-          registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre);
+          registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
         } else {
           const reg = state.ingresos.find(x => x.id === ep.id);
           if (reg) {
