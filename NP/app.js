@@ -1380,7 +1380,9 @@ function registrarSobrantePendiente(monto, origenNombre, opts){
     sinAsignar: true,
     persona: state.config.perfil,
     privado: o.dueno ? true : undefined,
-    duenoPriv: o.dueno || undefined
+    duenoPriv: o.dueno || undefined,
+    // Movimiento que generó este sobrante: si se revierte, el sobrante se va con él.
+    origenIngresoId: o.origenIngresoId || undefined
   };
   state.ingresos.unshift(ing);
   return ing;
@@ -3531,7 +3533,7 @@ function aplicarIngresoInmediatoActivo(ep) {
 
     if (esDistComun) {
       const { dist, rem: remDist } = distribuirAhorro(toSave);
-      if(remDist>0.5) registrarSobrantePendiente(remDist, 'reparto', { mes: mes });
+      if(remDist>0.5) registrarSobrantePendiente(remDist, 'reparto', { mes: mes, origenIngresoId: ep.id });
       distInmediato = Object.assign({}, dist);
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
@@ -3548,7 +3550,7 @@ function aplicarIngresoInmediatoActivo(ep) {
         }
       });
       if (rem > 0.5) {
-        registrarSobrantePendiente(rem, 'reparto individual', { dueno: profile, mes: mes });
+        registrarSobrantePendiente(rem, 'reparto individual', { dueno: profile, mes: mes, origenIngresoId: ep.id });
       }
     } else {
       const m = metaById(ep.meta);
@@ -3583,11 +3585,11 @@ function aplicarIngresoInmediatoActivo(ep) {
   if (ep._sobra) {
     openModalSobrante(ep._sobra, ep._metaLlena, ep._metaLlena.dueno || null).then(dec => {
       if (dec.accion === 'pendiente') {
-        registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
+        registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes, origenIngresoId: ep.id });
       } else {
         const res = aplicarDecisionSobrante(dec, ep._sobra, ep._metaLlena.dueno || null, ep.mes);
         if (res.tipo === 'pendiente') {
-          registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
+          registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes, origenIngresoId: ep.id });
         } else {
           const reg = state.ingresos.find(x => x.id === ep.id);
           if (reg) {
@@ -3659,7 +3661,9 @@ function revertirAporte(id) {
     }
   }
 
-  state.ingresos = state.ingresos.filter(ing => ing.id !== id);
+  // Se elimina el movimiento y, con él, el sobrante que ese movimiento dejó
+  // pendiente: si se quedara, el plan conservaría plata cuyo origen ya no existe.
+  state.ingresos = state.ingresos.filter(ing => ing.id !== id && ing.origenIngresoId !== id);
 
   save();
   rerender();
