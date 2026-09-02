@@ -3730,13 +3730,23 @@ function getMonthlyDistributionData(mes) {
 function drawMonthlyDistributionBars(mes) {
   const data = getMonthlyDistributionData(mes);
   const total = data.reduce((s, x) => s + x.amount, 0);
-  // Acumulado histórico: saldo de las metas visibles para este perfil.
-  const acumulado = metasVisiblesEnFondos().reduce((s, m) => s + (m.saldo || 0), 0);
+  // Mismo número que el patrimonio de Inicio. En un mes pasado el acumulado sigue
+  // siendo el de hoy, así que la etiqueta lo dice para no leerse como la foto de ese mes.
+  const pat = patrimonioResumen();
+  const acumulado = pat.total;
+  const esMesActual = mes === curMonth();
+  const acumLabel = esMesActual ? 'Acumulado total' : 'Acumulado total hoy';
+  const indivLabel = state.config.modo !== 'individual' && pat.totalIndividual > 0.5
+    ? `<div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:6px;">
+        <span style="font-size:11.5px; font-weight:600; color:var(--gs);">Mis metas individuales</span>
+        <span class="num" style="font-size:13px; font-weight:700; color:var(--gs);">${fmtK(pat.totalIndividual)}</span>
+      </div>`
+    : '';
   const acumuladoRow = acumulado > 0.5 ? `
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
-      <span style="font-size:11.5px; font-weight:600; color:var(--gs);">Acumulado total</span>
+      <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
       <span class="num" style="font-size:14px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
-    </div>
+    </div>${indivLabel}
   ` : '';
 
   if (total <= 0.5) {
@@ -3751,9 +3761,11 @@ function drawMonthlyDistributionBars(mes) {
         <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero a tus metas para ver la distribución del mes.</div>
       </div>
       ${acumulado > 0.5 ? `
-        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">
-          <span style="font-size:11.5px; font-weight:600; color:var(--gs);">Acumulado total</span>
-          <span class="num" style="font-size:16px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
+        <div style="padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+            <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
+            <span class="num" style="font-size:16px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
+          </div>${indivLabel}
         </div>
       ` : ''}
     `;
