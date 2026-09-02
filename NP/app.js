@@ -3926,15 +3926,20 @@ function renderMiMes(){
   const entry = state.log.find(e => e.mes === mes);
   const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
   
-  // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
-  // ingreso de origen) y los movimientos privados del otro perfil.
-  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
-  const totalOut = state.gastos.filter(g => g.fecha.substring(0, 7) === mes && g.mov === 'salida').reduce((sum, g) => sum + g.monto, 0);
-  const netSaved = totalIn - totalOut;
-  
   // Privacidad: la pareja solo ve movimientos de metas conjuntas. Se ocultan los
   // ingresos privados del otro perfil y los gastos que tocan una meta individual ajena.
   const perfilActivo = state.config.perfil;
+
+  // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
+  // ingreso de origen) y los movimientos privados del otro perfil.
+  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
+  const totalOut = state.gastos.filter(g => {
+    if (g.fecha.substring(0, 7) !== mes || g.mov !== 'salida') return false;
+    const m = metaById(g.meta);
+    if (m && m.dueno && m.dueno !== perfilActivo) return false; // retiro de meta individual ajena
+    return true;
+  }).reduce((sum, g) => sum + g.monto, 0);
+  const netSaved = totalIn - totalOut;
   const listIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).map(ing => ({
     type: 'ingreso',
     id: ing.id,
