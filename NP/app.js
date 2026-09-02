@@ -913,6 +913,28 @@ function metasVisiblesEnFondos(){
   // todas las compartidas + individuales de este teléfono
   return metasCompartidas().concat(metasIndividuales(state.config.perfil));
 }
+// Única fuente de verdad del "total del plan". La consumen el patrimonio de Inicio
+// y el acumulado de Mi Mes, para que ambas pantallas muestren el mismo número.
+// En pareja el número grande es SOLO lo compartido: idéntico en los dos teléfonos.
+function patrimonioResumen(){
+  const c=state.config;
+  const perfil=c.perfil;
+  const esPareja=c.modo!=='individual';
+  const compartido=state.metas
+    .filter(m=>m.tipo!=='personal'&&!m.dueno)
+    .reduce((s,m)=>s+(m.saldo||0),0);
+  const individual=metasIndividuales(perfil).reduce((s,m)=>s+(m.saldo||0),0);
+  const sp=sobrantesPendientesTodos();
+  const sinAsignarCompartido=sp.filter(i=>!i.duenoPriv).reduce((s,i)=>s+(i.monto||0),0);
+  const sinAsignarIndividual=sp.filter(i=>i.duenoPriv===perfil).reduce((s,i)=>s+(i.monto||0),0);
+  const totalPareja=compartido+sinAsignarCompartido;
+  const totalIndividual=individual+sinAsignarIndividual;
+  return {
+    compartido, individual, sinAsignarCompartido, sinAsignarIndividual,
+    totalPareja, totalIndividual,
+    total: esPareja ? totalPareja : totalPareja+totalIndividual
+  };
+}
 function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inversión':t==='sueno'?'Sueño':'Personal';}
 
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
@@ -1625,18 +1647,11 @@ function renderInicio(){
   const c=state.config;
   const perfil=c.perfil;
   const esPareja = c.modo !== 'individual';
-  // Compartido: lo de la pareja (sin dueño). Idéntico en ambos teléfonos.
-  const ahorrosCompartidos = state.metas.filter(m => m.tipo !== 'personal' && !m.dueno).reduce((s,m)=>s+m.saldo,0);
-  // Mi parte: metas individuales propias. Privada.
-  const misIndividuales = state.metas.filter(m => m.dueno === perfil).reduce((s,m)=>s+m.saldo,0);
-
-  // "Sin asignar" es plata real del plan (sumidero del sobrante) → cuenta en patrimonio.
-  const sinAsig = totalSinAsignar();
-  // Pareja: el número grande es SOLO lo compartido (mismo en ambos teléfonos).
-  // Individual: una sola persona, se suma todo.
-  const patrimonioNeto = (esPareja
-    ? ahorrosCompartidos
-    : (ahorrosCompartidos + misIndividuales)) + sinAsig;
+  // Único cálculo del total del plan (compartido con Mi Mes).
+  const pat = patrimonioResumen();
+  const ahorrosCompartidos = pat.totalPareja;
+  const misIndividuales = pat.totalIndividual;
+  const patrimonioNeto = pat.total;
   const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   const headerHtml = c.modo === 'individual'
