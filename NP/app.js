@@ -690,6 +690,9 @@ function normalize(){
   // Aquí state.metas ya es array y sus aportePct/objetivo son numéricos.
   migrarPctABuckets();
 
+  // Repara los sobrantes privados que se escribieron sin marca de dueño.
+  migrarSobrantesPrivados();
+
   if (reordenarMetasPorCompletadas()) {
     rebalancearElegiblesA100('compartido');
     rebalancearElegiblesA100('individual', 'p1');
@@ -902,6 +905,18 @@ function migrarPctABuckets(){
       else { grupo.forEach(m=>m.aportePct=Math.round((m.aportePct||0)/sum*100));
              const t=grupo.reduce((s,m)=>s+(m.aportePct||0),0); grupo[grupo.length-1].aportePct+=100-t; }
     });
+  });
+}
+
+// Sobrantes escritos antes de que existiera duenoPriv: sin marca, la pareja los
+// leia como plata compartida. Se reconstruye el dueno desde `persona`, que el
+// escritor viejo ya guardaba, para que ambos telefonos lleguen al mismo resultado.
+function migrarSobrantesPrivados(){
+  state.ingresos.forEach(i=>{
+    if(!i.sinAsignar || i.duenoPriv || !i.persona) return;
+    const esIndiv = i.nombre === 'Sobrante de reparto individual'
+      || state.metas.some(m=>m.dueno && ('Sobrante de '+m.nombre)===i.nombre);
+    if(esIndiv){ i.privado=true; i.duenoPriv=i.persona; }
   });
 }
 
@@ -3626,8 +3641,10 @@ function revertirAporte(id) {
   if (ep.sobranteRes && (ep.sobranteRes.monto || 0) > 0) {
     const sr = ep.sobranteRes;
     if (sr.tipo === 'motor' && sr.dist) {
+      const dSr = sr.dueno || null;
       state.metas.forEach(m => {
-        if (m.tipo !== 'personal' && !m.dueno && (sr.dist[m.id] || 0) > 0.5) {
+        const enScope = dSr ? m.dueno === dSr : (m.tipo !== 'personal' && !m.dueno);
+        if (enScope && (sr.dist[m.id] || 0) > 0.5) {
           m.saldo = Math.max(0, m.saldo - sr.dist[m.id]);
         }
       });
