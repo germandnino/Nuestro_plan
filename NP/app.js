@@ -1238,10 +1238,12 @@ function esDestinoPersonal(metaId){
 }
 // Pregunta qué hacer con el sobrante cuando un aporte directo llena la meta.
 // Resuelve {accion:'motor'|'meta'|'pendiente', metaId?}.
-function openModalSobrante(monto, metaLlena){
+function openModalSobrante(monto, metaLlena, dueno){
   return new Promise(resolve=>{
     const c=state.config;
-    const otras=metasVisiblesEnFondos().filter(m=>m.id!==metaLlena.id && m.tipo!=='personal');
+    // Sobrante privado: solo puede ir a metas individuales de su dueño.
+    const universo = dueno ? metasIndividuales(dueno) : metasVisiblesEnFondos();
+    const otras=universo.filter(m=>m.id!==metaLlena.id && m.tipo!=='personal');
     const opts=otras.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('');
     const showDejar = metaLlena && metaLlena.id !== '_pend';
     
@@ -1289,9 +1291,19 @@ function openModalSobrante(monto, metaLlena){
   });
 }
 // Ejecuta la decisión del modal. Muta saldos. Devuelve descriptor para el registro del ingreso.
-function aplicarDecisionSobrante(dec, monto){
-  const c=state.config;
+// `dueno` ('p1'|'p2'|null): si viene, el sobrante es privado y se reparte con el motor individual.
+function aplicarDecisionSobrante(dec, monto, dueno){
   if(dec.accion==='motor'){
+    if(dueno){
+      const { dist, rem } = distribuirAhorroIndividual(dueno, monto);
+      if(rem>0.5) registrarSobrantePendiente(rem, 'reparto individual', { dueno: dueno });
+      state.metas.forEach(m=>{
+        if(m.dueno===dueno&&(dist[m.id]||0)>0.5){
+          m.saldo+=dist[m.id];
+        }
+      });
+      return {tipo:'motor',dist:Object.assign({},dist),dueno:dueno};
+    }
     const { dist, rem } = distribuirAhorro(monto);
     if(rem>0.5) registrarSobrantePendiente(rem, 'reparto');
     state.metas.forEach(m=>{
@@ -1333,7 +1345,10 @@ function registrarSobrantePendiente(monto, origenNombre, opts){
   state.ingresos.unshift(ing);
   return ing;
 }
-function sobrantesPendientes(){return state.ingresos.filter(i=>i.sinAsignar);}
+// Todos los sobrantes del plan, sin filtrar. Solo para cálculos de patrimonio.
+function sobrantesPendientesTodos(){return state.ingresos.filter(i=>i.sinAsignar);}
+// Los que puede ver y asignar el perfil activo: los compartidos y los suyos.
+function sobrantesPendientes(){return especialesVisibles(sobrantesPendientesTodos());}
 function totalSinAsignar(){return sobrantesPendientes().reduce((s,i)=>s+(i.monto||0),0);}
 // Tarjeta reusable "sin asignar" (Inicio, Metas, Mi Mes). Botón [data-asignarpend].
 function drawSinAsignarCard(){
@@ -1348,9 +1363,10 @@ function drawSinAsignarCard(){
 async function asignarSobrantePendiente(){
   const p=sobrantesPendientes()[0];
   if(!p)return;
-  const dec=await openModalSobrante(p.monto,{id:'_pend',nombre:p.nombre});
+  const dueno=p.duenoPriv||null;
+  const dec=await openModalSobrante(p.monto,{id:'_pend',nombre:p.nombre},dueno);
   if(dec.accion==='pendiente')return;
-  const res=aplicarDecisionSobrante(dec,p.monto);
+  const res=aplicarDecisionSobrante(dec,p.monto,dueno);
   if(res.tipo==='pendiente')return;
   state.ingresos=state.ingresos.filter(i=>i.id!==p.id);
   save();rerender();flash('Sobrante asignado ✓');
