@@ -3781,27 +3781,29 @@ function getMonthlyDistributionData(mes) {
 function drawMonthlyDistributionBars(mes) {
   const data = getMonthlyDistributionData(mes);
   const total = data.reduce((s, x) => s + x.amount, 0);
-  // Mismo número que el patrimonio de Inicio. En un mes pasado el acumulado sigue
-  // siendo el de hoy, así que la etiqueta lo dice para no leerse como la foto de ese mes.
+  // Acumulado de quien mira: lo compartido MÁS sus metas individuales. No coincide
+  // con el número grande de Inicio, que en pareja cuenta solo lo compartido para ser
+  // idéntico en ambos teléfonos; por eso, cuando conviven los dos tipos, se muestra
+  // el desglose que explica la diferencia. En un mes pasado el acumulado sigue siendo
+  // el de hoy, así que la etiqueta lo dice para no leerse como la foto de ese mes.
   const pat = patrimonioResumen();
-  const acumulado = pat.total;
+  const acumulado = pat.totalPareja + pat.totalIndividual;
   const esMesActual = mes === curMonth();
   const acumLabel = esMesActual ? 'Acumulado total' : 'Acumulado total hoy';
-  const indivLabel = state.config.modo !== 'individual' && pat.totalIndividual > 0.5
-    ? `<div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:6px;">
-        <span style="font-size:11.5px; font-weight:600; color:var(--gs);">Mis metas individuales</span>
-        <span class="num" style="font-size:13px; font-weight:700; color:var(--gs);">${fmtK(pat.totalIndividual)}</span>
-      </div>`
-    : '';
-  // Las dos filas se deciden por separado: quien solo tiene metas individuales
-  // tiene acumulado 0 de pareja, y colgar la fila individual de esa condición
-  // dejaba la tarjeta sin ninguna cifra acumulada.
-  const parejaRow = acumulado > 0.5 ? `
+  // El desglose solo aporta si hay de los dos; si no, repetiría la misma cifra.
+  const hayDesglose = state.config.modo !== 'individual'
+    && pat.totalPareja > 0.5 && pat.totalIndividual > 0.5;
+  const subFila = (lbl, val) => `
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:5px; padding-left:10px;">
+      <span style="font-size:11px; font-weight:600; color:var(--gs); opacity:.75;">${lbl}</span>
+      <span class="num" style="font-size:12px; font-weight:700; color:var(--gs);">${fmtK(val)}</span>
+    </div>`;
+  const acumuladoRow = acumulado > 0.5 ? `
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
       <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
       <span class="num" style="font-size:14px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
-    </div>` : '';
-  const acumuladoRow = (parejaRow || indivLabel) ? `${parejaRow}${indivLabel}` : '';
+    </div>${hayDesglose ? subFila('Compartido', pat.totalPareja) + subFila('Mis metas individuales', pat.totalIndividual) : ''}
+  ` : '';
 
   if (total <= 0.5) {
     return `
@@ -3815,13 +3817,7 @@ function drawMonthlyDistributionBars(mes) {
         <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero a tus metas para ver la distribución del mes.</div>
       </div>
       ${acumuladoRow ? `
-        <div style="padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">
-          ${acumulado > 0.5 ? `
-            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
-              <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
-              <span class="num" style="font-size:16px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
-            </div>` : ''}${indivLabel}
-        </div>
+        <div style="padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">${acumuladoRow}</div>
       ` : ''}
     `;
   }
