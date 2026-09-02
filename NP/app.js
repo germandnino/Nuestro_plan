@@ -3589,12 +3589,23 @@ function revertirAporte(id) {
   
   const toSave = ep.monto;
 
+  // Sin el reparto guardado no se puede revertir: recalcularlo hoy usaría porcentajes
+  // y saldos distintos a los del día del movimiento y dejaría los saldos corruptos.
+  const eraDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
+  const eraDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
+  const faltaDistMovimiento = (eraDistComun || eraDistIndiv) && !ep.dist;
+  const faltaDistSobrante = !!(ep.sobranteRes && ep.sobranteRes.tipo === 'motor' && !ep.sobranteRes.dist);
+  if (faltaDistMovimiento || faltaDistSobrante) {
+    flash('Este movimiento es de una versión anterior y no guardó cómo se repartió. Ajusta los saldos a mano desde cada meta.');
+    return;
+  }
+
   if (toSave > 0.5) {
     const esDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
     const esDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
 
     if (esDistComun) {
-      const dist = ep.dist || distribuirAhorro(toSave).dist;
+      const dist = ep.dist;
       state.metas.forEach(m => {
         if (m.tipo !== 'personal' && !m.dueno && (dist[m.id] || 0) > 0.5) {
           m.saldo = Math.max(0, m.saldo - dist[m.id]);
@@ -3602,7 +3613,7 @@ function revertirAporte(id) {
       });
     } else if (esDistIndiv) {
       const profile = ep.duenoPriv || state.config.perfil;
-      const dist = ep.dist || distribuirAhorroIndividual(profile, toSave, true).dist;
+      const dist = ep.dist;
       state.metas.forEach(m => {
         if (m.dueno === profile && (dist[m.id] || 0) > 0.5) {
           m.saldo = Math.max(0, m.saldo - dist[m.id]);
