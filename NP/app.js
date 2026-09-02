@@ -1287,7 +1287,7 @@ function openModalSobrante(monto, metaLlena, dueno){
     ov.className='modal-overlay'; ov.style.display='flex';
     ov.innerHTML=`
       <div class="modal-card animate-in" style="max-width:400px; padding:20px;">
-        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa! 🎉</h3>
+        <h3 class="modal-title" style="font-size:18px; font-weight:800; margin-bottom:6px; color:var(--ink);">¡La meta "${metaLlena.nombre}" quedó completa!</h3>
         <div class="hint" style="margin:0; font-size:13px; color:var(--gs); line-height:1.45;">Sobran <b>${fmt(monto)}</b>. ¿Qué hacemos con ese dinero?</div>
         <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
           <button class="btn sm" id="sobMotor" style="margin:0; width:100%;">Repartir con el motor</button>
@@ -2380,7 +2380,7 @@ function renderMetas(){
         }
       } else if(m.tipo==='sueno' && obj>0 && m.saldo>=obj){
         // Estado terminal del sueño: cumplido (único que celebra). Acción: consumir → Logros.
-        sub = `<b style="color:var(--green)">¡Cumplido!</b> 🎉`;
+        sub = `<b style="color:var(--green)">¡Cumplido!</b>`;
       } else {
         sub = generico;
       }
@@ -3325,7 +3325,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             const m = x.m;
             const newSaldo = m.saldo + x.v;
             const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena!</span>` : '';
             const pct = (x.v / toSave) * 100;
             
             html += `
@@ -3367,7 +3367,7 @@ function openAsistenteIngresoExtra(preFill = null) {
         } else if (totalOverfill > 0.5) {
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              💡 ${c.modo === 'individual' ? 'Tus metas' : 'Tus metas comunes'} están completas. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
+              ${c.modo === 'individual' ? 'Tus metas' : 'Tus metas comunes'} están completas. El excedente de <b>${fmt(totalOverfill)}</b> se destinará al Fondo de Emergencia.
             </div>
           `;
         }
@@ -3389,7 +3389,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             const m = x.m;
             const newSaldo = m.saldo + x.v;
             const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena! 🎉</span>` : '';
+            const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Se llena!</span>` : '';
             const pct = (x.v / toSave) * 100;
             
             html += `
@@ -3416,7 +3416,7 @@ function openAsistenteIngresoExtra(preFill = null) {
             : `Tus metas individuales están llenas. El excedente de <b>${fmt(rem)}</b> quedará como sobrante por asignar.`;
           html += `
             <div style="margin-top:6px; font-size:11.5px; color:var(--green); background:rgba(60,140,100,0.06); border:1px solid rgba(60,140,100,0.2); border-radius:8px; padding:6px 8px; line-height:1.35;">
-              💡 ${msg}
+              ${msg}
             </div>
           `;
         }
@@ -3437,7 +3437,7 @@ function openAsistenteIngresoExtra(preFill = null) {
 
           const newSaldo = currentSaldo + aplicado;
           const isFilled = m.objetivo > 0 && newSaldo >= m.objetivo;
-          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada! 🎉</span>` : '';
+          const badge = isFilled ? ` <span class="tag ok" style="padding:1px 5px; font-size:9px; vertical-align:middle; margin-left:4px; border-color:var(--gb); color:var(--gb);">¡Llenada!</span>` : '';
           
           html += `
             <div style="font-weight:700; color:var(--green); margin-bottom:6px;">Aporte directo a la meta:</div>
@@ -4212,7 +4212,7 @@ function renderLearnPlaceholder(body, tool){
     <header><div class="ey">Próximamente</div><h1>${tool.title}</h1></header>
     <div class="card" style="text-align:center;padding:28px 16px;">
       <div class="learn-tool-ic" style="--tool-accent:${tool.color};margin:0 auto 12px;width:48px;height:48px;">${getSVG(tool.icon)}</div>
-      <div class="muted" style="font-size:13.5px;line-height:1.5;">Estamos construyendo esta herramienta. Vuelve pronto. 🚧</div>
+      <div class="muted" style="font-size:13.5px;line-height:1.5;">Estamos construyendo esta herramienta. Vuelve pronto.</div>
     </div>`;
 }
 
