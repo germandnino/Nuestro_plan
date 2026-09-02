@@ -31,6 +31,7 @@ let curTab=0, firstFlow=true, curMetasSubTab=1, curMetasScope='shared';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
 let _distribucionCollapsed = true; // estado colapsado por defecto del acordeón de reparto de propósitos
+let _barrasMesCollapsed = true;    // barras por meta de Mi Mes plegadas: las cifras quedan, el detalle se pide
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -3795,19 +3796,19 @@ function drawMonthlyDistributionBars(mes) {
     && pat.totalPareja > 0.5 && pat.totalIndividual > 0.5;
   const subFila = (lbl, val) => `
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:5px; padding-left:10px;">
-      <span style="font-size:11px; font-weight:600; color:var(--gs); opacity:.75;">${lbl}</span>
-      <span class="num" style="font-size:12px; font-weight:700; color:var(--gs);">${fmtK(val)}</span>
+      <span style="font-size:11.5px; font-weight:600; color:rgba(246,241,230,.6);">${lbl}</span>
+      <span class="num" style="font-size:12.5px; font-weight:700; color:rgba(246,241,230,.82);">${fmtK(val)}</span>
     </div>`;
   const acumuladoRow = acumulado > 0.5 ? `
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
-      <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
+      <span style="font-size:11.5px; font-weight:600; color:rgba(246,241,230,.72);">${acumLabel}</span>
       <span class="num" style="font-size:14px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
     </div>${hayDesglose ? subFila('Compartido', pat.totalPareja) + subFila('Mis metas individuales', pat.totalIndividual) : ''}
   ` : '';
 
   if (total <= 0.5) {
     return `
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 16px; text-align:center; color:var(--gs);">
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 16px; text-align:center; color:rgba(246,241,230,.6);">
         <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3; margin-bottom:10px;">
           <line x1="4" y1="20" x2="4" y2="12"></line>
           <line x1="12" y1="20" x2="12" y2="6"></line>
@@ -3830,7 +3831,7 @@ function drawMonthlyDistributionBars(mes) {
       <div style="margin-bottom:13px;">
         <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:5px;">
           <span style="font-size:13px; font-weight:600; color:var(--cream); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${slice.name}</span>
-          <span class="num" style="font-size:12.5px; font-weight:700; color:var(--cream); flex-shrink:0; white-space:nowrap;">${fmtK(slice.amount)} <span style="color:var(--gs); font-weight:600; font-size:11px; margin-left:2px;">${pct.toFixed(0)}%</span></span>
+          <span class="num" style="font-size:12.5px; font-weight:700; color:var(--cream); flex-shrink:0; white-space:nowrap;">${fmtK(slice.amount)} <span style="color:rgba(246,241,230,.55); font-weight:600; font-size:11px; margin-left:2px;">${pct.toFixed(0)}%</span></span>
         </div>
         <div style="height:10px; background:rgba(246,241,230,0.08); border-radius:6px; overflow:hidden;">
           <div style="height:100%; width:${pct.toFixed(1)}%; background:${fill}; border-radius:6px; transition:width .45s ease;"></div>
@@ -3839,16 +3840,20 @@ function drawMonthlyDistributionBars(mes) {
     `;
   }).join('');
 
+  // Plegado: las cifras se quedan, el detalle por meta se pide. La pantalla se llama
+  // "Movimientos del mes" y las barras empujaban la lista fuera de la primera pantalla.
+  const cierre = _barrasMesCollapsed
+    ? ''
+    : `<div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">${rows}</div>`;
+
   return `
     <div style="margin-top:2px;">
-      <div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(246,241,230,0.08);">
-        <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
-          <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Ahorrado este mes</span>
-          <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
-        </div>
-        ${acumuladoRow}
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
+        <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Ahorrado este mes</span>
+        <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
       </div>
-      ${rows}
+      ${acumuladoRow}
+      ${cierre}
     </div>
   `;
 }
@@ -4056,9 +4061,14 @@ function renderMiMes(){
     </div>
   `;
   
+  // El chevron solo tiene sentido si hay barras que plegar.
+  const hayBarras = getMonthlyDistributionData(mes).length > 0;
   const donutHtml = `
     <div class="card dark" style="padding:16px;">
-      <div class="k" style="margin-bottom:12px;">Distribución del Ahorro Realizado</div>
+      <div class="k${hayBarras ? ' mesdist-toggle' : ''}" style="margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;${hayBarras ? ' cursor:pointer;' : ''}">
+        <span>Distribución del Ahorro Realizado</span>
+        ${hayBarras ? `<span style="display:inline-flex; color:var(--cream); transform:rotate(${_barrasMesCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>` : ''}
+      </div>
       ${drawMonthlyDistributionBars(mes)}
     </div>
   `;
@@ -4134,6 +4144,13 @@ function renderMiMes(){
   }
   
   updateMesDisplay();
+
+  $('r2').querySelectorAll('.mesdist-toggle').forEach(el => {
+    el.onclick = () => {
+      _barrasMesCollapsed = !_barrasMesCollapsed;
+      renderMiMes();
+    };
+  });
 
   $('r2').querySelectorAll('.delete-tx-btn').forEach(btn => {
     btn.onclick = async () => {
