@@ -52,7 +52,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.48'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.49'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -2040,10 +2040,10 @@ function drawSavingsDonut() {
   });
 
   const legend = segments.map(seg => `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12.5px; color:rgba(246,241,230,.85)">
-      <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">
-        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${seg.color}; flex-shrink:0;"></span>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${seg.nombre}</span>
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px; font-size:12.5px; color:rgba(246,241,230,.85)">
+      <div style="display:flex; align-items:flex-start; gap:6px; min-width:0; flex:1;">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${seg.color}; flex-shrink:0; margin-top:4px;"></span>
+        <span style="min-width:0; line-height:1.3;">${seg.nombre}</span>
       </div>
       <div style="font-variant-numeric:tabular-nums; flex-shrink:0;">
         <b style="color:var(--cream);">${fmtK(seg.saldo)}</b>
@@ -2054,8 +2054,8 @@ function drawSavingsDonut() {
 
   return `<div class="card dark" style="padding:18px 16px;">
     <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
-    <div style="display:flex; align-items:center; gap:20px;">
-      <div style="width:128px; height:128px; flex-shrink:0;">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div style="width:112px; height:112px; flex-shrink:0;">
         <svg viewBox="0 0 100 100" style="width:100%; height:100%; overflow:visible;">
           ${svgCircles}
           <text x="50" y="46" text-anchor="middle" font-family="var(--sans)" font-size="7" fill="rgba(246,241,230,.5)" font-weight="700" letter-spacing="0.05em">TOTAL</text>
@@ -2205,6 +2205,22 @@ function drawSavingsHistoryCard() {
       <div class="k" style="color:rgba(246,241,230,.5)">Evolución del Ahorro</div>
       <div style="font-size:12.5px; color:rgba(246,241,230,.5); line-height:1.45; text-align:center; padding:12px 6px;">
         El gráfico de ahorro mensual se activará cuando agregues tu primer movimiento en <b>Mi Mes</b>.
+      </div>
+    </div>`;
+  }
+
+  // Con un solo mes no hay evolución que mostrar: una barra sola en un lienzo grande
+  // ocupa media pantalla y no dice nada. Se anuncia qué falta para que aparezca.
+  if (mesesUI.length === 1) {
+    const unico = mesesUI[0];
+    return `<div class="card dark" style="padding:18px 16px; border: 1px dashed rgba(246,241,230,.15); background: transparent;">
+      <div class="k" style="color:rgba(246,241,230,.5)">Evolución del Ahorro</div>
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:10px;">
+        <span style="font-size:12.5px; color:rgba(246,241,230,.7);">${fmtMes(unico)}</span>
+        <span class="num" style="font-size:18px; font-weight:700; color:var(--cream);">${fmtK(ahorroMesUI(unico))}</span>
+      </div>
+      <div style="font-size:12px; color:rgba(246,241,230,.5); line-height:1.45; margin-top:8px;">
+        Llevas un mes con movimientos. El próximo mes podrás comparar y verás la curva.
       </div>
     </div>`;
   }
@@ -5277,7 +5293,7 @@ function renderPlan(){
   let installHtml = '';
   if (!isCapacitor) {
     installHtml = `
-<details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary>Instalar en el teléfono</summary><div class="dpad">
+<details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary><span class="sm-t">Instalar en el teléfono<em>Añádela a tu pantalla de inicio</em></span></summary><div class="dpad">
   <div class="hint" style="margin-top:0">Instala "Nuestro plan" en tu pantalla de inicio para usarla como una aplicación, más rápido y sin conexión a internet.</div>
   <button class="btn" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
   <div id="pwaIosHint" style="display:${isIOS()?'block':'none'};margin-top:10px;background:rgba(28,58,44,.04);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--ink)">
@@ -5418,7 +5434,7 @@ function renderPlan(){
       </div>
     `;
     respaldoHtml = `
-      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
+      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary><span class="sm-t">Respaldo y datos<em>Exporta o restaura tu plan</em></span></summary><div class="dpad">
         <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;display:flex;align-items:flex-start;gap:6px;">
           ${getSVG('cloud', '', 'flex-shrink:0;opacity:0.7;margin-top:1px;')}
           <span><b>Sincronización activa:</b> Tus datos se guardan de forma automática en tu cuenta en la nube. No necesitas respaldos manuales.</span>
@@ -5470,7 +5486,7 @@ function renderPlan(){
       ` : ''}
     `;
     respaldoHtml = `
-      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary>Respaldo y datos</summary><div class="dpad">
+      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary><span class="sm-t">Respaldo y datos<em>Exporta o restaura tu plan</em></span></summary><div class="dpad">
         <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;display:flex;align-items:flex-start;gap:6px;">
           ${getSVG('phone', '', 'flex-shrink:0;opacity:0.7;margin-top:1px;')}
           <span><b>Modo Local activo:</b> Tus datos solo se guardan en este teléfono. Genera un respaldo manual para transferir tus datos o no perderlos si cambias de dispositivo.</span>
@@ -5485,17 +5501,17 @@ function renderPlan(){
   }
  
   const nombresHtml = isIndiv
-    ? `<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary>Mi nombre</summary><div class="dpad">
+    ? `<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary><span class="sm-t">Mi nombre<em>Cómo te llamas en la app</em></span></summary><div class="dpad">
         <label class="lbl">Mi nombre<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label>
        </div></details>`
-    : `<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary>Nombres de la pareja</summary><div class="dpad">
+    : `<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary><span class="sm-t">Nombres de la pareja<em>Cómo se llaman en la app</em></span></summary><div class="dpad">
         <div class="row2"><label class="lbl">Persona 1<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label>
           <label class="lbl">Persona 2<input class="sf" id="pNom2" value="${c.nombreP2.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label></div>
        </div></details>`;
 
   const perfilDetailHtml = isIndiv
     ? ''
-    : `<details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary>Perfil de este teléfono</summary><div class="dpad">
+    : `<details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary><span class="sm-t">Perfil de este teléfono<em>Quién eres aquí y cómo se reparte el ahorro</em></span></summary><div class="dpad">
         <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Cada quien ve sus metas individuales privadas.</div>
         ${perfilHtml}
        </div></details>`;
@@ -5505,7 +5521,7 @@ function renderPlan(){
 
 ${perfilDetailHtml}
  
-<details id="detInvitacion" ${detInvitacionOpen ? 'open' : ''}><summary>${isIndiv ? 'Copia de seguridad' : 'Sincronizar y Conectar Pareja'}</summary><div class="dpad">
+<details id="detInvitacion" ${detInvitacionOpen ? 'open' : ''}><summary><span class="sm-t">${isIndiv ? 'Copia de seguridad' : 'Sincronizar y Conectar Pareja'}<em>${isIndiv ? 'Guarda tu plan en la nube' : 'Vinculen sus teléfonos y elijan quién edita'}</em></span></summary><div class="dpad">
   ${syncHtml}
 </div></details>
  
