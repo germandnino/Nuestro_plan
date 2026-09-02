@@ -51,10 +51,10 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.43'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.44'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
-const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
+const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
 const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
@@ -3793,12 +3793,15 @@ function drawMonthlyDistributionBars(mes) {
         <span class="num" style="font-size:13px; font-weight:700; color:var(--gs);">${fmtK(pat.totalIndividual)}</span>
       </div>`
     : '';
-  const acumuladoRow = acumulado > 0.5 ? `
+  // Las dos filas se deciden por separado: quien solo tiene metas individuales
+  // tiene acumulado 0 de pareja, y colgar la fila individual de esa condición
+  // dejaba la tarjeta sin ninguna cifra acumulada.
+  const parejaRow = acumulado > 0.5 ? `
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
       <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
       <span class="num" style="font-size:14px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
-    </div>${indivLabel}
-  ` : '';
+    </div>` : '';
+  const acumuladoRow = (parejaRow || indivLabel) ? `${parejaRow}${indivLabel}` : '';
 
   if (total <= 0.5) {
     return `
@@ -3811,12 +3814,13 @@ function drawMonthlyDistributionBars(mes) {
         <div style="font-weight:700; font-size:13.5px; margin-bottom:4px;">Sin ahorros en este mes</div>
         <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero a tus metas para ver la distribución del mes.</div>
       </div>
-      ${acumulado > 0.5 ? `
+      ${acumuladoRow ? `
         <div style="padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">
-          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
-            <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
-            <span class="num" style="font-size:16px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
-          </div>${indivLabel}
+          ${acumulado > 0.5 ? `
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+              <span style="font-size:11.5px; font-weight:600; color:var(--gs);">${acumLabel}</span>
+              <span class="num" style="font-size:16px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
+            </div>` : ''}${indivLabel}
         </div>
       ` : ''}
     `;
