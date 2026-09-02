@@ -45,6 +45,7 @@ input.amt{width:100%;font-family:var(--serif);font-variant-numeric:tabular-nums;
 .dark input.amt{background:rgba(246,241,230,.1);border-color:rgba(246,241,230,.22);color:var(--cream)}
 input.amt:focus{border-color:var(--gold)}
 input.sf,select.sf{width:100%;font-family:var(--sans);font-size:15px;background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);outline:none;-webkit-appearance:none}
+select.sf{padding-right:36px;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2315241c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:16px}
 input.sf:focus{border-color:var(--gold)}
 .btn{width:100%;margin-top:10px;background:var(--green);color:var(--cream);border:1px solid rgba(246,241,230,.45);border-radius:10px;padding:13px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.02em;transition:transform .12s}
 .btn:active{transform:scale(.985)}
@@ -65,7 +66,7 @@ input.sf:focus{border-color:var(--gold)}
 .grow .gn{flex:1;font-size:14px;font-weight:500;color:var(--ink)}
 .grow input{width:120px;font-family:var(--serif);font-size:14px;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:var(--ink);outline:none;font-variant-numeric:tabular-nums}
 .grow input:focus{border-color:var(--gold)}
-.del,.ldel{background:none;border:none;color:var(--gs);font-size:18px;cursor:pointer;padding:4px 6px;opacity:.6}
+.del,.ldel{background:none;border:none;color:var(--gs);font-size:18px;cursor:pointer;opacity:.6;width:34px;height:44px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .lrow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
 .lrow:last-child{border-bottom:none}
 .lm{font-weight:700;color:var(--ink)}.ls{font-size:12px;color:var(--gs)}

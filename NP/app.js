@@ -52,7 +52,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.45'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.46'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -3990,7 +3990,7 @@ function drawTransactionTimeline(transactions, canEdit) {
         </div>
         <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
           <span class="num" style="font-size:14px; color:${color}; font-weight:700;">${sign}${fmt(t.monto)}</span>
-          ${canEdit && !t.noBorrable ? `<button class="ldel delete-tx-btn" data-type="${t.type}" data-id="${t.id}" style="font-size:18px; padding:4px; opacity:0.6; cursor:pointer;">×</button>` : ''}
+          ${canEdit && !t.noBorrable ? `<button class="ldel delete-tx-btn" data-type="${t.type}" data-id="${t.id}" style="font-size:18px; opacity:0.6; cursor:pointer; margin:-8px 0;">×</button>` : ''}
         </div>
       </div>
     `;
@@ -4082,7 +4082,7 @@ function renderMiMes(){
   const hayBarras = getMonthlyDistributionData(mes).length > 0;
   const donutHtml = `
     <div class="card dark" style="padding:16px;">
-      <div class="k${hayBarras ? ' mesdist-toggle' : ''}" style="margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;${hayBarras ? ' cursor:pointer;' : ''}">
+      <div class="k${hayBarras ? ' mesdist-toggle' : ''}" style="margin:-6px 0 6px; padding:6px 0; min-height:32px; display:flex; align-items:center; justify-content:space-between; gap:10px;${hayBarras ? ' cursor:pointer;' : ''}">
         <span>Distribución del Ahorro Realizado</span>
         ${hayBarras ? `<span style="display:inline-flex; color:var(--cream); transform:rotate(${_barrasMesCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>` : ''}
       </div>
