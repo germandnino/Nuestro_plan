@@ -32,7 +32,7 @@ let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósi
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
 let _distribucionCollapsed = true; // estado colapsado por defecto del acordeón de reparto de propósitos
 let _barrasMesCollapsed = true;    // barras por meta de Mi Mes plegadas: las cifras quedan, el detalle se pide
-let _verTodasLasMetas = false;     // lista de metas en Distribución de Ahorros: top 5 y el resto a pedido
+let _distAhorrosCollapsed = true;  // lista de metas de Distribución de Ahorros plegada: el total y el reparto por propósito quedan
 let mForm=null; // estado del formulario de meta en edición
 let selectedMonth=''; // mes seleccionado en cierre de mes (inicializado dinámicamente)
 let obMetaNom_temp = '', obMetaObj_temp = '', obMetaMin_temp = '';
@@ -53,7 +53,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.50'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.51'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -2015,11 +2015,8 @@ function drawSavingsDonut() {
   // Nivel 2: las metas, ordenadas por saldo. Barra horizontal para que el nombre
   // tenga toda la línea y la lista crezca hacia abajo sin deformar la tarjeta.
   const orden = visibles.slice().sort((a, b) => b.saldo - a.saldo);
-  const TOPE = 5;
-  const recorta = !_verTodasLasMetas && orden.length > TOPE;
-  const mostradas = recorta ? orden.slice(0, TOPE) : orden;
 
-  const filas = mostradas.map(m => {
+  const filas = orden.map(m => {
     const pct = m.saldo / total * 100;
     const nombre = m.dueno ? `${m.nombre} (Individual)` : m.nombre;
     return `
@@ -2034,20 +2031,20 @@ function drawSavingsDonut() {
       </div>`;
   }).join('');
 
-  const verMas = orden.length > TOPE ? `
-    <button class="metas-vertodas" style="width:100%; margin-top:2px; background:none; border:none; color:var(--gb); font-family:var(--sans); font-size:12px; font-weight:700; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; gap:6px;">
-      ${recorta ? `Ver las ${orden.length} metas` : 'Ver menos'}
-      <span style="display:inline-flex; transform:rotate(${recorta ? '0' : '180'}deg);">${getSVG('chevronDown', '', 'width:14px; height:14px;')}</span>
-    </button>` : '';
+  const detalle = _distAhorrosCollapsed
+    ? ''
+    : `<div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(246,241,230,0.08);">${filas}</div>`;
 
   return `<div class="card dark" style="padding:18px 16px;">
-    <div class="k" style="margin-bottom:10px;">Distribución de Ahorros</div>
+    <div class="k distahorros-toggle" style="margin:-6px 0 8px; padding:6px 0; min-height:32px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;">
+      <span>Distribución de Ahorros</span>
+      <span style="display:inline-flex; color:var(--cream); transform:rotate(${_distAhorrosCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>
+    </div>
     <div style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:rgba(246,241,230,.5);">Total acumulado</div>
     <div class="num" style="font-family:var(--serif); font-size:28px; font-weight:600; color:var(--cream); line-height:1.1; margin-bottom:12px;">${fmtK(total)}</div>
     <div style="display:flex; gap:2px; height:12px; margin-bottom:9px;">${segmentos}</div>
-    <div style="display:flex; flex-wrap:wrap; gap:6px 14px; margin-bottom:16px;">${leyenda}</div>
-    ${filas}
-    ${verMas}
+    <div style="display:flex; flex-wrap:wrap; gap:6px 14px;">${leyenda}</div>
+    ${detalle}
   </div>`;
 }
 
@@ -2510,9 +2507,9 @@ function renderMetas(){
   const tabLogros = $('btnTabLogros');
   if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 2; rerender(); };
 
-  $('r1').querySelectorAll('.metas-vertodas').forEach(btn => {
-    btn.onclick = () => {
-      _verTodasLasMetas = !_verTodasLasMetas;
+  $('r1').querySelectorAll('.distahorros-toggle').forEach(el => {
+    el.onclick = () => {
+      _distAhorrosCollapsed = !_distAhorrosCollapsed;
       rerender();
     };
   });
