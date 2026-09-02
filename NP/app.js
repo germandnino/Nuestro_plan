@@ -1079,12 +1079,15 @@ function distribuirAhorro(monto){
   state.metas.forEach(m=>res[m.id]=0);
   if(monto<=0)return { dist:res, rem:0 };
   const pesos=pesosBuckets(null);
-  let rem=0;
+  let rem=0, despachado=0;
   BUCKETS.forEach(tipo=>{
     const w=pesos[tipo]||0;
     if(w<=0)return;
-    rem+=repartirEnBucket(tipo,null,monto*w/100,res);
+    const parte=monto*w/100;
+    despachado+=parte;
+    rem+=repartirEnBucket(tipo,null,parte,res);
   });
+  rem+=monto-despachado; // rescata lo que ningún bucket llegó a recibir (p.ej. todas las metas llenas)
   const r=colocarSobrante(rem,res);
   return { dist:res, rem:r.rem };
 }
@@ -1097,12 +1100,15 @@ function distribuirAhorroIndividual(perfil, monto){
   metasIndividuales(perfil).forEach(m=>res[m.id]=0);
   if(monto<=0)return { dist:res, rem:monto };
   const pesos=pesosBuckets(perfil);
-  let rem=0;
+  let rem=0, despachado=0;
   BUCKETS.forEach(tipo=>{
     const w=pesos[tipo]||0;
     if(w<=0)return;
-    rem+=repartirEnBucket(tipo,perfil,monto*w/100,res);
+    const parte=monto*w/100;
+    despachado+=parte;
+    rem+=repartirEnBucket(tipo,perfil,parte,res);
   });
+  rem+=monto-despachado; // rescata lo que ningún bucket llegó a recibir (p.ej. todas las metas llenas)
   // Sumidero individual: inversión abierta propia del perfil, si existe.
   const invPerfil=metasIndividuales(perfil).find(m=>m.tipo==='invertir'&&!m.colocado);
   if(invPerfil && rem>0.5){ res[invPerfil.id]+=rem; rem=0; }
