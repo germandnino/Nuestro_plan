@@ -924,6 +924,11 @@ function migrarSobrantesPrivados(){
 function metaById(id){return state.metas.find(m=>m.id===id);}
 function metasCompartidas(){return state.metas.filter(m=>m.tipo!=='personal'&&!m.dueno);}
 function metasIndividuales(p){return state.metas.filter(m=>m.dueno===p&&m.tipo!=='personal');}
+// Un gasto que toca una meta individual del otro perfil no es visible para este.
+function gastoDeMetaAjena(g, perfil){
+  const m=metaById(g.meta);
+  return !!(m && m.dueno && m.dueno!==perfil);
+}
 function metasVisiblesEnFondos(){
   // todas las compartidas + individuales de este teléfono
   return metasCompartidas().concat(metasIndividuales(state.config.perfil));
@@ -935,9 +940,7 @@ function patrimonioResumen(){
   const c=state.config;
   const perfil=c.perfil;
   const esPareja=c.modo!=='individual';
-  const compartido=state.metas
-    .filter(m=>m.tipo!=='personal'&&!m.dueno)
-    .reduce((s,m)=>s+(m.saldo||0),0);
+  const compartido = metasCompartidas().reduce((s,m)=>s+(m.saldo||0),0);
   const individual=metasIndividuales(perfil).reduce((s,m)=>s+(m.saldo||0),0);
   const sp=sobrantesPendientesTodos();
   const sinAsignarCompartido=sp.filter(i=>!i.duenoPriv).reduce((s,i)=>s+(i.monto||0),0);
@@ -968,10 +971,6 @@ function sumaPct(){ return 100; } // los % se normalizan por bucket; la suma glo
 function chequearDistribucionAhorro(){ return { ok:true }; } // el sobrante siempre tiene destino (inversión o sin-asignar)
 function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
 function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
-function computeTotal(){
-  const p = state.config.perfil;
-  return metasCompartidas().reduce((s,m)=>s+m.saldo,0) + metasIndividuales(p).reduce((s,m)=>s+m.saldo,0);
-}
 function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
 function emergenciaPrincipal(){return emergencias()[0]||null;}
 // Inversión activa preferida; si no hay ninguna sin colocar, cae a la colocada como último
@@ -1329,11 +1328,12 @@ function openModalSobrante(monto, metaLlena, dueno){
 }
 // Ejecuta la decisión del modal. Muta saldos. Devuelve descriptor para el registro del ingreso.
 // `dueno` ('p1'|'p2'|null): si viene, el sobrante es privado y se reparte con el motor individual.
-function aplicarDecisionSobrante(dec, monto, dueno){
+// `mes`: mes del movimiento que originó el sobrante; sin él, el residuo se iría al mes en curso.
+function aplicarDecisionSobrante(dec, monto, dueno, mes){
   if(dec.accion==='motor'){
     if(dueno){
       const { dist, rem } = distribuirAhorroIndividual(dueno, monto);
-      if(rem>0.5) registrarSobrantePendiente(rem, 'reparto individual', { dueno: dueno });
+      if(rem>0.5) registrarSobrantePendiente(rem, 'reparto individual', { dueno: dueno, mes: mes });
       state.metas.forEach(m=>{
         if(m.dueno===dueno&&(dist[m.id]||0)>0.5){
           m.saldo+=dist[m.id];
@@ -1342,7 +1342,7 @@ function aplicarDecisionSobrante(dec, monto, dueno){
       return {tipo:'motor',dist:Object.assign({},dist),dueno:dueno};
     }
     const { dist, rem } = distribuirAhorro(monto);
-    if(rem>0.5) registrarSobrantePendiente(rem, 'reparto');
+    if(rem>0.5) registrarSobrantePendiente(rem, 'reparto', { mes: mes });
     state.metas.forEach(m=>{
       if(m.tipo!=='personal'&&!m.dueno&&(dist[m.id]||0)>0.5){
         m.saldo+=dist[m.id];
@@ -1352,11 +1352,14 @@ function aplicarDecisionSobrante(dec, monto, dueno){
   }
   if(dec.accion==='meta'){
     const m=metaById(dec.metaId);
+    // Plata privada solo puede aterrizar en metas de su dueño (no basta con filtrar el <select>).
+    if(dueno && (!m || m.dueno!==dueno)) return {tipo:'pendiente'};
     if(m){aplicarAporteDirecto(m,monto);return {tipo:'meta',metaId:dec.metaId};}
     return {tipo:'pendiente'};
   }
   if(dec.accion==='dejar'){
     const m=metaById(dec.metaId);
+    if(dueno && (!m || m.dueno!==dueno)) return {tipo:'pendiente'};
     if(m){m.saldo+=monto;return {tipo:'meta',metaId:dec.metaId};}
     return {tipo:'pendiente'};
   }
@@ -1385,11 +1388,11 @@ function registrarSobrantePendiente(monto, origenNombre, opts){
 // Todos los sobrantes del plan, sin filtrar. Solo para cálculos de patrimonio.
 function sobrantesPendientesTodos(){return state.ingresos.filter(i=>i.sinAsignar);}
 // Los que puede ver y asignar el perfil activo: los compartidos y los suyos.
-function sobrantesPendientes(){return especialesVisibles(sobrantesPendientesTodos());}
-function totalSinAsignar(){return sobrantesPendientes().reduce((s,i)=>s+(i.monto||0),0);}
+function sobrantesPendientesVisibles(){return especialesVisibles(sobrantesPendientesTodos());}
+function totalSinAsignar(){return sobrantesPendientesVisibles().reduce((s,i)=>s+(i.monto||0),0);}
 // Tarjeta reusable "sin asignar" (Inicio, Metas, Mi Mes). Botón [data-asignarpend].
 function drawSinAsignarCard(){
-  const sp=sobrantesPendientes();
+  const sp=sobrantesPendientesVisibles();
   if(!sp.length) return '';
   return `<div class="card" style="border:1px solid var(--gold);padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
     <div style="font-size:13px;display:flex;align-items:center;gap:7px;">${getSVG('alert','', 'width:15px;height:15px;color:var(--gold);flex-shrink:0')}<span><b style="color:var(--gold)">${fmt(totalSinAsignar())}</b> sin asignar${sp.length>1?` · ${sp.length} pendientes`:''}</span></div>
@@ -1398,12 +1401,12 @@ function drawSinAsignarCard(){
 }
 // Flujo "Asignar" del primer sobrante pendiente (reusable, rerender en cualquier vista).
 async function asignarSobrantePendiente(){
-  const p=sobrantesPendientes()[0];
+  const p=sobrantesPendientesVisibles()[0];
   if(!p)return;
   const dueno=p.duenoPriv||null;
   const dec=await openModalSobrante(p.monto,{id:'_pend',nombre:p.nombre},dueno);
   if(dec.accion==='pendiente')return;
-  const res=aplicarDecisionSobrante(dec,p.monto,dueno);
+  const res=aplicarDecisionSobrante(dec,p.monto,dueno,p.mes);
   if(res.tipo==='pendiente')return;
   state.ingresos=state.ingresos.filter(i=>i.id!==p.id);
   save();rerender();flash('Sobrante asignado ✓');
@@ -3582,7 +3585,7 @@ function aplicarIngresoInmediatoActivo(ep) {
       if (dec.accion === 'pendiente') {
         registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
       } else {
-        const res = aplicarDecisionSobrante(dec, ep._sobra, ep._metaLlena.dueno || null);
+        const res = aplicarDecisionSobrante(dec, ep._sobra, ep._metaLlena.dueno || null, ep.mes);
         if (res.tipo === 'pendiente') {
           registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
         } else {
@@ -3606,6 +3609,8 @@ function revertirAporte(id) {
 
   // Sin el reparto guardado no se puede revertir: recalcularlo hoy usaría porcentajes
   // y saldos distintos a los del día del movimiento y dejaría los saldos corruptos.
+  // Se declaran aquí a propósito: las usa la guarda de abajo Y el bloque que muta saldos
+  // más adelante. No volverlas a calcular en local: deben ser el mismo criterio en ambos.
   const esDistComun = ep.meta === 'distribuir' && !ep.duenoPriv;
   const esDistIndiv = ep.meta === 'distribuir-individual' || (ep.meta === 'distribuir' && ep.duenoPriv);
   const faltaDistMovimiento = (esDistComun || esDistIndiv) && !ep.dist;
@@ -3960,8 +3965,7 @@ function renderMiMes(){
   const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
   const totalOut = state.gastos.filter(g => {
     if (g.fecha.substring(0, 7) !== mes || g.mov !== 'salida') return false;
-    const m = metaById(g.meta);
-    if (m && m.dueno && m.dueno !== perfilActivo) return false; // retiro de meta individual ajena
+    if (gastoDeMetaAjena(g, perfilActivo)) return false; // retiro de meta individual ajena
     return true;
   }).reduce((sum, g) => sum + g.monto, 0);
   const netSaved = totalIn - totalOut;
@@ -3977,8 +3981,7 @@ function renderMiMes(){
 
   const listGastos = state.gastos.filter(g => {
     if (g.fecha.substring(0, 7) !== mes) return false;
-    const m = metaById(g.meta);
-    if (m && m.dueno && m.dueno !== perfilActivo) return false; // toca meta individual ajena
+    if (gastoDeMetaAjena(g, perfilActivo)) return false; // toca meta individual ajena
     return true;
   }).map(g => ({
     type: 'gasto',
