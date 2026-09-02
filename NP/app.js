@@ -3847,20 +3847,35 @@ function processTransactionsForDisplay(rawList) {
       if (gOut && gIn) {
         const mOut = metaById(gOut.meta);
         const mIn = metaById(gIn.meta);
-        const nameOut = mOut ? (mOut.tipo === 'personal' ? (state.config.modo === 'pareja' ? `Individual ${mOut.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}` : 'Individual') : mOut.nombre) : 'Origen';
+        const perfilAct = state.config.perfil;
+        // Privacidad: una de las dos patas puede tocar la meta individual del otro
+        // perfil (la otra pata es compartida y pasa el filtro de renderMiMes). En ese
+        // caso se enmascara el nombre de la meta privada y la fila deja de ser
+        // borrable: revertirla movería un saldo que este perfil no debería tocar.
+        const outAjena = gastoDeMetaAjena(gOut, perfilAct);
+        const inAjena = gastoDeMetaAjena(gIn, perfilAct);
+        const hayAjena = outAjena || inAjena;
+        const nombrePrivado = m => `Lo personal de ${m.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}`;
+        const nameOut = mOut
+          ? (mOut.tipo === 'personal'
+            ? (state.config.modo === 'pareja' ? `Individual ${mOut.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}` : 'Individual')
+            : (outAjena ? nombrePrivado(mOut) : mOut.nombre))
+          : 'Origen';
         const nameIn = mIn
           ? (mIn.tipo === 'personal'
             ? (state.config.modo === 'pareja' ? `Individual ${mIn.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}` : 'Individual')
-            : (gOut && gOut.aTerrenoPersonal && mIn.dueno && mIn.dueno !== state.config.perfil
-              ? `Lo personal de ${mIn.dueno === 'p2' ? state.config.nombreP2 : state.config.nombreP1}`
-              : mIn.nombre))
+            : (inAjena ? nombrePrivado(mIn) : mIn.nombre))
           : 'Destino';
-        
+
         processed.push({
           type: 'transfer',
           id: gOut.id,
           transferId: t.transferId,
-          nombre: t.nombre.startsWith('Transferencia') ? `Transferencia: ${nameOut} → ${nameIn}` : t.nombre,
+          // La nota guardada puede traer el nombre de la meta privada ("Transferencia
+          // a Moto"), así que cuando hay una meta ajena manda siempre la etiqueta
+          // enmascarada y nunca se cae de vuelta a la nota.
+          nombre: (hayAjena || t.nombre.startsWith('Transferencia')) ? `Transferencia: ${nameOut} → ${nameIn}` : t.nombre,
+          noBorrable: hayAjena || undefined,
           monto: gOut.monto,
           fecha: gOut.fecha,
           creadoPor: gOut.creadoPor || gIn.creadoPor,
@@ -3932,7 +3947,7 @@ function drawTransactionTimeline(transactions, canEdit) {
         </div>
         <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
           <span class="num" style="font-size:14px; color:${color}; font-weight:700;">${sign}${fmt(t.monto)}</span>
-          ${canEdit ? `<button class="ldel delete-tx-btn" data-type="${t.type}" data-id="${t.id}" style="font-size:18px; padding:4px; opacity:0.6; cursor:pointer;">×</button>` : ''}
+          ${canEdit && !t.noBorrable ? `<button class="ldel delete-tx-btn" data-type="${t.type}" data-id="${t.id}" style="font-size:18px; padding:4px; opacity:0.6; cursor:pointer;">×</button>` : ''}
         </div>
       </div>
     `;
