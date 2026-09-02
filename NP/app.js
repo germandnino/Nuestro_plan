@@ -3866,7 +3866,8 @@ function renderMiMes(){
   const entry = state.log.find(e => e.mes === mes);
   const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
   
-  const totalIn = state.ingresos.filter(ing => ing.mes === mes).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
+  // Privacidad: la métrica de ingresos no debe delatar los movimientos privados del otro perfil.
+  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
   const totalOut = state.gastos.filter(g => g.fecha.substring(0, 7) === mes && g.mov === 'salida').reduce((sum, g) => sum + g.monto, 0);
   const netSaved = totalIn - totalOut;
   
