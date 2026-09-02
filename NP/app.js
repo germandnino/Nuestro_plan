@@ -52,7 +52,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.44'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.45'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -1680,7 +1680,11 @@ function renderInicio(){
   const pat = patrimonioResumen();
   const ahorrosCompartidos = pat.totalPareja;
   const misIndividuales = pat.totalIndividual;
-  const patrimonioNeto = pat.total;
+  // En pareja el número grande es solo lo compartido, para que sea idéntico en ambos
+  // teléfonos. Pero si no hay NADA compartido no hay nada que mantener sincronizado, y
+  // encabezar con $0 esconde el saldo real: ahí el titular pasa a ser el propio.
+  const soloLoMio = esPareja && pat.totalPareja <= 0.5 && pat.totalIndividual > 0.5;
+  const patrimonioNeto = soloLoMio ? pat.totalIndividual : pat.total;
   const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   const headerHtml = c.modo === 'individual'
@@ -1691,7 +1695,12 @@ function renderInicio(){
   // ¿Hay metas de ahorro creadas?
   const hayMetasAhorro = metasCompartidas().length > 0
     || metasIndividuales(perfil).length > 0;
-  const desgloseHtml = esPareja
+  const desgloseHtml = soloLoMio
+    ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
+        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Mis metas individuales: <b>${fmt(misIndividuales)}</b></span>
+      </div>
+      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Aún no tienen metas en común. Esto es tuyo y solo tú lo ves.</div>`
+    : esPareja
     ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
         <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Individual: <b>${fmt(misIndividuales)}</b></span>
@@ -1703,7 +1712,7 @@ function renderInicio(){
   const patHtml = hayMetasAhorro
     ? `
     <div class="card dark">
-      <div class="k">${esPareja ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
+      <div class="k">${(esPareja && !soloLoMio) ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
       <div class="num big" style="color:var(--cream);">${fmt(patrimonioNeto)}</div>
       ${desgloseHtml}
     </div>
@@ -1978,6 +1987,13 @@ function drawSavingsDonut() {
     };
   }).filter(m => m.saldo > 0);
 
+  // La plata sin asignar también es plata del plan: sin ella el total de la dona no
+  // cuadraba con el patrimonio de Inicio ni con el acumulado de Mi Mes.
+  const sinAsignar = totalSinAsignar();
+  if (sinAsignar > 0.5) {
+    metasConSaldo.push({ id: '_sinAsignar', nombre: 'Sin asignar', saldo: sinAsignar, tipo: null, dueno: null, esSinAsignar: true });
+  }
+
   const total = metasConSaldo.reduce((s, m) => s + m.saldo, 0);
 
   if (total === 0 || metasConSaldo.length === 0) {
@@ -2004,7 +2020,8 @@ function drawSavingsDonut() {
 
   metasConSaldo.forEach((m, i) => {
     const pct = (m.saldo / total) * 100;
-    const color = DONUT_PALETTE[i % DONUT_PALETTE.length];
+    // "Sin asignar" no es una meta: se pinta apagado para que se lea como pendiente.
+    const color = m.esSinAsignar ? 'rgba(246,241,230,.28)' : DONUT_PALETTE[i % DONUT_PALETTE.length];
 
     segments.push({
       ...m,
