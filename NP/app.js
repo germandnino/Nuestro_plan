@@ -51,7 +51,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.39'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.40'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);if(n>=1000000)return '$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return '$'+Math.round(n/1000)+'k';return '$'+n;};
@@ -3637,9 +3637,20 @@ function getCreatorName(creadoPor) {
 function getMonthlyDistributionData(mes) {
   const c = state.config;
   const distMap = {}; // key: metaId, value: { name, amount, color }
-  
-  const monthlyIngresos = state.ingresos.filter(ing => ing.mes === mes);
-  
+
+  // Privacidad: nunca acumular metas individuales del otro perfil.
+  const add = (mId, amt) => {
+    if (!(amt > 0)) return;
+    const m = metaById(mId);
+    if (!m) return;
+    if (m.dueno && m.dueno !== c.perfil) return;
+    if (!distMap[mId]) distMap[mId] = { name: m.nombre, amount: 0, color: null };
+    distMap[mId].amount += amt;
+  };
+
+  // Privacidad: se ocultan además los movimientos privados del otro perfil.
+  const monthlyIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes));
+
   monthlyIngresos.forEach(ing => {
     const toSave = ing.monto;
 
@@ -3649,60 +3660,21 @@ function getMonthlyDistributionData(mes) {
 
       if (esDistComun) {
         const dist = ing.dist || distribuirAhorro(toSave).dist;
-        Object.keys(dist).forEach(mId => {
-          const m = metaById(mId);
-          if (m) {
-            if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: null };
-            }
-            distMap[mId].amount += dist[mId];
-          }
-        });
+        Object.keys(dist).forEach(mId => add(mId, dist[mId]));
       } else if (esDistIndiv) {
         const dist = ing.dist || distribuirAhorroIndividual(ing.duenoPriv || c.perfil, toSave, true).dist;
-        Object.keys(dist).forEach(mId => {
-          const m = metaById(mId);
-          if (m) {
-            if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: null };
-            }
-            distMap[mId].amount += dist[mId];
-          }
-        });
+        Object.keys(dist).forEach(mId => add(mId, dist[mId]));
       } else {
-        const m = metaById(ing.meta);
-        if (m) {
-          const mId = ing.meta;
-          if (!distMap[mId]) {
-            distMap[mId] = { name: m.nombre, amount: 0, color: null };
-          }
-          const amt = ing.aplicadoDirecto != null ? ing.aplicadoDirecto : toSave;
-          distMap[mId].amount += amt;
-        }
+        add(ing.meta, ing.aplicadoDirecto != null ? ing.aplicadoDirecto : toSave);
       }
     }
-    
+
     if (ing.sobranteRes && (ing.sobranteRes.monto || 0) > 0) {
       const sr = ing.sobranteRes;
       if (sr.tipo === 'motor' && sr.dist) {
-        Object.keys(sr.dist).forEach(mId => {
-          const m = metaById(mId);
-          if (m) {
-            if (!distMap[mId]) {
-              distMap[mId] = { name: m.nombre, amount: 0, color: null };
-            }
-            distMap[mId].amount += sr.dist[mId];
-          }
-        });
+        Object.keys(sr.dist).forEach(mId => add(mId, sr.dist[mId]));
       } else if (sr.tipo === 'meta') {
-        const m2 = metaById(sr.metaId);
-        if (m2) {
-          const mId = sr.metaId;
-          if (!distMap[mId]) {
-            distMap[mId] = { name: m2.nombre, amount: 0, color: null };
-          }
-          distMap[mId].amount += sr.monto;
-        }
+        add(sr.metaId, sr.monto);
       }
     }
   });
@@ -3713,6 +3685,14 @@ function getMonthlyDistributionData(mes) {
 function drawMonthlyDistributionBars(mes) {
   const data = getMonthlyDistributionData(mes);
   const total = data.reduce((s, x) => s + x.amount, 0);
+  // Acumulado histórico: saldo de las metas visibles para este perfil.
+  const acumulado = metasVisiblesEnFondos().reduce((s, m) => s + (m.saldo || 0), 0);
+  const acumuladoRow = acumulado > 0.5 ? `
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:8px;">
+      <span style="font-size:11.5px; font-weight:600; color:var(--gs);">Acumulado total</span>
+      <span class="num" style="font-size:14px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
+    </div>
+  ` : '';
 
   if (total <= 0.5) {
     return `
@@ -3725,6 +3705,12 @@ function drawMonthlyDistributionBars(mes) {
         <div style="font-weight:700; font-size:13.5px; margin-bottom:4px;">Sin ahorros en este mes</div>
         <div style="font-size:12px; opacity:0.8; max-width:260px; margin:0 auto; line-height:1.4;">Agrega dinero a tus metas para ver la distribución del mes.</div>
       </div>
+      ${acumulado > 0.5 ? `
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">
+          <span style="font-size:11.5px; font-weight:600; color:var(--gs);">Acumulado total</span>
+          <span class="num" style="font-size:16px; font-weight:700; color:var(--cream);">${fmtK(acumulado)}</span>
+        </div>
+      ` : ''}
     `;
   }
 
@@ -3747,9 +3733,12 @@ function drawMonthlyDistributionBars(mes) {
 
   return `
     <div style="margin-top:2px;">
-      <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(246,241,230,0.08);">
-        <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Total ahorrado</span>
-        <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
+      <div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(246,241,230,0.08);">
+        <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
+          <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Ahorrado este mes</span>
+          <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
+        </div>
+        ${acumuladoRow}
       </div>
       ${rows}
     </div>
