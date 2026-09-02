@@ -3548,7 +3548,7 @@ function aplicarIngresoInmediatoActivo(ep) {
   flash('Aporte aplicado con éxito ✓');
 
   if (ep._sobra) {
-    openModalSobrante(ep._sobra, ep._metaLlena).then(dec => {
+    openModalSobrante(ep._sobra, ep._metaLlena, ep._metaLlena.dueno || null).then(dec => {
       if (dec.accion === 'pendiente') {
         registrarSobrantePendiente(ep._sobra, ep._metaLlena.nombre, { dueno: ep._metaLlena.dueno || null, mes: ep.mes });
       } else {
