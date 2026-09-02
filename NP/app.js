@@ -2094,7 +2094,8 @@ function drawStatsBI(){
 
   let tiles = '';
   tiles += tile('Ahorro mensual prom.', `${fmtK(avgAhorro)}${trend}`, '');
-  tiles += tile('Total ahorrado', fmtK(totalAhorrado), '');
+  // Es la suma de lo que ha entrado al plan, no el saldo actual (la dona de arriba muestra ese).
+  tiles += tile('Total aportado', fmtK(totalAhorrado), 'en movimientos');
   tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
   if (tasa !== null) tiles += tile('Tasa de ahorro', `${tasa}%`, 'del ingreso');
   tiles += tile('Constancia', `${n} ${n === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
@@ -3804,7 +3805,10 @@ function drawTransactionTimeline(transactions, canEdit) {
     if (t.type === 'ingreso') {
       sign = '+';
       color = 'var(--green)';
-      const metaNom = t.meta === 'distribuir' ? 'Reparto' : (t.meta === 'distribuir-individual' ? 'Reparto indiv.' : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada'));
+      const metaNom = t.meta === 'distribuir' ? 'Reparto'
+        : t.meta === 'distribuir-individual' ? 'Reparto indiv.'
+        : t.meta === 'sinAsignar' ? 'Pendiente de asignar'
+        : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada');
       destLabel = metaNom;
     } else if (t.type === 'gasto') {
       sign = '-';
@@ -3866,8 +3870,9 @@ function renderMiMes(){
   const entry = state.log.find(e => e.mes === mes);
   const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
   
-  // Privacidad: la métrica de ingresos no debe delatar los movimientos privados del otro perfil.
-  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
+  // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
+  // ingreso de origen) y los movimientos privados del otro perfil.
+  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
   const totalOut = state.gastos.filter(g => g.fecha.substring(0, 7) === mes && g.mov === 'salida').reduce((sum, g) => sum + g.monto, 0);
   const netSaved = totalIn - totalOut;
   
