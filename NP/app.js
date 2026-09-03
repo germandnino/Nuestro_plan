@@ -6828,7 +6828,7 @@ auth.onAuthStateChanged(async user => {
         const debeMigrar = necesitaMigrarASplit(remote, state.config.perfil);
         if (debeMigrar) console.info('Migrando este plan al split de bolsillos…');
 
-        save();
+        await save();
         // El Editor limpia shared con su propio save(). El Lector no lo escribe
         // (canEditShared() es falso para su rol), así que sin esta pasada sus datos
         // privados se quedarían ahí para siempre y la ventana de exposición nunca
