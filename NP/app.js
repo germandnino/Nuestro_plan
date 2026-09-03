@@ -2319,6 +2319,17 @@ function drawLogros(){
 function mesesConDatosUI(){
   const set = {};
   especialesVisibles(state.ingresos).forEach(i => { if (i.mes && !i.sinAsignar) set[i.mes] = true; });
+  // Las patas huérfanas entrantes también son movimientos visibles del mes: ahorroMesUI()
+  // las suma, así que un mes cuyo único movimiento visible sea una de ellas tiene que
+  // entrar en la lista. Si no, Inicio (que deriva sus KPI de aquí) lo ignora mientras
+  // Mi Mes —que navega mes a mes por su cuenta— sí lo muestra, y las dos pantallas se
+  // contradicen. Mismo filtro que entrantesHuerfanasUI, para contar exactamente lo mismo.
+  state.gastos.forEach(g => {
+    if (!g.desdePrivado || !sinContraparteVisible(g)) return;
+    if (gastoDeMetaAjena(g, state.config.perfil)) return;
+    const mes = (g.fecha || '').substring(0, 7);
+    if (mes) set[mes] = true;
+  });
   return Object.keys(set).sort();
 }
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
