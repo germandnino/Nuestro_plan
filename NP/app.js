@@ -2378,11 +2378,19 @@ function ahorroMesScope(mes, dueno){
 }
 
 // Meses 'YYYY-MM' con movimientos en ese scope, en orden ascendente.
+// La guarda de formato es defensiva: ningún escritor produce hoy otra forma, pero un
+// '2026' suelto ordenaría antes que cualquier 'YYYY-MM', se volvería conDatos[0] y
+// ensancharía la ventana de estimación en silencio (un único mes real de $600.000 más
+// un registro con mes:'2026' daría $100.000 en vez de $600.000).
+const YM = /^\d{4}-\d{2}$/;
 function mesesConDatosScope(dueno){
   const set = {};
-  state.ingresos.forEach(i=>{ if(i.mes && ingresoDeScope(i, dueno)) set[i.mes] = true; });
+  state.ingresos.forEach(i=>{ if(i.mes && YM.test(i.mes) && ingresoDeScope(i, dueno)) set[i.mes] = true; });
   if(!dueno) state.gastos.forEach(g=>{
-    if(g.fecha && huerfanaVisible(g)) set[g.fecha.substring(0,7)] = true;
+    if(g.fecha && huerfanaVisible(g)){
+      const mes = g.fecha.substring(0,7);
+      if(YM.test(mes)) set[mes] = true;
+    }
   });
   return Object.keys(set).sort();
 }
@@ -2442,8 +2450,10 @@ function sinContraparteVisible(g){
   return !state.gastos.some(x => x.transferId === g.transferId && x.id !== g.id);
 }
 function entrantesHuerfanasUI(mes){
+  // (g.fecha||'') cierra la asimetría con ahorroMesScope y mesesConDatosScope, que sí
+  // protegen el acceso: un gasto sin fecha tumbaría el render de Inicio y de Mi Mes.
   return state.gastos
-    .filter(g => g.fecha.substring(0, 7) === mes && huerfanaVisible(g))
+    .filter(g => (g.fecha||'').substring(0, 7) === mes && huerfanaVisible(g))
     .reduce((s, g) => s + g.monto, 0);
 }
 
