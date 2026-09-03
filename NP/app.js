@@ -3948,13 +3948,18 @@ function revertirGasto(id) {
     return;
   }
 
-  // Media transferencia: la pata marcada con desdePrivado/haciaPrivado tiene su
-  // contraparte en el bolsillo del otro perfil, que nunca llega a este dispositivo.
-  // Revertir solo la pata que sí llegó movería el saldo de la meta compartida sin que
-  // esa plata reaparezca en ningún lado — duplicarla o destruirla. noBorrable en
-  // processTransactionsForDisplay solo oculta el botón (capa de UI); esta es la guarda
-  // de datos, para cuando revertirGasto se invoque por cualquier otra vía.
-  if ((g.desdePrivado || g.haciaPrivado) && patas.length < 2) {
+  // Media transferencia: la contraparte no llegó a este dispositivo (vive en el bolsillo
+  // del otro perfil, o su meta fue borrada). Revertir solo la pata que sí llegó movería
+  // el saldo de la meta compartida sin que esa plata reaparezca en ningún lado —
+  // duplicarla o destruirla. noBorrable en processTransactionsForDisplay solo oculta el
+  // botón (capa de UI); esta es la guarda de datos, para cuando revertirGasto se invoque
+  // por cualquier otra vía.
+  //
+  // La condición es el transferId, no la marca: la rama de contraparte ausente de
+  // sanearGastoCruzado neutraliza la nota pero no marca nada (no conoce el dueño), y esa
+  // pata sin marca era el único camino que quedaba para mover plata a medias. Una
+  // transferencia normal trae sus dos patas y no la toca.
+  if (g.transferId && patas.length < 2) {
     flash('Esta transferencia no está completa en este dispositivo: no puedes eliminarla');
     return;
   }
@@ -5698,7 +5703,7 @@ function renderPlan(){
         <button class="btn danger" id="bReset" ${dis}>Borrar plan y todos los datos</button>
         <div class="hint" style="margin-top:6px;font-size:11px;color:#b3261e;display:flex;align-items:flex-start;gap:5px;">
           ${getSVG('alert', '', 'flex-shrink:0;stroke:#b3261e;width:12px;height:12px;margin-top:1px;')}
-          <span>Esta acción restablecerá tu app local y eliminará permanentemente la información compartida de este plan en la nube.</span>
+          <span>Esta acción restablecerá tu app local y borrará de la nube el plan compartido y tus datos individuales. Los datos individuales de tu pareja siguen siendo suyos y no se tocan.</span>
         </div>
         <button class="btn ghost" id="bOnb" style="margin-top:12px" ${dis}>Ver el tutorial otra vez</button>
       </div></details>
