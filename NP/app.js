@@ -6040,7 +6040,12 @@ function attachPlan(){
     }
     _syncShared = null;
     state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};
-    save();
+    // El await no es opcional: save() cede el control en su primer `await store.set(...)`,
+    // así que sin él syncSubscribe() correría antes de que se emita el .set() a Firestore
+    // y reabriría el listener contra el cache viejo. Ese primer snapshot siempre
+    // reconstruye (_firstSyncSnapshot lo exime del corte de eco), reviviendo el plan
+    // recién borrado, y el snapshot correctivo posterior sí se descarta como eco propio.
+    await save();
     // Rearma los dos listeners contra los documentos ya vacíos. Si no se hace, el
     // unsubscribeBolsillo() de arriba deja _syncBolsillo en null para siempre, pero el
     // listener de shared sigue vivo: su próximo snapshot (p. ej. la pareja editando algo
