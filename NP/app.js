@@ -888,7 +888,15 @@ let _syncShared = null;
 let _syncBolsillo = null;
 
 function rebuildStateFromSync(){
-  if (!_syncShared && !_syncBolsillo) return;
+  // La guarda mira SOLO a shared, no a los dos. `config`, `log` y las metas compartidas
+  // viven únicamente ahí, así que reconstruir sin ese documento devuelve `config:{perfil}`
+  // + listas vacías: normalize() rellena con CFG_DEF y el resultado neto es resetear
+  // nombres, modo, pesos de bucket y `onboarded`, y borrar todo lo compartido — que
+  // saveLocalOnly() persiste y el siguiente save() de un Editor sube a shared. Además el
+  // listener del bolsillo sintetiza un objeto truthy aunque el documento no exista, así
+  // que "llegó el bolsillo" no es señal de nada. Sin shared, se espera a su primer
+  // snapshot: no hay caso legítimo en que haya que reconstruir sin él.
+  if (!_syncShared) return;
   const unido = unirEstado(_syncShared, _syncBolsillo, state.config.perfil);
   state.config = unido.config;
   state.metas = unido.metas;
