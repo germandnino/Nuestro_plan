@@ -4181,16 +4181,15 @@ function processTransactionsForDisplay(rawList) {
         });
       } else {
         // Con el split, la contraparte de una transferencia cruzada vive en el bolsillo
-        // del otro perfil y nunca llega a este dispositivo. La pata que sí llegó se
-        // muestra por lo que es para quien la mira — un aporte o un retiro sobre una
-        // meta compartida — sin revelar de qué bolsillo salió ni a cuál entró. Nunca
-        // borrable: revertir media transferencia duplicaría o destruiría plata.
-        const soloUna = gOut || gIn;
-        if (soloUna && (soloUna.desdePrivado || soloUna.haciaPrivado)) {
-          processed.push({ ...t, huerfana: true, noBorrable: true });
-        } else {
-          processed.push(t);
-        }
+        // del otro perfil y nunca llega a este dispositivo. Lo mismo pasa cuando la meta
+        // de la contraparte se borró en este dispositivo (p.ej. consumirSueno/liberarCDT):
+        // la pata gemela queda sin marca de privacidad pero sigue siendo media
+        // transferencia. La pata que sí llegó se muestra por lo que es para quien la
+        // mira — un aporte o un retiro sobre una meta compartida — sin revelar de qué
+        // bolsillo salió ni a cuál entró. Nunca borrable (con o sin marca): revertir
+        // media transferencia duplicaría o destruiría plata, igual que ya impone la
+        // guarda de datos en revertirGasto.
+        processed.push({ ...t, noBorrable: true });
       }
     } else {
       processed.push(t);
