@@ -826,49 +826,37 @@ async function syncLoadShared(planId) {
 }
 
 async function syncSaveShared(planId, stateToSave) {
-  const { config, metas, log, ingresos, gastos, logros } = stateToSave;
-  const configSinPerfil = { ...config };
-  delete configSinPerfil.perfil;
-  const metasSync = metas.filter(m => m.tipo !== 'personal');
+  const { shared } = particionarEstado(stateToSave, stateToSave.config.perfil);
   await db.collection('planes').doc(planId)
     .collection('shared').doc('data')
     .set({
-      config: configSinPerfil,
-      metas: metasSync,
-      log,
-      ingresos,
-      gastos,
-      logros: logros || [],
+      ...shared,
       lastEditBy: stateToSave.config.perfil || 'p1',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 }
 
-// El Lector solo persiste SUS porciones (metas/movimientos/logros con su perfil).
-// Read-modify-write: relee el doc compartido y sobrepone solo lo propio, sin pisar lo conjunto.
-async function syncSaveSharedAsViewer(planId, localState, perfil){
-  const ref = db.collection('planes').doc(planId).collection('shared').doc('data');
-  const snap = await ref.get();
-  const remote = snap.exists ? snap.data() : { config:{}, metas:[], log:[], ingresos:[], gastos:[], logros:[] };
-  const esMiMov = x => !!(x && x.privado && x.duenoPriv === perfil);
-  const metas = (remote.metas || []).filter(m => m.dueno !== perfil)
-    .concat((localState.metas || []).filter(m => m.dueno === perfil && m.tipo !== 'personal'));
-  const ingresos = (remote.ingresos || []).filter(x => !esMiMov(x))
-    .concat((localState.ingresos || []).filter(esMiMov));
-  const gastos = (remote.gastos || []).filter(x => !esMiMov(x))
-    .concat((localState.gastos || []).filter(esMiMov));
-  const logros = (remote.logros || []).filter(l => (l && l.dueno) !== perfil)
-    .concat((localState.logros || []).filter(l => l && l.dueno === perfil));
-  await ref.set({
-    config: remote.config || {},
-    metas,
-    log: remote.log || [],
-    ingresos,
-    gastos,
-    logros,
-    lastEditBy: perfil,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+// El bolsillo es privado por transporte: las reglas de Firestore solo dejan a cada
+// uid leer y escribir el suyo (firestore.rules, match /planes/{planId}/bolsillos/{uid}).
+async function syncSaveBolsillo(planId, uid, bolsillo) {
+  await db.collection('planes').doc(planId)
+    .collection('bolsillos').doc(uid)
+    .set({
+      ...bolsillo,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+}
+
+// Un guardado toca dos documentos. El Editor escribe ambos; el Lector solo su
+// bolsillo (ya no necesita el read-modify-write que hacía syncSaveSharedAsViewer,
+// porque lo suyo dejó de vivir en el documento compartido).
+async function syncSavePartido(planId, stateToSave) {
+  const { bolsillo } = particionarEstado(stateToSave, stateToSave.config.perfil);
+  const escrituras = [syncSaveBolsillo(planId, currentUser.uid, bolsillo)];
+  if (canEditShared()) escrituras.push(syncSaveShared(planId, stateToSave));
+  // Si una de las dos falla, el guardado entero se reporta como fallido: el usuario
+  // no puede quedar creyendo que sincronizó cuando la mitad no salió.
+  await Promise.all(escrituras);
 }
 
 async function syncRegisterOwner(planId, uid) {
@@ -980,12 +968,7 @@ async function save(){
       console.warn('Firestore shared save failed, local only:', e.message);
       showSyncStatus('Solo local (sin conexión)', true);
     };
-    if (canEditShared()) {
-      syncSaveShared(currentPlanId, stateClone).then(onOk).catch(onErr);
-    } else {
-      // Lector: persiste solo sus porciones sin pisar lo conjunto.
-      syncSaveSharedAsViewer(currentPlanId, stateClone, state.config.perfil).then(onOk).catch(onErr);
-    }
+    syncSavePartido(currentPlanId, stateClone).then(onOk).catch(onErr);
   }
 }
 
