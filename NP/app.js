@@ -717,14 +717,25 @@ function esMetaPropia(m, perfil){ return !!(m && m.dueno && m.dueno === perfil);
 // la pata que se queda en shared no puede llevar el nombre de la meta privada en su
 // nota. Devuelve una copia saneada y marcada; si no cruza, devuelve el gasto tal cual.
 // `patas` es la lista completa de gastos del estado, para hallar la contraparte.
+// Se asume exactamente dos patas por transferId; así las crea y las borra la app.
 function sanearGastoCruzado(g, patas, metas){
   if (!g || !g.transferId) return g;
+  // Ya saneado y marcado por el dispositivo que sí tenía la contraparte a la vista.
+  if (g.desdePrivado || g.haciaPrivado) return g;
   const otra = patas.find(x => x.transferId === g.transferId && x.id !== g.id);
-  if (!otra) return g;
-  const mOtra = metas.find(m => m.id === otra.meta);
-  if (!mOtra || !mOtra.dueno) return g;   // la contraparte no es privada: nada que ocultar
-  const marca = g.mov === 'transfer-in' ? 'desdePrivado' : 'haciaPrivado';
-  const nota = g.mov === 'transfer-in' ? 'Aporte desde lo personal' : 'Transferencia a lo personal';
+  const mOtra = otra ? metas.find(m => m.id === otra.meta) : null;
+  const entrante = g.mov === 'transfer-in';
+  if (!mOtra) {
+    // Contraparte ausente. Pudo ser una meta privada que su dueño borró: borrar una
+    // meta elimina sus propios gastos pero NO la pata gemela, que vive en la otra
+    // meta (NP/app.js:1620 y 3169). No hay forma de saber si era privada, así que la
+    // nota se neutraliza igual — fallar abierto dejaría el nombre de una meta privada
+    // en shared de forma permanente. Sin marca: no se conoce el dueño.
+    return { ...g, nota: entrante ? 'Transferencia recibida' : 'Transferencia enviada' };
+  }
+  if (!mOtra.dueno) return g;   // la contraparte es compartida: nada que ocultar
+  const marca = entrante ? 'desdePrivado' : 'haciaPrivado';
+  const nota = entrante ? 'Aporte desde lo personal' : 'Transferencia a lo personal';
   return { ...g, nota, [marca]: mOtra.dueno };
 }
 
