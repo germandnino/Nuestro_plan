@@ -953,13 +953,21 @@ async function syncSaveBolsillo(planId, uid, bolsillo) {
 // Un guardado toca dos documentos. El Editor escribe ambos; el Lector solo su
 // bolsillo (ya no necesita el read-modify-write que hacía syncSaveSharedAsViewer,
 // porque lo suyo dejó de vivir en el documento compartido).
+//
+// El orden es secuencial a propósito: primero el bolsillo, después shared. En la PRIMERA
+// carga tras el split este mismo guardado saca las metas individuales propias de shared y
+// las mete en el bolsillo; si las dos escrituras salieran en paralelo y confirmara la de
+// shared pero no la del bolsillo, esos datos no quedarían en NINGÚN documento, y la
+// pérdida no se autocorrige (la próxima carga reconstruye desde los dos y saveLocalOnly()
+// la persiste). Escribiendo el bolsillo primero, si falla, shared ni se toca. Se aplica
+// siempre y no solo durante la migración: es más simple que llevar una bandera, y el
+// costo —un round-trip de más por guardado— es barato frente a perder plata.
+// Si cualquiera de las dos falla, el guardado entero se reporta como fallido: el usuario
+// no puede quedar creyendo que sincronizó cuando la mitad no salió.
 async function syncSavePartido(planId, stateToSave) {
   const { bolsillo } = particionarEstado(stateToSave, stateToSave.config.perfil);
-  const escrituras = [syncSaveBolsillo(planId, currentUser.uid, bolsillo)];
-  if (canEditShared()) escrituras.push(syncSaveShared(planId, stateToSave));
-  // Si una de las dos falla, el guardado entero se reporta como fallido: el usuario
-  // no puede quedar creyendo que sincronizó cuando la mitad no salió.
-  await Promise.all(escrituras);
+  await syncSaveBolsillo(planId, currentUser.uid, bolsillo);
+  if (canEditShared()) await syncSaveShared(planId, stateToSave);
 }
 
 async function syncRegisterOwner(planId, uid) {
