@@ -48,6 +48,7 @@ let unsubscribeSync = null;   // función para cancelar listener de Firestore
 let planMeta = null;          // Objeto con metadatos del plan (owner, partner, roles)
 let unsubscribeMeta = null;   // función para cancelar listener de metadatos
 let unsubscribeBolsillo = null; // listener del bolsillo privado propio
+let _syncEnVuelo = Promise.resolve(); // última escritura de sync lanzada por save(), para poder encadenarla
 
 const store={
   async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
@@ -1053,7 +1054,8 @@ async function save(){
       console.warn('Firestore shared save failed, local only:', e.message);
       showSyncStatus('Solo local (sin conexión)', true);
     };
-    syncSavePartido(currentPlanId, stateClone).then(onOk).catch(onErr);
+    _syncEnVuelo = syncSavePartido(currentPlanId, stateClone);
+    _syncEnVuelo.then(onOk).catch(onErr);
   }
 }
 
@@ -6823,26 +6825,25 @@ auth.onAuthStateChanged(async user => {
         // el guardado de abajo lo mueve al bolsillo y lo saca del documento compartido.
         // Idempotente: en un plan ya migrado esto no dispara ninguna escritura extra,
         // porque save() escribe la misma partición de todas formas.
-        if (necesitaMigrarASplit(remote, state.config.perfil)) {
-          console.info('Migrando este plan al split de bolsillos…');
-          // El Editor limpia shared con su propio save(). El Lector no escribe shared
-          // (canEditShared() es falso para su rol), así que sin esta pasada explícita sus
-          // datos privados se quedarían ahí para siempre y la ventana de exposición
-          // nunca cerraría en los planes donde la pareja es Lector.
-          if (!canEditShared()) {
-            // El orden no es negociable: primero se confirma que el bolsillo quedó
-            // escrito, y solo entonces se saca lo propio de shared. Al revés, si la
-            // limpieza confirma y la escritura del bolsillo falla, esos datos no quedan
-            // en ningún lado — y no se recuperan solos, porque rebuildStateFromSync()
-            // rehace el estado local desde los dos documentos en la siguiente carga.
-            const miBolsillo = particionarEstado(state, state.config.perfil).bolsillo;
-            syncSaveBolsillo(currentPlanId, currentUser.uid, miBolsillo)
-              .then(() => syncLimpiarMisDatosDeShared(currentPlanId, state.config.perfil))
-              .catch(e => console.warn('No se pudo limpiar el documento compartido:', e.message));
-          }
-        }
+        const debeMigrar = necesitaMigrarASplit(remote, state.config.perfil);
+        if (debeMigrar) console.info('Migrando este plan al split de bolsillos…');
 
         save();
+        // El Editor limpia shared con su propio save(). El Lector no lo escribe
+        // (canEditShared() es falso para su rol), así que sin esta pasada sus datos
+        // privados se quedarían ahí para siempre y la ventana de exposición nunca
+        // cerraría en los planes donde la pareja es Lector.
+        //
+        // El orden no es negociable: se encadena a la escritura que save() acaba de
+        // lanzar, así que shared solo se limpia cuando el bolsillo ya quedó guardado.
+        // Al revés, si la limpieza confirma y el bolsillo falla, esos datos no quedan en
+        // ningún lado — y no se recuperan solos, porque rebuildStateFromSync() rehace el
+        // estado local desde los dos documentos en la siguiente carga.
+        if (debeMigrar && !canEditShared()) {
+          _syncEnVuelo
+            .then(() => syncLimpiarMisDatosDeShared(currentPlanId, state.config.perfil))
+            .catch(e => console.warn('No se pudo limpiar el documento compartido:', e.message));
+        }
         if (state.config.onboarded) {
           // Si el onboarding estaba visible y ahora ya cargamos el plan remoto completo,
           // quitamos la pantalla de onboarding e iniciamos
