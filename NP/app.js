@@ -2583,14 +2583,20 @@ function calcularTiempoRestante(m) {
   if (!m.objetivo || m.saldo >= m.objetivo) return null;
   const falta = m.objetivo - m.saldo;
   const aporteMes = aporteMensualEstimado(m);
-  if (aporteMes <= 0) return null;
+  if (aporteMes === null || aporteMes <= 0) return null;
   return Math.ceil(falta / aporteMes);
 }
 
 // Aporte mensual estimado a una meta según el reparto de dos niveles (propósito → meta).
+// Una meta individual se proyecta con SU motor y los pesos de su dueño, no con el
+// compartido: en el reparto compartido nunca aparece, así que recibiría 0 siempre.
+// Devuelve null cuando no hay historial suficiente en ese scope — nunca 0, para que
+// quien lo consuma pueda distinguir "no sé" de "no recibe nada".
 function aporteMensualEstimado(m){
-  const est = Math.max(0, computeBase());
-  const { dist } = distribuirAhorro(est);
+  const est = ahorroEstimado(m.dueno || null);
+  if(est === null || est <= 0) return null;
+  const { dist } = m.dueno ? distribuirAhorroIndividual(m.dueno, est)
+                           : distribuirAhorro(est);
   return dist[m.id] || 0;
 }
 
@@ -3460,7 +3466,7 @@ function horizonteMeses(m){
   }
   if (!m.objetivo) return null;
   const aporteMes = aporteMensualEstimado(m);
-  if (aporteMes <= 0) return null;
+  if (aporteMes === null || aporteMes <= 0) return null;
   return Math.ceil(m.objetivo / aporteMes);
 }
 
