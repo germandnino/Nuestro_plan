@@ -2387,6 +2387,45 @@ function mesesConDatosScope(dueno){
   return Object.keys(set).sort();
 }
 
+const VENTANA_ESTIMACION = 6; // meses de calendario cerrados
+
+// 'YYYY-MM' del mes anterior.
+function mesPrevio(mes){
+  const [y,m] = mes.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+// Los últimos `n` meses de calendario terminando en `hasta` (inclusive), sin bajar
+// de `desde`. Orden ascendente. La comparación de 'YYYY-MM' como texto es correcta.
+function ventanaMeses(hasta, n, desde){
+  const out = [];
+  let cur = hasta;
+  while(out.length < n && cur >= desde){ out.unshift(cur); cur = mesPrevio(cur); }
+  return out;
+}
+
+// Promedio de ahorro mensual de un scope sobre hasta VENTANA_ESTIMACION meses de
+// calendario CERRADOS —el mes en curso nunca entra, o el día 2 la estimación se
+// desplomaría— sin arrancar antes del primer mes con datos de ese scope. Sin ese
+// límite inferior, alguien que empezó el mes pasado vería su ahorro dividido entre
+// seis meses de ceros previos a que el plan existiera.
+//
+// Los meses vacíos DENTRO de la ventana cuentan cero: un mes sin ahorro es
+// información, y es lo que hace que el promedio funcione para quien ahorra por
+// temporadas. Ver el spec para por qué no se usa mediana ni media recortada.
+//
+// Devuelve null —no 0— cuando no hay ningún mes cerrado con datos, para que las
+// pantallas digan "no sé" en vez de anunciar "$0".
+function ahorroEstimado(dueno){
+  const actual = curMonth();
+  const conDatos = mesesConDatosScope(dueno).filter(mes => mes < actual);
+  if(conDatos.length === 0) return null;
+  const ventana = ventanaMeses(mesPrevio(actual), VENTANA_ESTIMACION, conDatos[0]);
+  if(ventana.length === 0) return null;
+  return ventana.reduce((s,mes)=> s + ahorroMesScope(mes, dueno), 0) / ventana.length;
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
