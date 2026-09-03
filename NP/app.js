@@ -743,13 +743,19 @@ function particionarEstado(st, perfil){
   };
 }
 
-// Reconstruye el estado a partir de los dos documentos. Deduplica por id: si una
-// escritura pasó y la otra falló, un mismo item puede estar en ambos lados.
+// Reconstruye el estado a partir de los dos documentos, deduplicando por id.
+//
+// El bolsillo gana sobre shared, y el orden importa: mientras la pareja no haya
+// actualizado los dos teléfonos, el que sigue en la versión anterior reescribe en
+// shared la copia que tenga en local de MIS datos privados, que para entonces ya
+// está rancia. Si shared ganara, ese saldo viejo pisaría el mío, se persistiría con
+// saveLocalOnly() y en el siguiente guardado se escribiría de vuelta a mi bolsillo.
+// Lo mío lo manda mi bolsillo, siempre.
 function unirEstado(shared, bolsillo, perfilLocal){
   const sh = shared || {}, bo = bolsillo || {};
-  const unir = (a, b) => {
+  const unir = (propio, ajeno) => {
     const vistos = new Set();
-    return (a || []).concat(b || []).filter(x => {
+    return (propio || []).concat(ajeno || []).filter(x => {
       if (!x || !x.id) return true;
       if (vistos.has(x.id)) return false;
       vistos.add(x.id);
@@ -758,11 +764,11 @@ function unirEstado(shared, bolsillo, perfilLocal){
   };
   return {
     config: { ...(sh.config || {}), perfil: perfilLocal },
-    metas: unir(sh.metas, bo.metas),
+    metas: unir(bo.metas, sh.metas),
     log: sh.log || [],
-    ingresos: unir(sh.ingresos, bo.ingresos),
-    gastos: unir(sh.gastos, bo.gastos),
-    logros: unir(sh.logros, bo.logros)
+    ingresos: unir(bo.ingresos, sh.ingresos),
+    gastos: unir(bo.gastos, sh.gastos),
+    logros: unir(bo.logros, sh.logros)
   };
 }
 
