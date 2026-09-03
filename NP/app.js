@@ -6041,6 +6041,13 @@ function attachPlan(){
     _syncShared = null;
     state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};
     save();
+    // Rearma los dos listeners contra los documentos ya vacíos. Si no se hace, el
+    // unsubscribeBolsillo() de arriba deja _syncBolsillo en null para siempre, pero el
+    // listener de shared sigue vivo: su próximo snapshot (p. ej. la pareja editando algo
+    // compartido) dispara rebuildStateFromSync(), unirEstado no tiene bo.metas y
+    // state.metas se sobrescribe solo con lo compartido — borrando cualquier meta,
+    // ingreso, gasto o logro individual que el usuario cree después del reseteo.
+    if (currentUser && currentPlanId) syncSubscribe(currentPlanId);
     startOnboarding();
   };
   $('btnAjustesVolver').onclick=()=>go(0);
