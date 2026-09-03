@@ -807,7 +807,7 @@ function unirEstado(shared, bolsillo, perfilLocal){
 // porque las reglas de Firestore solo le dejan escribir su propio bolsillo.
 function necesitaMigrarASplit(shared, perfil){
   if (!shared) return false;
-  const metas = shared.metas || [];
+  const metas = (shared.metas || []).filter(m => m && m.tipo !== 'personal');
   // Ids de las metas propias que todavía están en shared. Se calcula antes de
   // decidir, para que un guardado a medias (la meta ya migró pero su gasto no)
   // también se detecte.
@@ -819,6 +819,27 @@ function necesitaMigrarASplit(shared, perfil){
     || (shared.ingresos || []).some(tocaPropia)
     || (shared.gastos || []).some(tocaPropia)
     || (shared.logros || []).some(l => l && l.dueno === perfil);
+}
+
+// Única excepción al hecho de que el Lector no escribe el documento compartido, y es de
+// una sola dirección: solo QUITA lo suyo. Nunca agrega, ni toca lo conjunto, ni lo del
+// otro perfil. Va en transacción para no pisar una edición simultánea del Editor.
+async function syncLimpiarMisDatosDeShared(planId, perfil){
+  const ref = db.collection('planes').doc(planId).collection('shared').doc('data');
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    const remote = snap.data();
+    if (!necesitaMigrarASplit(remote, perfil)) return;
+    const { shared } = particionarEstado(remote, perfil);
+    // Solo las cuatro listas: config y log no son suyos y no se tocan.
+    tx.update(ref, {
+      metas: shared.metas,
+      ingresos: shared.ingresos,
+      gastos: shared.gastos,
+      logros: shared.logros
+    });
+  });
 }
 
 // --- Firebase Sync Helpers ---
@@ -6797,6 +6818,14 @@ auth.onAuthStateChanged(async user => {
         // porque save() escribe la misma partición de todas formas.
         if (necesitaMigrarASplit(remote, state.config.perfil)) {
           console.info('Migrando este plan al split de bolsillos…');
+          // El Editor limpia shared con su propio save(). El Lector no escribe shared
+          // (canEditShared() es falso para su rol), así que sin esta pasada explícita sus
+          // datos privados se quedarían ahí para siempre y la ventana de exposición
+          // nunca cerraría en los planes donde la pareja es Lector.
+          if (!canEditShared()) {
+            syncLimpiarMisDatosDeShared(currentPlanId, state.config.perfil)
+              .catch(e => console.warn('No se pudo limpiar el documento compartido:', e.message));
+          }
         }
 
         save();
