@@ -1176,15 +1176,13 @@ function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inv
 
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
 function gastosFijosTotal(){return state.config.gastos||0;}
-/* Colchón de emergencia sugerido: 3 meses de gastos fijos; si el usuario solo declara
-   ahorro mensual (sin gastos fijos), ~6 meses de ese ahorro como punto de partida editable.
-   Devuelve 0 cuando no hay datos para inferirlo. */
+/* Colchón de emergencia sugerido: ~6 meses del ahorro mensual estimado, como punto de
+   partida editable. Devuelve 0 cuando no hay historial para inferirlo — sin datos no se
+   sugiere nada, en vez de sugerir cero. */
 function colchonSugerido(){
-  const g=gastosFijosTotal();
-  if(g>0)return Math.round(g*3);
-  const c=state.config;
-  if(c.soloAhorroDirecto && (c.ahorroDirecto||0)>0)return Math.round((c.ahorroDirecto||0)*6);
-  return 0;
+  const est = ahorroEstimado(null);
+  if(est === null || est <= 0) return 0;
+  return Math.round(est*6);
 }
 function sumaPct(){ return 100; } // los % se normalizan por bucket; la suma global ya no aplica
 function chequearDistribucionAhorro(){ return { ok:true }; } // el sobrante siempre tiene destino (inversión o sin-asignar)
@@ -3168,7 +3166,7 @@ function renderMetaForm(editing){
     const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
-      ${sug>0 ? `<div class="hint">Colchón sugerido: <b>${fmt(sug)}</b> (${gastosFijosTotal()>0?'3 meses de gastos fijos':'~6 meses de ahorro mensual'}). El ahorro sobrante lo completa antes de ir a inversión.</div>` : ''}
+      ${sug>0 ? `<div class="hint">Colchón sugerido: <b>${fmt(sug)}</b> (~6 meses de lo que ahorran al mes). El ahorro sobrante lo completa antes de ir a inversión.</div>` : ''}
       <div class="mf-grid" style="margin-top:10px">${pctCol}${saldoCol}</div>${pctHint}
       <details style="margin-top:10px"${m.gastoRef?' open':''}>
         <summary style="font-size:12px;font-weight:700;color:var(--gs);cursor:pointer">Medir en meses de respaldo (opcional)</summary>
@@ -4748,16 +4746,9 @@ function renderLearnInvertir(body){
 
 // --- Herramienta: ¿Cuánto puedo ahorrar? (sliders entra/sale + 50/30/20) ---
 function renderLearnAhorro(body){
-  const c = state.config;
-
-  // Pre-llenado (solo lectura) desde el plan; si no hay plan, defaults jugables editables.
-  const entra0 = (c.nominaP1||0) + (c.nominaP2||0);
-  const sale0  = gastosFijosTotal() + repartoFijo();
-  // Estado interno de la simulación (no escribe nada al plan).
-  const S = {
-    entra: entra0 > 0 ? entra0 : 2500000,
-    sale:  sale0  > 0 ? sale0  : 1500000
-  };
+  // Calculadora exploratoria: arranca con defaults jugables y editables. No se presiembra
+  // desde el plan porque "cuánto entra" y "cuánto sale" ya no son datos que la app capture.
+  const S = { entra: 2500000, sale: 1500000 };
   // Escala no lineal: el slider tiene POS posiciones; la posición mapea al monto
   // con una curva de potencia, así el extremo bajo (1-10M, lo común en CO) tiene
   // mucha más resolución y el tope llega hasta 100M.
@@ -4951,7 +4942,10 @@ function renderSimMetas(body){
 
   const formatInt = n => (n || 0).toLocaleString('es-CO');
   const usaMeses = m.objetivo > 0 && m.tipo !== 'invertir'; // sueño/colchón con objetivo → meses
-  const aporteBase = Math.round(aporteMensualEstimado(m));   // línea base desde la distribución
+  // Sin historial no hay línea base: el simulador arranca en cero y el usuario mueve
+  // los deslizadores. Math.round(null) daría 0 igual, pero por accidente.
+  const aporteEst = aporteMensualEstimado(m);
+  const aporteBase = aporteEst === null ? 0 : Math.round(aporteEst);
   const tasaInit = Math.round(tasaSugeridaMeta(m) * 100);
 
   // Estado local de la simulación.
@@ -5102,7 +5096,7 @@ function renderSimLibre(body){
   const handoff = _learnHandoff; _learnHandoff = null;
   const sugAhorro = handoff && handoff.monto > 0 ? Math.round(handoff.monto / SNAP) * SNAP : 0;
   const pctInv = state.metas.filter(m => m.tipo === 'invertir').reduce((a,m) => a + (m.aportePct||0), 0);
-  const ahorroReal = Math.max(0, computeBase());
+  const ahorroReal = ahorroEstimado(null) || 0;
   const sugPlan = ahorroReal > 0 && pctInv > 0 ? Math.round((ahorroReal * pctInv/100) / SNAP) * SNAP : 0;
 
   const S = {
@@ -5388,9 +5382,9 @@ function renderLearnAporte(body){
   const n1 = c.nombreP1 || 'Persona 1', n2 = c.nombreP2 || 'Persona 2';
 
   const S = {
-    total: Math.max(0, Math.round(computeBase())) || 1000000,  // ahorro en pareja al mes
-    ing1:  c.nominaP1 || 0,
-    ing2:  c.nominaP2 || 0,
+    total: Math.round(ahorroEstimado(null) || 0) || 1000000,  // ahorro en pareja al mes
+    ing1:  0,
+    ing2:  0,
     custP1: 50   // % del ahorro en pareja que pone P1 en el modo a medida
   };
 
