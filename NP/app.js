@@ -643,6 +643,11 @@ function normalize(){
   // (La re-normalización de aportePct por bucket se hace más abajo, una vez que
   //  state.metas está garantizado como array y con aportePct/objetivo numéricos.)
   if(state.config.estrategia!==undefined){ delete state.config.estrategia; }
+  // Presupuesto legacy (nóminas, gastos del hogar, reparto fijo): el onboarding dejó de
+  // capturarlo y la estimación de ahorro ahora sale del historial. Se purga para que no
+  // siga viajando a Firestore en cada guardado.
+  ['nominaP1','nominaP2','gastos','planPareja','libreP1','libreP2','soloAhorroDirecto','ahorroDirecto','gastosFijos']
+    .forEach(k=>{ delete state.config[k]; });
   if(!state.config.buckets || typeof state.config.buckets!=='object'){
     state.config.buckets={ imprevistos:50, sueno:30, invertir:20 };
   }
