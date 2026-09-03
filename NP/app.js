@@ -4684,7 +4684,11 @@ function renderLearnInvertir(body){
   `;
 
   // --- Capa 2: Tus metas, tu plan (personalizado) ---
-  const metasCoach = state.metas.filter(m => m.tipo !== 'personal');
+  // Las metas individuales del otro perfil viven en el documento compartido hasta que su
+  // dueño abra la app y migre (regla de particionarEstado: a shared va todo lo demás,
+  // incluido lo privado del otro). Sin filtro por dueño este perfil las ve — y ahora
+  // además publica su plazo e instrumento, derivados del ahorro privado del otro.
+  const metasCoach = metasVisiblesEnFondos();
   let coachHtml;
   if (metasCoach.length){
     const rows = metasCoach.map(m => {
