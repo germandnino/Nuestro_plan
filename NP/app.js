@@ -1169,9 +1169,15 @@ function bucketLabel(t){ return BUCKET_LBL[t] || tipoLabel(t); }
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
 /* Colchón de emergencia sugerido: ~6 meses del ahorro mensual estimado, como punto de
    partida editable. Devuelve 0 cuando no hay historial para inferirlo — sin datos no se
-   sugiere nada, en vez de sugerir cero. */
-function colchonSugerido(){
-  const est = ahorroEstimado(null);
+   sugiere nada, en vez de sugerir cero.
+
+   Se mide en el scope de la meta (`dueno` null = compartido). Con el scope compartido
+   fijo quedaba muerto para siempre en modo individual —allí TODO movimiento sale
+   privado, así que el scope compartido nunca tiene datos— y en pareja proponía a un
+   colchón individual 6x el ahorro de la PAREJA, aunque se financie con el motor
+   individual de su dueño. */
+function colchonSugerido(dueno){
+  const est = ahorroEstimado(dueno || null);
   if(est === null || est <= 0) return 0;
   return Math.round(est*6);
 }
@@ -3149,7 +3155,7 @@ function renderMetaForm(editing){
 
   let fields='';
   if(m.tipo==='imprevistos'){
-    const sug = colchonSugerido();
+    const sug = colchonSugerido(m.dueno || null);
     const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
