@@ -5097,7 +5097,9 @@ function renderSimLibre(body){
   // Sugerencias de monto (solo lectura): handoff del Commit 2 y % del plan a inversión.
   const handoff = _learnHandoff; _learnHandoff = null;
   const sugAhorro = handoff && handoff.monto > 0 ? Math.round(handoff.monto / SNAP) * SNAP : 0;
-  const pctInv = state.metas.filter(m => m.tipo === 'invertir').reduce((a,m) => a + (m.aportePct||0), 0);
+  // El peso del bucket ya es el % del ahorro que va a inversión; sumar los aportePct de las
+  // metas daría 100 por bucket (o 200 con una compartida y una individual), no el % real.
+  const pctInv = pesosBuckets(null).invertir || 0;
   const ahorroReal = ahorroEstimado(null) || 0;
   const sugPlan = ahorroReal > 0 && pctInv > 0 ? Math.round((ahorroReal * pctInv/100) / SNAP) * SNAP : 0;
 
