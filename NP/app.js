@@ -801,6 +801,26 @@ function unirEstado(shared, bolsillo, perfilLocal){
   };
 }
 
+// ¿El documento compartido todavía trae datos privados de este perfil? Si sí, este
+// dispositivo viene de una versión anterior al split y hay que reescribir los dos
+// documentos una vez. Cada quien migra lo suyo: nadie puede mover los datos del otro
+// porque las reglas de Firestore solo le dejan escribir su propio bolsillo.
+function necesitaMigrarASplit(shared, perfil){
+  if (!shared) return false;
+  const metas = shared.metas || [];
+  // Ids de las metas propias que todavía están en shared. Se calcula antes de
+  // decidir, para que un guardado a medias (la meta ya migró pero su gasto no)
+  // también se detecte.
+  const propios = metas.filter(m => m && m.dueno === perfil).map(m => m.id);
+  const tocaPropia = x => !!x && (
+    (x.privado && x.duenoPriv === perfil) || propios.indexOf(x.meta) !== -1
+  );
+  return propios.length > 0
+    || (shared.ingresos || []).some(tocaPropia)
+    || (shared.gastos || []).some(tocaPropia)
+    || (shared.logros || []).some(l => l && l.dueno === perfil);
+}
+
 // --- Firebase Sync Helpers ---
 
 function getPlanId() {
@@ -6770,6 +6790,14 @@ auth.onAuthStateChanged(async user => {
         _syncShared = remote;
         _syncBolsillo = bolsillo || { metas: [], ingresos: [], gastos: [], logros: [] };
         rebuildStateFromSync();
+
+        // Migración al split: si shared todavía trae lo privado de este perfil,
+        // el guardado de abajo lo mueve al bolsillo y lo saca del documento compartido.
+        // Idempotente: en un plan ya migrado esto no dispara ninguna escritura extra,
+        // porque save() escribe la misma partición de todas formas.
+        if (necesitaMigrarASplit(remote, state.config.perfil)) {
+          console.info('Migrando este plan al split de bolsillos…');
+        }
 
         save();
         if (state.config.onboarded) {
