@@ -907,6 +907,7 @@ async function syncLoadBolsillo(planId, uid) {
 // en cualquier orden, así que reconstruir desde un solo lado borraría el otro.
 let _syncShared = null;
 let _syncBolsillo = null;
+let _warnedNoSyncShared = false; // una sola vez: la guarda de abajo se dispara con cada snapshot del bolsillo.
 
 function rebuildStateFromSync(){
   // La guarda mira SOLO a shared, no a los dos. `config`, `log` y las metas compartidas
@@ -917,7 +918,16 @@ function rebuildStateFromSync(){
   // listener del bolsillo sintetiza un objeto truthy aunque el documento no exista, así
   // que "llegó el bolsillo" no es señal de nada. Sin shared, se espera a su primer
   // snapshot: no hay caso legítimo en que haya que reconstruir sin él.
-  if (!_syncShared) return;
+  if (!_syncShared) {
+    // Diagnóstico: sin esto, un shared/data ausente (p.ej. el owner borró el plan) deja
+    // la reconstrucción congelada sin ningún rastro. Una sola vez porque el listener del
+    // bolsillo dispara esta guarda con cada snapshot suyo.
+    if (!_warnedNoSyncShared) {
+      _warnedNoSyncShared = true;
+      console.warn('rebuildStateFromSync: no hay snapshot de shared/data todavía, no se reconstruye el estado');
+    }
+    return;
+  }
   const unido = unirEstado(_syncShared, _syncBolsillo, state.config.perfil);
   state.config = unido.config;
   state.metas = unido.metas;
