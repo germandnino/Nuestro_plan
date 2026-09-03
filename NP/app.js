@@ -2351,6 +2351,42 @@ function mesesConDatosUI(){
   });
   return Object.keys(set).sort();
 }
+/* ---------- estimación de ahorro desde el historial ---------- */
+// Un ingreso pertenece a un scope: `dueno` nulo = lo compartido; 'p1'/'p2' = lo
+// individual de ese perfil. Los sobrantes sin asignar no son de ningún scope —
+// ya se contaron en el ingreso que los originó.
+function ingresoDeScope(i, dueno){
+  if(!i || i.sinAsignar) return false;
+  return dueno ? !!(i.privado && i.duenoPriv === dueno) : !i.privado;
+}
+
+// Pata huérfana entrante que este perfil sí ve. Siempre cae en una meta compartida,
+// así que cuenta como ahorro compartido.
+function huerfanaVisible(g){
+  return !!(g && g.desdePrivado) && sinContraparteVisible(g)
+         && !gastoDeMetaAjena(g, state.config.perfil);
+}
+
+// Cuánto entró a un scope en un mes concreto. Siempre devuelve número: el null es
+// decisión de ahorroEstimado, no de aquí.
+function ahorroMesScope(mes, dueno){
+  const ing = state.ingresos.reduce((s,i)=>
+    (i.mes === mes && ingresoDeScope(i, dueno)) ? s + (i.monto||0) : s, 0);
+  if(dueno) return ing;
+  return ing + state.gastos.reduce((s,g)=>
+    (g.fecha && g.fecha.substring(0,7) === mes && huerfanaVisible(g)) ? s + (g.monto||0) : s, 0);
+}
+
+// Meses 'YYYY-MM' con movimientos en ese scope, en orden ascendente.
+function mesesConDatosScope(dueno){
+  const set = {};
+  state.ingresos.forEach(i=>{ if(i.mes && ingresoDeScope(i, dueno)) set[i.mes] = true; });
+  if(!dueno) state.gastos.forEach(g=>{
+    if(g.fecha && huerfanaVisible(g)) set[g.fecha.substring(0,7)] = true;
+  });
+  return Object.keys(set).sort();
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
@@ -2368,11 +2404,7 @@ function sinContraparteVisible(g){
 }
 function entrantesHuerfanasUI(mes){
   return state.gastos
-    // gastoDeMetaAjena es defensa en profundidad, no un filtro activo hoy: una pata
-    // con desdePrivado solo puede vivir en el documento compartido apuntando a una
-    // meta compartida, y para esa meta gastoDeMetaAjena siempre da false.
-    .filter(g => g.fecha.substring(0, 7) === mes && g.desdePrivado && sinContraparteVisible(g)
-                 && !gastoDeMetaAjena(g, state.config.perfil))
+    .filter(g => g.fecha.substring(0, 7) === mes && huerfanaVisible(g))
     .reduce((s, g) => s + g.monto, 0);
 }
 
