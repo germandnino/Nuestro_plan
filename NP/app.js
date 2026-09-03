@@ -3269,12 +3269,18 @@ function updateDeriv(){
   const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
   const saldo=$('fSaldo')?parse($('fSaldo').value):0;
 
-  // Metas individuales se fondean con aportes directos: sin estimación de motor.
-  const est=Math.max(0,computeBase());
-  const pctMes = mForm.dueno ? 0 : est*pct/100;
+  // La estimación sale del historial del scope de la meta: una meta individual se
+  // proyecta con lo que su dueño ahorra, no con lo de la pareja.
+  const est = ahorroEstimado(mForm.dueno || null);
+  const hayEst = est !== null && est > 0;
+  const pctMes = hayEst ? est*pct/100 : 0;
 
-  const aporteMes=pctMes;
-  const apTxt=()=>pct>0 ? '~'+fmt(pctMes)+' ('+pct+'% del ahorro)' : '';
+  const aporteMes = pctMes;
+  // Sin estimación se nombra el reparto sin inventar un monto. Prometer "$0" es peor
+  // que no prometer nada: se lee como "tu meta no va a ningún lado".
+  const apTxt=()=> pct<=0 ? ''
+                 : hayEst ? '~'+fmt(pctMes)+' ('+pct+'% del ahorro)'
+                          : pct+'% del ahorro';
 
   let txt='';
 
@@ -3288,6 +3294,8 @@ function updateDeriv(){
       txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
     }else if(aporteMes>0&&!obj){
       txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+    }else if(obj && pct>0 && !hayEst){
+      txt=`Meta de <b>${fmt(obj)}</b> con ${apTxt()}. Aún no podemos proyectar cuándo llegas: necesitamos al menos un mes cerrado de movimientos.`;
     }else if(obj){
       txt=`Meta de <b>${fmt(obj)}</b> sin aporte mensual definido. Se financiará mediante aportes manuales.`;
     }else{
@@ -3303,6 +3311,8 @@ function updateDeriv(){
       txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
     }else if(aporteMes>0&&!obj){
       txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+    }else if(obj && pct>0 && !hayEst){
+      txt=`Meta de <b>${fmt(obj)}</b> con ${apTxt()}. Aún no podemos proyectar cuándo llegas: necesitamos al menos un mes cerrado de movimientos.`;
     }else if(obj){
       txt=`Meta de <b>${fmt(obj)}</b> sin aporte definido: recibe lo que sobre del ahorro mensual.`;
     }else{
