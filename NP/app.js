@@ -464,13 +464,14 @@ function consumirSueno(m, skipConfirm=false){
     }
     const metaSnap=JSON.parse(JSON.stringify(m));
     const logro={id:uid(), nombre:m.nombre, monto:m.saldo, fecha:today(), dueno:m.dueno||null};
-    // `duenoMeta` deja constancia de a quién pertenecía la meta: al borrarla, el gasto
-    // queda huérfano y particionarEstado ya no podría deducirlo, y un gasto por el saldo
-    // íntegro de una meta privada terminaría en el documento compartido.
     const gasto={id:uid(),meta:m.id,fecha:today(),monto:m.saldo,mov:'salida',nota:'Sueño cumplido',creadoPor:state.config.perfil};
-    if(m.dueno) gasto.duenoMeta=m.dueno;
     state.gastos.push(gasto);
     state.logros.push(logro);
+    // `duenoMeta` deja constancia de a quién pertenecía la meta: al borrarla, sus gastos
+    // (el nuevo y cualquier historial previo — retiros, transferencias) quedan huérfanos y
+    // particionarEstado ya no podría deducirlo, así que terminarían en el documento
+    // compartido. Se estampan todos, igual que hace liberarCDT.
+    if(m.dueno) state.gastos.forEach(g=>{ if(g.meta===m.id) g.duenoMeta=m.dueno; });
     state.metas=state.metas.filter(x=>x.id!==m.id);
     save(); rerender();
     flashUndo('Sueño guardado en Logros ✓', ()=>{
