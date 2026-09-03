@@ -6023,7 +6023,26 @@ function attachPlan(){
       flash(`Reiniciamos: ${msgs.join(', ')} ✓`);
     };
   }
-  $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Eliminar por completo el plan y todos los datos permanentemente? Esta acción es irreversible.', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};save();startOnboarding();};
+  $('bReset').onclick=async()=>{
+    if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}
+    if(!await customConfirm('¿Eliminar por completo el plan y todos los datos permanentemente? Esta acción es irreversible.', true))return;
+    // El bolsillo propio se borra de raíz: si solo se sobrescribiera, un snapshot
+    // en vuelo del listener podría reinyectar las metas individuales ya borradas.
+    // El bolsillo de la pareja no se toca — es su plata y las reglas de Firestore
+    // solo dejan a cada quien escribir el suyo.
+    if (currentUser && currentPlanId) {
+      if (unsubscribeBolsillo) { unsubscribeBolsillo(); unsubscribeBolsillo = null; }
+      _syncBolsillo = null;
+      try {
+        await db.collection('planes').doc(currentPlanId)
+          .collection('bolsillos').doc(currentUser.uid).delete();
+      } catch(e){ console.warn('No se pudo borrar el bolsillo:', e.message); }
+    }
+    _syncShared = null;
+    state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};
+    save();
+    startOnboarding();
+  };
   $('btnAjustesVolver').onclick=()=>go(0);
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
