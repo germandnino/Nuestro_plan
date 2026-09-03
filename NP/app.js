@@ -47,6 +47,7 @@ let isOwner = false;          // true si este usuario es el owner del plan
 let unsubscribeSync = null;   // función para cancelar listener de Firestore
 let planMeta = null;          // Objeto con metadatos del plan (owner, partner, roles)
 let unsubscribeMeta = null;   // función para cancelar listener de metadatos
+let unsubscribeBolsillo = null; // listener del bolsillo privado propio
 
 const store={
   async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
@@ -825,6 +826,31 @@ async function syncLoadShared(planId) {
   return doc.data();
 }
 
+async function syncLoadBolsillo(planId, uid) {
+  const doc = await db.collection('planes').doc(planId).collection('bolsillos').doc(uid).get();
+  if (!doc.exists) return null;
+  return doc.data();
+}
+
+// Últimos snapshots recibidos de cada documento. `state` es la unión de los dos, y se
+// recompone cada vez que llega cualquiera: los listeners son independientes y llegan
+// en cualquier orden, así que reconstruir desde un solo lado borraría el otro.
+let _syncShared = null;
+let _syncBolsillo = null;
+
+function rebuildStateFromSync(){
+  if (!_syncShared && !_syncBolsillo) return;
+  const unido = unirEstado(_syncShared, _syncBolsillo, state.config.perfil);
+  state.config = unido.config;
+  state.metas = unido.metas;
+  state.log = unido.log;
+  state.ingresos = unido.ingresos;
+  state.gastos = unido.gastos;
+  state.logros = unido.logros;
+  normalize();
+  saveLocalOnly();
+}
+
 async function syncSaveShared(planId, stateToSave) {
   const { shared } = particionarEstado(stateToSave, stateToSave.config.perfil);
   await db.collection('planes').doc(planId)
@@ -903,17 +929,8 @@ function syncSubscribe(planId) {
       }
       // Marca como visto el último estado sincronizado.
       if (remoteUpdatedMs) { try { localStorage.setItem('lastSeenUpdate', String(remoteUpdatedMs)); } catch(_){} }
-      const perfilLocal = state.config.perfil;
-      const remoteMetas = remote.metas || [];
-
-      state.config = { ...remote.config, perfil: perfilLocal };
-      state.metas = remoteMetas;
-      state.log = remote.log || [];
-      state.ingresos = remote.ingresos || [];
-      state.gastos = remote.gastos || [];
-      state.logros = remote.logros || [];
-      normalize();
-      saveLocalOnly();
+      _syncShared = remote;
+      rebuildStateFromSync();
       // Si el invitado estaba en espera (spinner) y el owner acaba de terminar el onboarding,
       // entrar a la app directamente sin que el invitado tenga que hacer nada.
       if ($('onb').classList.contains('on') && state.config.onboarded && localStorage.getItem('isInvited') === 'true') {
@@ -923,6 +940,19 @@ function syncSubscribe(planId) {
       }
       scheduleRerender();
     });
+
+  // El bolsillo propio. El del otro perfil nunca se pide: las reglas lo rechazarían
+  // y, sobre todo, no debe llegar a este dispositivo.
+  if (unsubscribeBolsillo) unsubscribeBolsillo();
+  if (currentUser) {
+    unsubscribeBolsillo = db.collection('planes').doc(planId)
+      .collection('bolsillos').doc(currentUser.uid)
+      .onSnapshot(doc => {
+        _syncBolsillo = doc.exists ? doc.data() : { metas: [], ingresos: [], gastos: [], logros: [] };
+        rebuildStateFromSync();
+        scheduleRerender();
+      }, e => console.warn('Bolsillo sin sincronizar:', e.message));
+  }
 
   if (unsubscribeMeta) unsubscribeMeta();
   unsubscribeMeta = db.collection('meta').doc(planId)
@@ -6725,15 +6755,15 @@ auth.onAuthStateChanged(async user => {
       }
       
       // Intentar cargar datos de Firestore
-      const remote = await syncLoadShared(currentPlanId);
+      const [remote, bolsillo] = await Promise.all([
+        syncLoadShared(currentPlanId),
+        syncLoadBolsillo(currentPlanId, user.uid)
+      ]);
       if (remote) {
-        const perfilLocal = state.config.perfil;
-        state.config = { ...remote.config, perfil: perfilLocal };
-        state.metas = remote.metas || [];
-        state.log = remote.log || [];
-        state.ingresos = remote.ingresos || [];
-        state.gastos = remote.gastos || [];
-        
+        _syncShared = remote;
+        _syncBolsillo = bolsillo || { metas: [], ingresos: [], gastos: [], logros: [] };
+        rebuildStateFromSync();
+
         save();
         if (state.config.onboarded) {
           // Si el onboarding estaba visible y ahora ya cargamos el plan remoto completo,
@@ -6783,6 +6813,7 @@ auth.onAuthStateChanged(async user => {
   } else {
     if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
     if (unsubscribeMeta) { unsubscribeMeta(); unsubscribeMeta = null; }
+    if (unsubscribeBolsillo) { unsubscribeBolsillo(); unsubscribeBolsillo = null; }
     currentPlanId = null;
     isOwner = false;
     planMeta = null;
