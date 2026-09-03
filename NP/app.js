@@ -2240,6 +2240,9 @@ function sinContraparteVisible(g){
 }
 function entrantesHuerfanasUI(mes){
   return state.gastos
+    // gastoDeMetaAjena es defensa en profundidad, no un filtro activo hoy: una pata
+    // con desdePrivado solo puede vivir en el documento compartido apuntando a una
+    // meta compartida, y para esa meta gastoDeMetaAjena siempre da false.
     .filter(g => g.fecha.substring(0, 7) === mes && g.desdePrivado && sinContraparteVisible(g)
                  && !gastoDeMetaAjena(g, state.config.perfil))
     .reduce((s, g) => s + g.monto, 0);
@@ -3825,6 +3828,17 @@ function revertirGasto(id) {
   const patas = g.transferId ? state.gastos.filter(x => x.transferId === g.transferId) : [g];
   if (patas.some(x => gastoDeMetaAjena(x, state.config.perfil))) {
     flash('Este movimiento toca una meta individual de tu pareja: no puedes eliminarlo');
+    return;
+  }
+
+  // Media transferencia: la pata marcada con desdePrivado/haciaPrivado tiene su
+  // contraparte en el bolsillo del otro perfil, que nunca llega a este dispositivo.
+  // Revertir solo la pata que sí llegó movería el saldo de la meta compartida sin que
+  // esa plata reaparezca en ningún lado — duplicarla o destruirla. noBorrable en
+  // processTransactionsForDisplay solo oculta el botón (capa de UI); esta es la guarda
+  // de datos, para cuando revertirGasto se invoque por cualquier otra vía.
+  if ((g.desdePrivado || g.haciaPrivado) && patas.length < 2) {
+    flash('Esta transferencia no está completa en este dispositivo: no puedes eliminarla');
     return;
   }
 
