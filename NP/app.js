@@ -3260,7 +3260,7 @@ function updateDeriv(){
   // Sin estimación se nombra el reparto sin inventar un monto. Prometer "$0" es peor
   // que no prometer nada: se lee como "tu meta no va a ningún lado".
   const apTxt=()=> pct<=0 ? ''
-                 : hayEst ? '~'+fmt(pctMes)+' ('+pct+'% del ahorro)'
+                 : hayEst ? '~'+fmt(pctMes)+'/mes ('+pct+'% del ahorro)'
                           : pct+'% del ahorro';
 
   let txt='';
@@ -3269,12 +3269,12 @@ function updateDeriv(){
     if(obj&&fecha){
       const meses=Math.max(1,monthsUntil(fecha));const need=Math.ceil((obj-saldo)/meses);
       txt=`Para llegar a <b>${fmt(obj)}</b> en ${fmtMes(fecha)} necesitas <b>${fmt(need)}/mes</b>.`;
-      if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} (~${fmt(aporteMes)}/mes) llegarías en ${addMonths(m2)}.`;}
+      if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} llegarías en ${addMonths(m2)}.`;}
     }else if(obj&&aporteMes>0){
       const meses=Math.ceil((obj-saldo)/aporteMes);
-      txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
+      txt=`Aportando ${apTxt()}, llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
     }else if(aporteMes>0&&!obj){
-      txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+      txt=`Meta abierta: sumas ${apTxt()}, sin fecha de cierre.`;
     }else if(obj && pct>0 && !hayEst){
       txt=`Meta de <b>${fmt(obj)}</b> con ${apTxt()}. Aún no podemos proyectar cuándo llegas: necesitamos al menos un mes cerrado de movimientos.`;
     }else if(obj){
@@ -3286,12 +3286,12 @@ function updateDeriv(){
     if(obj&&fecha){
       const meses=Math.max(1,monthsUntil(fecha));const need=Math.ceil((obj-saldo)/meses);
       txt=`Para llegar a <b>${fmt(obj)}</b> en ${fmtMes(fecha)} necesitas <b>${fmt(need)}/mes</b>.`;
-      if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} (~${fmt(aporteMes)}/mes) llegarías en ${addMonths(m2)}.`;}
+      if(aporteMes>0){const m2=Math.ceil((obj-saldo)/aporteMes);txt+=` Con ${apTxt()} llegarías en ${addMonths(m2)}.`;}
     }else if(obj&&aporteMes>0){
       const meses=Math.ceil((obj-saldo)/aporteMes);
-      txt=`Aportando ${apTxt()} (~${fmt(aporteMes)}/mes), llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
+      txt=`Aportando ${apTxt()}, llegas a <b>${fmt(obj)}</b> en <b>${addMonths(meses)}</b> (~${meses} mes${meses!==1?'es':''}).`;
     }else if(aporteMes>0&&!obj){
-      txt=`Meta abierta: sumas ${apTxt()} (~${fmt(aporteMes)}/mes), sin fecha de cierre.`;
+      txt=`Meta abierta: sumas ${apTxt()}, sin fecha de cierre.`;
     }else if(obj && pct>0 && !hayEst){
       txt=`Meta de <b>${fmt(obj)}</b> con ${apTxt()}. Aún no podemos proyectar cuándo llegas: necesitamos al menos un mes cerrado de movimientos.`;
     }else if(obj){
