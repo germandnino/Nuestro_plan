@@ -369,6 +369,11 @@ function resolverCDT(m){
 function liberarCDT(m){
   const snap=JSON.parse(JSON.stringify(m));
   const monto=m.saldo;
+  // Cerrar el CDT borra la meta pero NO sus gastos, que quedan huérfanos. Se les estampa
+  // el dueño antes de quitarla: sin eso particionarEstado no puede deducirlo y todo el
+  // historial de una meta privada se iría al documento compartido. Son todos los gastos
+  // de la meta, no solo los del cierre.
+  if(m.dueno) state.gastos.forEach(g=>{ if(g.meta===m.id) g.duenoMeta=m.dueno; });
   state.metas=state.metas.filter(x=>x.id!==m.id);
   const ing=registrarSobrantePendiente(monto, m.nombre, { dueno: m.dueno || null });
   save(); rerender();
@@ -459,7 +464,11 @@ function consumirSueno(m, skipConfirm=false){
     }
     const metaSnap=JSON.parse(JSON.stringify(m));
     const logro={id:uid(), nombre:m.nombre, monto:m.saldo, fecha:today(), dueno:m.dueno||null};
+    // `duenoMeta` deja constancia de a quién pertenecía la meta: al borrarla, el gasto
+    // queda huérfano y particionarEstado ya no podría deducirlo, y un gasto por el saldo
+    // íntegro de una meta privada terminaría en el documento compartido.
     const gasto={id:uid(),meta:m.id,fecha:today(),monto:m.saldo,mov:'salida',nota:'Sueño cumplido',creadoPor:state.config.perfil};
+    if(m.dueno) gasto.duenoMeta=m.dueno;
     state.gastos.push(gasto);
     state.logros.push(logro);
     state.metas=state.metas.filter(x=>x.id!==m.id);
@@ -753,7 +762,13 @@ function particionarEstado(st, perfil){
   // Un gasto es privado por la meta que toca. Un ingreso lo declara con `privado`
   // (lo hace openAgregarDinero y registrarSobrantePendiente); el fallback por meta
   // cubre registros viejos sin la marca.
-  const gastoMio = g => mia(metaDe(g.meta));
+  //
+  // `duenoMeta` es el respaldo para los gastos huérfanos: consumirSueno y liberarCDT
+  // borran la meta y dejan atrás sus gastos, y sin respaldo metaDe() daría undefined y
+  // el gasto —con el saldo íntegro de una meta privada— se clasificaría como compartido.
+  // Sin marca la clasificación es la de siempre (compartido), así que los huérfanos
+  // conjuntos no cambian de lado.
+  const gastoMio = g => { const m = metaDe(g.meta); return m ? mia(m) : g.duenoMeta === perfil; };
   const ingresoMio = i => (i.privado ? i.duenoPriv === perfil : mia(metaDe(i.meta)));
 
   const configSinPerfil = { ...(st.config || {}) };
