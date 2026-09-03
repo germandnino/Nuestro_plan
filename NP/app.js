@@ -3177,7 +3177,7 @@ function renderMetaForm(editing){
     const objVal = m.objetivo ? fmt(m.objetivo) : (!editing && sug>0 ? fmt(sug) : '');
     fields=`<div class="card"><label class="lbl">¿Cuánto quieren tener guardado?</label>
       <input class="amt money" id="fObj" inputmode="numeric" value="${objVal}" placeholder="$0">
-      ${sug>0 ? `<div class="hint">Colchón sugerido: <b>${fmt(sug)}</b> (~6 meses de lo que ahorran al mes). El ahorro sobrante lo completa antes de ir a inversión.</div>` : ''}
+      ${sug>0 ? `<div class="hint">Colchón sugerido: <b>${fmt(sug)}</b> (~6 meses de lo que ${m.dueno?'ahorras':'ahorran'} al mes). El ahorro sobrante lo completa antes de ir a inversión.</div>` : ''}
       <div class="mf-grid" style="margin-top:10px">${pctCol}${saldoCol}</div>${pctHint}
       <details style="margin-top:10px"${m.gastoRef?' open':''}>
         <summary style="font-size:12px;font-weight:700;color:var(--gs);cursor:pointer">Medir en meses de respaldo (opcional)</summary>
