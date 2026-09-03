@@ -1964,7 +1964,10 @@ function renderInicio(){
     tipPool = [
       {
         t: _svgTip('target') + ' Crea tu primera meta',
-        d: `Aún no ${_ind?'tienes':'tienen'} metas de ahorro. Empieza con un <b>fondo de emergencias</b>: 3 meses de gastos fijos guardados. Es el colchón que evita que una crisis se convierta en deuda.`,
+        // La misma cifra que sugiere el formulario de meta (colchonSugerido = 6 meses de
+        // la estimación de ahorro). Antes decía "3 meses de gastos fijos" y las dos
+        // pantallas se contradecían.
+        d: `Aún no ${_ind?'tienes':'tienen'} metas de ahorro. Empieza con un <b>fondo de emergencias</b>: unos 6 meses de lo que ${_ind?'ahorras':'ahorran'} al mes. Es el colchón que evita que una crisis se convierta en deuda.`,
         a: 'Crear mi primera meta',
         fn: () => { go(1); setTimeout(() => openMetaForm(null, 'sueno'), 50); }
       },
