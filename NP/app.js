@@ -27,7 +27,7 @@ function metasEjemplo(){
 }
 
 let state={config:{},metas:[],log:[],ingresos:[],gastos:[],logros:[]};
-let curTab=0, firstFlow=true, curMetasSubTab=1, curMetasScope='shared';
+let curTab=0, firstFlow=true, curMetasSubTab=0, curMetasScope='shared';
 let _bucketEditOrder=[]; // memoria de orden de edición de la barra de propósitos (más reciente al final)
 let _collapsedBuckets=new Set(); // secciones de propósito colapsadas (acordeón) por scope:tipo
 let _distribucionCollapsed = true; // estado colapsado por defecto del acordeón de reparto de propósitos
@@ -53,7 +53,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.51'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.52'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -82,6 +82,7 @@ function getSVG(name, cls='', style='') {
     phone: '<rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>',
     drag: '<circle cx="9" cy="5" r="1.5"></circle><circle cx="9" cy="12" r="1.5"></circle><circle cx="9" cy="19" r="1.5"></circle><circle cx="15" cy="5" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="15" cy="19" r="1.5"></circle>',
     chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>',
+    sliders: '<line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line>',
     info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
     edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>',
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
@@ -1688,9 +1689,11 @@ function renderInicio(){
   const patrimonioNeto = soloLoMio ? pat.totalIndividual : pat.total;
   const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
+  // Ajustes salio del nav para dejarle el slot a Mi Mes: entra aqui como engranaje.
+  const gearHtml = `<button id="btnGoAjustes" aria-label="Ajustes" style="background:none;border:none;cursor:pointer;color:rgba(246,241,230,.55);padding:8px;margin:-8px -8px 0 0;display:inline-flex;align-items:center;">${getSVG('sliders', '', 'width:22px;height:22px;')}</button>`;
   const headerHtml = c.modo === 'individual'
-    ? `<header><div class="ey">${esc(c.nombreP1)}</div><h1>Mi plan</h1></header>`
-    : `<header><div class="ey">${esc(c.nombreP1)} &amp; ${esc(c.nombreP2)}</div><h1>Nuestro plan</h1></header>`;
+    ? `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="ey">${esc(c.nombreP1)}</div><h1>Mi plan</h1></div>${gearHtml}</header>`
+    : `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="ey">${esc(c.nombreP1)} &amp; ${esc(c.nombreP2)}</div><h1>Nuestro plan</h1></div>${gearHtml}</header>`;
 
   // 1. Patrimonio Neto Card
   // ¿Hay metas de ahorro creadas?
@@ -1852,19 +1855,30 @@ function renderInicio(){
     </div>
   `;
 
+  // Sin metas todavia, el tablero no tiene nada que mostrar: se conserva el
+  // arranque guiado con su CTA en vez de tarjetas vacias.
+  const tableroHtml = hayMetasAhorro
+    ? `${drawSavingsDonut()}
+       <div style="height:12px;"></div>
+       ${drawStatsBI()}
+       ${drawSavingsHistoryCard()}`
+    : shortcutsHtml;
+
   $('r0').innerHTML=`
     ${headerHtml}
     ${patHtml}
     ${drawSinAsignarCard()}
-    ${shortcutsHtml}
+    ${tableroHtml}
     ${tipHtml}
+    <div style="height:72px;"></div>
   `;
 
   // Asignar clics
-  $('btnGoMiMes').onclick = () => go(2);
-  $('btnGoAddMeta').onclick = () => openMetaForm(null);
-  $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
-  $('btnTipAction').onclick = tipActionFn;
+  $('btnGoAjustes').onclick = () => go(4);
+  if ($('btnGoMiMes')) $('btnGoMiMes').onclick = () => go(2);
+  if ($('btnGoAddMeta')) $('btnGoAddMeta').onclick = () => openMetaForm(null);
+  if ($('btnGoAddExtra')) $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
+  if ($('btnTipAction')) $('btnTipAction').onclick = tipActionFn;
   const btnPrimeraMeta = $('btnCrearPrimeraMeta');
   if (btnPrimeraMeta) btnPrimeraMeta.onclick = () => openMetaForm(null);
 }
@@ -2329,23 +2343,14 @@ function renderMetas(){
   };
   let subTabsHtml = `
     <div class="seg dark-seg" style="margin-bottom:10px;">
-      <button id="btnTabDist" class="${curMetasSubTab===0?'on':''}">Resumen</button>
-      <button id="btnTabAhorros" class="${curMetasSubTab===1?'on':''}">Mis metas</button>
-      <button id="btnTabLogros" class="${curMetasSubTab===2?'on':''}">Logros</button>
+      <button id="btnTabAhorros" class="${curMetasSubTab===0?'on':''}">Mis metas</button>
+      <button id="btnTabLogros" class="${curMetasSubTab===1?'on':''}">Logros</button>
     </div>
   `;
   
   let contentHtml = '';
   
   if (curMetasSubTab === 0) {
-    contentHtml = `
-      ${drawSavingsDonut()}
-      <div style="height:12px;"></div>
-      ${drawStatsBI()}
-      ${drawSavingsHistoryCard()}
-      <div style="height:72px;"></div>
-    `;
-  } else if (curMetasSubTab === 1) {
     const card=(m)=>{
       const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
@@ -2485,7 +2490,7 @@ function renderMetas(){
       ${!canEdit ? '<div style="text-align:center;font-size:12.5px;color:rgba(246,241,230,.7);font-weight:600;background:rgba(246,241,230,.06);border:1px solid rgba(246,241,230,.15);border-radius:10px;padding:12px;margin-top:8px;">Rol: Lector — gestionas solo tus metas individuales. Las comunes las maneja el Editor.</div>' : ''}
       <div style="height:24px;flex-shrink:0;"></div>
     `;
-  } else if (curMetasSubTab === 2) {
+  } else if (curMetasSubTab === 1) {
     contentHtml = drawLogros();
   }
 
@@ -2500,12 +2505,10 @@ function renderMetas(){
     ${contentHtml}
   `;
 
-  const tabDist = $('btnTabDist');
   const tabAhorros = $('btnTabAhorros');
-  if (tabDist) tabDist.onclick = () => { curMetasSubTab = 0; rerender(); };
-  if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 1; rerender(); };
+  if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 0; rerender(); };
   const tabLogros = $('btnTabLogros');
-  if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 2; rerender(); };
+  if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 1; rerender(); };
 
   $('r1').querySelectorAll('.distahorros-toggle').forEach(el => {
     el.onclick = () => {
@@ -5503,7 +5506,10 @@ function renderPlan(){
        </div></details>`;
 
   $('r4').innerHTML=`
-<header><div class="ey">Configuración</div><h1>Ajustes</h1></header>
+<header style="display:flex;align-items:flex-start;gap:10px;">
+  <button id="btnAjustesVolver" aria-label="Volver a Inicio" style="background:none;border:none;cursor:pointer;color:rgba(246,241,230,.6);padding:8px;margin:2px 0 0 -8px;display:inline-flex;align-items:center;">${getSVG('chevronDown', '', 'width:22px;height:22px;transform:rotate(90deg);')}</button>
+  <div><div class="ey">Configuración</div><h1>Ajustes</h1></div>
+</header>
 
 ${perfilDetailHtml}
  
@@ -5799,6 +5805,7 @@ function attachPlan(){
     };
   }
   $('bReset').onclick=async()=>{if(!canEditShared()){flash('Solo un editor puede borrar el plan');return;}if(!await customConfirm('¿Eliminar por completo el plan y todos los datos permanentemente? Esta acción es irreversible.', true))return;state={config:Object.assign({},CFG_DEF),metas:metasEjemplo(),log:[],ingresos:[],gastos:[],logros:[]};save();startOnboarding();};
+  $('btnAjustesVolver').onclick=()=>go(0);
   $('bOnb').onclick=()=>startOnboarding();
   const bInst = $('bInstallPWA');
   if (bInst) {
