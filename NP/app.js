@@ -4028,7 +4028,17 @@ function processTransactionsForDisplay(rawList) {
           toMeta: nameIn
         });
       } else {
-        processed.push(t);
+        // Con el split, la contraparte de una transferencia cruzada vive en el bolsillo
+        // del otro perfil y nunca llega a este dispositivo. La pata que sí llegó se
+        // muestra por lo que es para quien la mira — un aporte o un retiro sobre una
+        // meta compartida — sin revelar de qué bolsillo salió ni a cuál entró. Nunca
+        // borrable: revertir media transferencia duplicaría o destruiría plata.
+        const soloUna = gOut || gIn;
+        if (soloUna && (soloUna.desdePrivado || soloUna.haciaPrivado)) {
+          processed.push({ ...t, huerfana: true, noBorrable: true });
+        } else {
+          processed.push(t);
+        }
       }
     } else {
       processed.push(t);
@@ -4057,10 +4067,18 @@ function drawTransactionTimeline(transactions, canEdit) {
         : (metaById(t.meta) ? metaById(t.meta).nombre : 'Meta eliminada');
       destLabel = metaNom;
     } else if (t.type === 'gasto') {
-      sign = '-';
-      color = '#e06c75';
       const m = metaById(t.meta);
-      destLabel = `Retiro de ${m ? m.nombre : 'Meta'}`;
+      if (t.mov === 'transfer-in') {
+        // Pata huérfana entrante: plata que entró a una meta compartida desde el
+        // bolsillo del otro. Se anuncia como aporte suyo, sin decir de dónde salió.
+        sign = '+';
+        color = 'var(--green)';
+        destLabel = `Aporte de ${getCreatorName(t.creadoPor)} → ${m ? m.nombre : 'Meta'}`;
+      } else {
+        sign = '-';
+        color = '#e06c75';
+        destLabel = `Retiro de ${m ? m.nombre : 'Meta'}`;
+      }
     } else if (t.type === 'transfer') {
       sign = '';
       color = 'var(--gold)';
@@ -4122,9 +4140,15 @@ function renderMiMes(){
 
   // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
   // ingreso de origen) y los movimientos privados del otro perfil.
-  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied;
+  const entrantesHuerfanas = state.gastos
+    .filter(g => g.fecha.substring(0, 7) === mes && g.desdePrivado)
+    .reduce((sum, g) => sum + g.monto, 0);
+  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied + entrantesHuerfanas;
   const totalOut = state.gastos.filter(g => {
-    if (g.fecha.substring(0, 7) !== mes || g.mov !== 'salida') return false;
+    if (g.fecha.substring(0, 7) !== mes) return false;
+    // Salidas reales + patas huérfanas salientes: en ambos casos la plata dejó
+    // una meta compartida y no hay contraparte visible que la compense.
+    if (g.mov !== 'salida' && !g.haciaPrivado) return false;
     if (gastoDeMetaAjena(g, perfilActivo)) return false; // retiro de meta individual ajena
     return true;
   }).reduce((sum, g) => sum + g.monto, 0);
@@ -4146,7 +4170,8 @@ function renderMiMes(){
   }).map(g => ({
     type: 'gasto',
     id: g.id,
-    nombre: g.nota || (g.mov === 'salida' ? 'Retiro' : 'Transferencia'),
+    nombre: g.desdePrivado ? `Aporte de ${getCreatorName(g.creadoPor)}`
+          : (g.nota || (g.mov === 'salida' ? 'Retiro' : 'Transferencia')),
     monto: g.monto,
     fecha: g.fecha,
     creadoPor: g.creadoPor,
