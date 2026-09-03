@@ -7,18 +7,10 @@ const CFG_DEF={
   nombreP1:'Persona 1',
   nombreP2:'Persona 2',
   perfil:'p1',
-  nominaP1:0,
-  nominaP2:0,
-  gastos:0,
-  planPareja:0,
-  libreP1:0,
-  libreP2:0,
   pctPremio:20,
   modoPremio:'igual',      // igual | proporcional | personalizado
   pctPremioP1:50,
   buckets:{ imprevistos:50, sueno:30, invertir:20 }, // % nivel 1 por propósito (split sugerido: colchón primero)
-  soloAhorroDirecto:false,
-  ahorroDirecto:0,
   onboarded:false,
   modo:'pareja'            // pareja | individual
 };
@@ -647,8 +639,6 @@ document.addEventListener('focusout', () => {
 /* ---------- persistencia ---------- */
 function normalize(){
   state.config=Object.assign({},CFG_DEF,state.config||{});
-  if(Array.isArray(state.config.gastosFijos)){state.config.gastos=state.config.gastosFijos.reduce((s,x)=>s+(x.v||0),0);delete state.config.gastosFijos;}
-  if(typeof state.config.gastos!=='number')state.config.gastos=CFG_DEF.gastos;
   // Migración a modelo de dos niveles: elimina estrategia, garantiza buckets.
   // (La re-normalización de aportePct por bucket se hace más abajo, una vez que
   //  state.metas está garantizado como array y con aportePct/objetivo numéricos.)
@@ -669,9 +659,6 @@ function normalize(){
   });
   if(state.config.modo==='individual'){
     state.config.perfil='p1';
-    state.config.planPareja=0;
-    state.config.libreP2=0;
-    state.config.nominaP2=0;
   }
   if(!['p1','p2'].includes(state.config.perfil))state.config.perfil='p1';
   if(!Array.isArray(state.metas)||!state.metas.length){
@@ -1175,7 +1162,6 @@ function patrimonioResumen(){
 function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inversión':t==='sueno'?'Sueño':'Personal';}
 
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
-function gastosFijosTotal(){return state.config.gastos||0;}
 /* Colchón de emergencia sugerido: ~6 meses del ahorro mensual estimado, como punto de
    partida editable. Devuelve 0 cuando no hay historial para inferirlo — sin datos no se
    sugiere nada, en vez de sugerir cero. */
@@ -1186,8 +1172,6 @@ function colchonSugerido(){
 }
 function sumaPct(){ return 100; } // los % se normalizan por bucket; la suma global ya no aplica
 function chequearDistribucionAhorro(){ return { ok:true }; } // el sobrante siempre tiene destino (inversión o sin-asignar)
-function repartoFijo(){const c=state.config;return c.planPareja+c.libreP1+c.libreP2;}
-function computeBase(){const c=state.config;return c.soloAhorroDirecto ? (c.ahorroDirecto||0) : (c.nominaP1+c.nominaP2-gastosFijosTotal()-repartoFijo());}
 function emergencias(){return state.metas.filter(m=>m.tipo==='imprevistos').sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));}
 function emergenciaPrincipal(){return emergencias()[0]||null;}
 // Inversión activa preferida; si no hay ninguna sin colocar, cae a la colocada como último
@@ -2446,7 +2430,6 @@ function entrantesHuerfanasUI(mes){
 }
 
 function drawStatsBI(){
-  const c = state.config;
   const meses = mesesConDatosUI();
   const n = meses.length;
   if (n === 0) return '';
@@ -2457,8 +2440,9 @@ function drawStatsBI(){
   let bestIdx = 0;
   ahorros.forEach((v, i) => { if (v > ahorros[bestIdx]) bestIdx = i; });
 
-  const ingresoMensual = c.soloAhorroDirecto ? 0 : ((c.nominaP1 || 0) + (c.nominaP2 || 0));
-  const tasa = ingresoMensual > 0 ? Math.round(Math.max(0, Math.min(100, avgAhorro / ingresoMensual * 100))) : null;
+  // La tasa de ahorro (ahorro / ingreso mensual) se retiró con el presupuesto legacy:
+  // la app dejó de capturar el ingreso cuando el onboarding quitó las nóminas, así que
+  // el tile nunca se renderizaba. Para reactivarla hace falta una fuente de ingreso.
 
   const mesAnterior = (mes) => {
     const [y, m] = mes.split('-').map(Number);
@@ -2492,7 +2476,6 @@ function drawStatsBI(){
   // Es la suma de lo que ha entrado al plan, no el saldo actual (la dona de arriba muestra ese).
   tiles += tile('Total aportado', fmtK(totalAhorrado), 'en movimientos');
   tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
-  if (tasa !== null) tiles += tile('Tasa de ahorro', `${tasa}%`, 'del ingreso');
   tiles += tile('Constancia', `${n} ${n === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
 
   return `<div class="card dark" style="padding:18px 16px; margin-bottom:12px;">
@@ -5089,7 +5072,6 @@ function renderSimMetas(body){
 }
 
 function renderSimLibre(body){
-  const c = state.config;
   const SNAP = 10000, POS = 1000, P = 3;
 
   // Sugerencias de monto (solo lectura): handoff del Commit 2 y % del plan a inversión.
@@ -6845,13 +6827,6 @@ $('obSkip').onclick=()=>{
   } else {
     c.nombreP2 = c.nombreP2.trim() || 'Persona 2';
   }
-  c.nominaP1 = 0;
-  c.nominaP2 = 0;
-  c.gastos = 0;
-  c.planPareja = 0;
-  c.libreP1 = 0;
-  c.libreP2 = 0;
-  
   state.metas = [];
   state.log = [];
   state.ingresos = [];
