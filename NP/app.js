@@ -703,6 +703,69 @@ function normalize(){
   }
 }
 
+/* ---------- split de sincronización ---------- */
+// Reparte el estado entre el documento compartido y el bolsillo propio.
+//
+// Regla que hace segura la migración: al bolsillo va SOLO lo de `perfil`; a shared
+// va todo lo demás, INCLUIDO lo privado del otro perfil. Este dispositivo no puede
+// mover los datos del otro (las reglas de Firestore solo le dejan escribir su propio
+// bolsillo), así que borrarlos de shared sería destruirlos. Cada quien limpia lo suyo.
+function esMetaPropia(m, perfil){ return !!(m && m.dueno && m.dueno === perfil); }
+
+function particionarEstado(st, perfil){
+  const metas = (st.metas || []).filter(m => m.tipo !== 'personal');
+  const metaDe = id => metas.find(m => m.id === id);
+  const mia = m => esMetaPropia(m, perfil);
+  // Un gasto es privado por la meta que toca. Un ingreso lo declara con `privado`
+  // (lo hace openAgregarDinero y registrarSobrantePendiente); el fallback por meta
+  // cubre registros viejos sin la marca.
+  const gastoMio = g => mia(metaDe(g.meta));
+  const ingresoMio = i => (i.privado ? i.duenoPriv === perfil : mia(metaDe(i.meta)));
+
+  const configSinPerfil = { ...(st.config || {}) };
+  delete configSinPerfil.perfil;
+
+  return {
+    bolsillo: {
+      metas: metas.filter(mia),
+      ingresos: (st.ingresos || []).filter(ingresoMio),
+      gastos: (st.gastos || []).filter(gastoMio),
+      logros: (st.logros || []).filter(l => l && l.dueno === perfil)
+    },
+    shared: {
+      config: configSinPerfil,
+      metas: metas.filter(m => !mia(m)),
+      log: st.log || [],
+      ingresos: (st.ingresos || []).filter(i => !ingresoMio(i)),
+      gastos: (st.gastos || []).filter(g => !gastoMio(g)),
+      logros: (st.logros || []).filter(l => !(l && l.dueno === perfil))
+    }
+  };
+}
+
+// Reconstruye el estado a partir de los dos documentos. Deduplica por id: si una
+// escritura pasó y la otra falló, un mismo item puede estar en ambos lados.
+function unirEstado(shared, bolsillo, perfilLocal){
+  const sh = shared || {}, bo = bolsillo || {};
+  const unir = (a, b) => {
+    const vistos = new Set();
+    return (a || []).concat(b || []).filter(x => {
+      if (!x || !x.id) return true;
+      if (vistos.has(x.id)) return false;
+      vistos.add(x.id);
+      return true;
+    });
+  };
+  return {
+    config: { ...(sh.config || {}), perfil: perfilLocal },
+    metas: unir(sh.metas, bo.metas),
+    log: sh.log || [],
+    ingresos: unir(sh.ingresos, bo.ingresos),
+    gastos: unir(sh.gastos, bo.gastos),
+    logros: unir(sh.logros, bo.logros)
+  };
+}
+
 // --- Firebase Sync Helpers ---
 
 function getPlanId() {
