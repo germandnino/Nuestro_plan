@@ -2227,7 +2227,22 @@ function mesesConDatosUI(){
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
   return especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
-    .reduce((s, i) => s + i.monto, 0);
+    .reduce((s, i) => s + i.monto, 0) + entrantesHuerfanasUI(mes);
+}
+
+// Una pata marcada solo cuenta como movimiento del mes cuando su contraparte NO llegó
+// a este dispositivo. Si las dos están visibles — una transferencia entre una meta
+// compartida y una meta individual PROPIA, donde la pata saneada vuelve por shared y
+// la otra vive en el bolsillo — el timeline ya la muestra como una sola fila neutra, y
+// sumarla aquí inflaría el KPI sin fila que lo respalde.
+function sinContraparteVisible(g){
+  return !state.gastos.some(x => x.transferId === g.transferId && x.id !== g.id);
+}
+function entrantesHuerfanasUI(mes){
+  return state.gastos
+    .filter(g => g.fecha.substring(0, 7) === mes && g.desdePrivado && sinContraparteVisible(g)
+                 && !gastoDeMetaAjena(g, state.config.perfil))
+    .reduce((s, g) => s + g.monto, 0);
 }
 
 function drawStatsBI(){
@@ -4140,15 +4155,12 @@ function renderMiMes(){
 
   // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
   // ingreso de origen) y los movimientos privados del otro perfil.
-  const entrantesHuerfanas = state.gastos
-    .filter(g => g.fecha.substring(0, 7) === mes && g.desdePrivado)
-    .reduce((sum, g) => sum + g.monto, 0);
-  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied + entrantesHuerfanas;
+  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied + entrantesHuerfanasUI(mes);
   const totalOut = state.gastos.filter(g => {
     if (g.fecha.substring(0, 7) !== mes) return false;
     // Salidas reales + patas huérfanas salientes: en ambos casos la plata dejó
     // una meta compartida y no hay contraparte visible que la compense.
-    if (g.mov !== 'salida' && !g.haciaPrivado) return false;
+    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
     if (gastoDeMetaAjena(g, perfilActivo)) return false; // retiro de meta individual ajena
     return true;
   }).reduce((sum, g) => sum + g.monto, 0);
@@ -4171,6 +4183,7 @@ function renderMiMes(){
     type: 'gasto',
     id: g.id,
     nombre: g.desdePrivado ? `Aporte de ${getCreatorName(g.creadoPor)}`
+          : g.haciaPrivado ? 'Retiro'
           : (g.nota || (g.mov === 'salida' ? 'Retiro' : 'Transferencia')),
     monto: g.monto,
     fecha: g.fecha,
