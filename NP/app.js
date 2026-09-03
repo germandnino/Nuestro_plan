@@ -736,9 +736,14 @@ function sanearGastoCruzado(g, patas, metas){
     return { ...g, nota: entrante ? 'Transferencia recibida' : 'Transferencia enviada' };
   }
   if (!mOtra.dueno) return g;   // la contraparte es compartida: nada que ocultar
+  // La marca es booleana a propósito: guardar `mOtra.dueno` escribiría en el documento
+  // compartido de quién es el bolsillo que está al otro lado —justo el "mero hecho de
+  // que existe" que el split busca ocultar— y ningún consumidor lee ese valor, solo su
+  // verdad lógica. La nota es la misma que produce la rama de contraparte ausente, para
+  // que las dos ramas sean indistinguibles desde el otro teléfono.
   const marca = entrante ? 'desdePrivado' : 'haciaPrivado';
-  const nota = entrante ? 'Aporte desde lo personal' : 'Transferencia a lo personal';
-  return { ...g, nota, [marca]: mOtra.dueno };
+  const nota = entrante ? 'Transferencia recibida' : 'Transferencia enviada';
+  return { ...g, nota, [marca]: true };
 }
 
 function particionarEstado(st, perfil){
