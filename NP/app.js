@@ -831,13 +831,20 @@ async function syncLimpiarMisDatosDeShared(planId, perfil){
     if (!snap.exists) return;
     const remote = snap.data();
     if (!necesitaMigrarASplit(remote, perfil)) return;
+    // Se parte el documento remoto tal cual, sin pasar por normalize(). Ojo con el
+    // acoplamiento: particionarEstado excluye las metas tipo:'personal' de las DOS
+    // mitades, así que una meta legacy de ese tipo que siguiera durmiendo en shared se
+    // borraría sin migrar. normalize() lleva purgándolas desde hace varias versiones.
     const { shared } = particionarEstado(remote, perfil);
-    // Solo las cuatro listas: config y log no son suyos y no se tocan.
+    // Solo las cuatro listas: config y log no son suyos y no se tocan. lastEditBy va
+    // para que el listener reconozca esto como escritura propia y no le anuncie al
+    // Lector que su pareja editó el plan.
     tx.update(ref, {
       metas: shared.metas,
       ingresos: shared.ingresos,
       gastos: shared.gastos,
-      logros: shared.logros
+      logros: shared.logros,
+      lastEditBy: perfil
     });
   });
 }
@@ -6823,7 +6830,14 @@ auth.onAuthStateChanged(async user => {
           // datos privados se quedarían ahí para siempre y la ventana de exposición
           // nunca cerraría en los planes donde la pareja es Lector.
           if (!canEditShared()) {
-            syncLimpiarMisDatosDeShared(currentPlanId, state.config.perfil)
+            // El orden no es negociable: primero se confirma que el bolsillo quedó
+            // escrito, y solo entonces se saca lo propio de shared. Al revés, si la
+            // limpieza confirma y la escritura del bolsillo falla, esos datos no quedan
+            // en ningún lado — y no se recuperan solos, porque rebuildStateFromSync()
+            // rehace el estado local desde los dos documentos en la siguiente carga.
+            const miBolsillo = particionarEstado(state, state.config.perfil).bolsillo;
+            syncSaveBolsillo(currentPlanId, currentUser.uid, miBolsillo)
+              .then(() => syncLimpiarMisDatosDeShared(currentPlanId, state.config.perfil))
               .catch(e => console.warn('No se pudo limpiar el documento compartido:', e.message));
           }
         }
