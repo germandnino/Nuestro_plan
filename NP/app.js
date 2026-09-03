@@ -1170,6 +1170,10 @@ function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inv
 // formulario de meta no invente un nombre distinto del que el usuario ya vio.
 const BUCKET_LBL={ imprevistos:'Colchón', sueno:'Sueños', invertir:'Inversión' };
 function bucketLabel(t){ return BUCKET_LBL[t] || tipoLabel(t); }
+// Forma posesiva, para cuando la etiqueta va dentro de una frase: "60% de tus sueños"
+// lee natural donde "60% de Sueños" no. Mismas palabras que los títulos de sección.
+const BUCKET_LBL_POS={ imprevistos:'tu colchón', sueno:'tus sueños', invertir:'tus inversiones' };
+function bucketLabelPos(t){ return BUCKET_LBL_POS[t] || bucketLabel(t); }
 
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
 /* Colchón de emergencia sugerido: ~6 meses del ahorro mensual estimado, como punto de
@@ -3302,7 +3306,7 @@ function updateDeriv(){
   // que no prometer nada: se lee como "tu meta no va a ningún lado".
   // El % se nombra contra su propósito ("60% de Sueños"), no contra el ahorro total:
   // decir "del ahorro" reforzaba justo el modelo mental que producía el 3x.
-  const bktLbl = bucketLabel(mForm.tipo);
+  const bktLbl = bucketLabelPos(mForm.tipo);
   const apTxt=()=> pct<=0 ? ''
                  : hayEst ? '~'+fmt(pctMes)+'/mes ('+pct+'% de '+bktLbl+')'
                           : pct+'% de '+bktLbl;
