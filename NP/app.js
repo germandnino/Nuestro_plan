@@ -712,6 +712,22 @@ function normalize(){
 // bolsillo), así que borrarlos de shared sería destruirlos. Cada quien limpia lo suyo.
 function esMetaPropia(m, perfil){ return !!(m && m.dueno && m.dueno === perfil); }
 
+// Una transferencia entre una meta privada y una compartida son dos gastos con el
+// mismo transferId. Con el split cada pata vive en un documento distinto, así que
+// la pata que se queda en shared no puede llevar el nombre de la meta privada en su
+// nota. Devuelve una copia saneada y marcada; si no cruza, devuelve el gasto tal cual.
+// `patas` es la lista completa de gastos del estado, para hallar la contraparte.
+function sanearGastoCruzado(g, patas, metas){
+  if (!g || !g.transferId) return g;
+  const otra = patas.find(x => x.transferId === g.transferId && x.id !== g.id);
+  if (!otra) return g;
+  const mOtra = metas.find(m => m.id === otra.meta);
+  if (!mOtra || !mOtra.dueno) return g;   // la contraparte no es privada: nada que ocultar
+  const marca = g.mov === 'transfer-in' ? 'desdePrivado' : 'haciaPrivado';
+  const nota = g.mov === 'transfer-in' ? 'Aporte desde lo personal' : 'Transferencia a lo personal';
+  return { ...g, nota, [marca]: mOtra.dueno };
+}
+
 function particionarEstado(st, perfil){
   const metas = (st.metas || []).filter(m => m.tipo !== 'personal');
   const metaDe = id => metas.find(m => m.id === id);
@@ -737,7 +753,8 @@ function particionarEstado(st, perfil){
       metas: metas.filter(m => !mia(m)),
       log: st.log || [],
       ingresos: (st.ingresos || []).filter(i => !ingresoMio(i)),
-      gastos: (st.gastos || []).filter(g => !gastoMio(g)),
+      gastos: (st.gastos || []).filter(g => !gastoMio(g))
+                               .map(g => sanearGastoCruzado(g, st.gastos || [], metas)),
       logros: (st.logros || []).filter(l => !(l && l.dueno === perfil))
     }
   };
