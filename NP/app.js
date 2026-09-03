@@ -908,6 +908,10 @@ function syncSubscribe(planId) {
     .onSnapshot(doc => {
       if (!doc.exists) return;
       const remote = doc.data();
+      // El cache se refresca SIEMPRE, también en el eco de una escritura propia. Si se
+      // quedara rancio, el listener del bolsillo —que sí dispara con el eco— reconstruiría
+      // mezclándolo con su bolsillo fresco y revertiría la edición compartida recién hecha.
+      _syncShared = remote;
       // Aviso "tu pareja editó": ignora el eco de escrituras propias.
       const esEco = (doc.metadata && doc.metadata.hasPendingWrites) || remote.lastEditBy === state.config.perfil;
       if (esEco && !_firstSyncSnapshot) {
@@ -929,7 +933,6 @@ function syncSubscribe(planId) {
       }
       // Marca como visto el último estado sincronizado.
       if (remoteUpdatedMs) { try { localStorage.setItem('lastSeenUpdate', String(remoteUpdatedMs)); } catch(_){} }
-      _syncShared = remote;
       rebuildStateFromSync();
       // Si el invitado estaba en espera (spinner) y el owner acaba de terminar el onboarding,
       // entrar a la app directamente sin que el invitado tenga que hacer nada.
@@ -949,6 +952,10 @@ function syncSubscribe(planId) {
       .collection('bolsillos').doc(currentUser.uid)
       .onSnapshot(doc => {
         _syncBolsillo = doc.exists ? doc.data() : { metas: [], ingresos: [], gastos: [], logros: [] };
+        // El eco de una escritura propia refresca el cache pero no reconstruye: el estado
+        // local ya es el bueno, y rehacerlo aquí solo abre la ventana para mezclar con un
+        // snapshot compartido que todavía no llegó.
+        if (doc.metadata && doc.metadata.hasPendingWrites) return;
         rebuildStateFromSync();
         scheduleRerender();
       }, e => console.warn('Bolsillo sin sincronizar:', e.message));
@@ -6750,7 +6757,7 @@ auth.onAuthStateChanged(async user => {
             partnerRole: 'editor',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
-          await syncSaveShared(currentPlanId, state);
+          await syncSavePartido(currentPlanId, state);
         }
       }
       
@@ -6814,6 +6821,11 @@ auth.onAuthStateChanged(async user => {
     if (unsubscribeSync) { unsubscribeSync(); unsubscribeSync = null; }
     if (unsubscribeMeta) { unsubscribeMeta(); unsubscribeMeta = null; }
     if (unsubscribeBolsillo) { unsubscribeBolsillo(); unsubscribeBolsillo = null; }
+    // Los caches de módulo son del usuario que se va. Si no se limpian, un login con otra
+    // cuenta en la misma pestaña puede mezclar su bolsillo/shared fresco con datos del
+    // usuario anterior hasta que llegue el primer snapshot nuevo.
+    _syncShared = null;
+    _syncBolsillo = null;
     currentPlanId = null;
     isOwner = false;
     planMeta = null;
