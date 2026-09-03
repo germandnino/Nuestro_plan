@@ -1160,6 +1160,11 @@ function patrimonioResumen(){
   };
 }
 function tipoLabel(t){return t==='imprevistos'?'Imprevistos':t==='invertir'?'Inversión':t==='sueno'?'Sueño':'Personal';}
+// Nombre de un propósito (bucket) tal como lo nombra la vista Metas: la barra de
+// distribución del ahorro y la barra de patrimonio. Fuente única, para que el
+// formulario de meta no invente un nombre distinto del que el usuario ya vio.
+const BUCKET_LBL={ imprevistos:'Colchón', sueno:'Sueños', invertir:'Inversión' };
+function bucketLabel(t){ return BUCKET_LBL[t] || tipoLabel(t); }
 
 /* ---------- motor de cálculo (preserva la esencia) ---------- */
 /* Colchón de emergencia sugerido: ~6 meses del ahorro mensual estimado, como punto de
@@ -2095,7 +2100,7 @@ function drawBucketBar(dueno){
   const todos = bucketsConMetas(dueno);            // todos los propósitos que el usuario tiene (incl. llenos)
   if(todos.length <= 1) return '';                 // con 0-1 propósitos no hay nada que repartir a nivel 1
   const editables = bucketsPresentes(dueno);       // solo los que tienen cupo (no llenos) → reciben %
-  const meta = { imprevistos:{ic:'shield', lbl:'Colchón'}, sueno:{ic:'target', lbl:'Sueños'}, invertir:{ic:'trending', lbl:'Inversión'} };
+  const meta = { imprevistos:{ic:'shield', lbl:bucketLabel('imprevistos')}, sueno:{ic:'target', lbl:bucketLabel('sueno')}, invertir:{ic:'trending', lbl:bucketLabel('invertir')} };
   const cfg = bucketsCfg(dueno);
   const titulo = dueno ? 'Distribución del ahorro individual' : 'Distribución del ahorro compartido';
   // Editable: lo compartido solo por el Editor; lo individual por el dueño del perfil.
@@ -2201,9 +2206,8 @@ function drawSavingsDonut() {
   // no crece por más metas que se agreguen. Los colores son los mismos de la barra
   // de propósitos en Metas y van pegados al propósito, nunca a la posición.
   const COL = { imprevistos:'#3f8a8a', sueno:'#d9a84a', invertir:'#5aa67e' };
-  const LBL = { imprevistos:'Colchón', sueno:'Sueños', invertir:'Inversión' };
   const grupos = BUCKETS.map(t => ({
-    id: t, nombre: LBL[t], color: COL[t],
+    id: t, nombre: bucketLabel(t), color: COL[t],
     monto: visibles.filter(m => m.tipo === t).reduce((s, m) => s + m.saldo, 0)
   })).filter(g => g.monto > 0.5);
   if (sinAsignar > 0.5) {
@@ -3254,14 +3258,30 @@ function updateDeriv(){
   // proyecta con lo que su dueño ahorra, no con lo de la pareja.
   const est = ahorroEstimado(mForm.dueno || null);
   const hayEst = est !== null && est > 0;
-  const pctMes = hayEst ? est*pct/100 : 0;
+  // aportePct es el % DENTRO del bucket, no del ahorro total: el motor reparte en dos
+  // niveles (pesosBuckets entre propósitos, luego aportePct dentro de cada uno). Sin el
+  // peso del bucket la proyección del formulario sale ~3x optimista y contradice el ETA
+  // que la tarjeta de la misma meta calcula con el motor real.
+  //
+  // El bucket del borrador puede no estar en bucketsPresentes() —al crear la primera meta
+  // de un propósito no hay ninguna meta elegible de ese tipo todavía—, así que se incluye
+  // a mano antes de normalizar; si no, el peso saldría 0 y la proyección siempre cero.
+  const cfgB = bucketsCfg(mForm.dueno || null);
+  const presentes = bucketsPresentes(mForm.dueno || null);
+  const conBorrador = presentes.indexOf(mForm.tipo) >= 0 ? presentes : presentes.concat(mForm.tipo);
+  const sumaW = conBorrador.reduce((s,t)=>s+(cfgB[t]||0),0);
+  const pesoBucket = sumaW > 0 ? (cfgB[mForm.tipo]||0)/sumaW*100 : 100/conBorrador.length;
+  const pctMes = hayEst ? est * pesoBucket/100 * pct/100 : 0;
 
   const aporteMes = pctMes;
   // Sin estimación se nombra el reparto sin inventar un monto. Prometer "$0" es peor
   // que no prometer nada: se lee como "tu meta no va a ningún lado".
+  // El % se nombra contra su propósito ("60% de Sueños"), no contra el ahorro total:
+  // decir "del ahorro" reforzaba justo el modelo mental que producía el 3x.
+  const bktLbl = bucketLabel(mForm.tipo);
   const apTxt=()=> pct<=0 ? ''
-                 : hayEst ? '~'+fmt(pctMes)+'/mes ('+pct+'% del ahorro)'
-                          : pct+'% del ahorro';
+                 : hayEst ? '~'+fmt(pctMes)+'/mes ('+pct+'% de '+bktLbl+')'
+                          : pct+'% de '+bktLbl;
 
   let txt='';
 
