@@ -2660,7 +2660,13 @@ function drawSavingsHistoryCard() {
   }));
 
   const maxVal = Math.max(...historyData.map(d => d.ahorro), 500000);
-  const avgVal = historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length;
+  // El promedio de referencia es el mismo que cita la tarjeta del mes (ahorroEstimado:
+  // SMA de 6 meses cerrados). Antes se promediaban las barras dibujadas, que incluyen el
+  // mes en curso a medias, y daba una cifra distinta a la del titular: dos "promedios"
+  // en la misma pantalla. El respaldo es la media de las barras, por si no hay ningún
+  // mes cerrado todavía.
+  const avgVal = ahorroEstimado(null)
+    ?? (historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length);
   const N = historyData.length;
   
   const graphWidth = 250;
