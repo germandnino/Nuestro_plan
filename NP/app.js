@@ -4625,7 +4625,6 @@ function drawTransactionTimeline(transactions, canEdit) {
   
   return `
     <div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px 14px;">
-      <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px; border-bottom:1px solid rgba(246,241,230,0.05); padding-bottom:6px;">Movimientos del mes</div>
       <div style="display:flex; flex-direction:column; max-height:300px; overflow-y:auto; padding-right:4px;">
         ${itemsHtml}
       </div>
@@ -4711,8 +4710,7 @@ function renderMiMes(){
 
   $('r2').innerHTML=`
     <header>
-      <div class="ey">Movimientos del mes</div>
-      <div style="display:flex; align-items:center; gap:12px; margin-top:2px;">
+      <div style="display:flex; align-items:center; gap:12px;">
         <button id="btnPrevMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">‹</button>
         <h1 id="mMesDisplay" style="font-size:26px; margin:0; cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--cream);"></h1>
         <button id="btnNextMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">›</button>
