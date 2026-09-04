@@ -5973,6 +5973,8 @@ function renderPlan(){
   const detRespaldoOpen = $('detRespaldo') ? $('detRespaldo').hasAttribute('open') : false;
   const detInstalarOpen = $('detInstalar') ? $('detInstalar').hasAttribute('open') : false;
   const detInvitacionOpen = $('detInvitacion') ? $('detInvitacion').hasAttribute('open') : false;
+  const detCodigoOpen = $('detCodigo') ? $('detCodigo').hasAttribute('open') : false;
+  const chev = getSVG('chevronDown', 'set-c', '');
 
   const isCapacitor = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform();
   let perfilHtml = '';
@@ -5994,7 +5996,7 @@ function renderPlan(){
   let installHtml = '';
   if (!isCapacitor) {
     installHtml = `
-<details id="detInstalar" ${detInstalarOpen ? 'open' : ''}><summary><span class="sm-t">Instalar en el teléfono<em>Añádela a tu pantalla de inicio</em></span></summary><div class="dpad">
+<details id="detInstalar" class="set-det" ${detInstalarOpen ? 'open' : ''}><summary class="set-row"><span class="n">Instalar en el teléfono</span>${chev}</summary><div class="dpad">
   <div class="hint" style="margin-top:0">Instala "Nuestro plan" en tu pantalla de inicio para usarla como una aplicación, más rápido y sin conexión a internet.</div>
   <button class="btn" id="bInstallPWA" style="display:${deferredPrompt?'block':'none'};margin-top:12px">Instalar Aplicación</button>
   <div id="pwaIosHint" style="display:${isIOS()?'block':'none'};margin-top:10px;background:rgba(28,58,44,.04);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--ink)">
@@ -6058,17 +6060,8 @@ function renderPlan(){
             <div style="background:rgba(217,168,74,0.06);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;">
               <div class="k" style="margin-bottom:4px;color:var(--green);">Pareja Conectada</div>
               <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${planMeta.partnerEmail}</div>
-              <div style="margin-top:10px;">
-                <label class="lbl" style="font-size:11px;margin-bottom:6px;">Permisos de tu pareja:</label>
-                <div class="seg" style="margin-top:0;">
-                  <button id="btnRoleEditor" class="${planMeta.partnerRole !== 'viewer' ? 'on' : ''}">Editor</button>
-                  <button id="btnRoleViewer" class="${planMeta.partnerRole === 'viewer' ? 'on' : ''}">Lector</button>
-                </div>
-                <div class="hint" style="margin-top:6px;font-size:11px;">
-                  ${planMeta.partnerRole === 'viewer'
-                    ? '<b>Lector</b>: Tu pareja puede ver el plan pero no puede realizar aportes ni editar metas.'
-                    : '<b>Editor</b>: Ambos pueden realizar aportes, editar metas y modificar el presupuesto.'}
-                </div>
+              <div class="hint" style="margin-top:8px;font-size:11px;">
+                Los permisos de tu pareja se cambian en <b>Quién edita qué</b>, en la lista de Ajustes.
               </div>
             </div>
           `;
@@ -6087,13 +6080,6 @@ function renderPlan(){
           <div style="background:rgba(28,58,44,0.03);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;">
             <div class="k" style="margin-bottom:4px;color:var(--gs);">Conectado al Plan de</div>
             <div style="font-size:13.5px;font-weight:600;color:var(--ink);">${ownerEmail}</div>
-            <div style="margin-top:10px;">
-              <label class="lbl" style="font-size:11px;margin-bottom:6px;">Tu rol en el plan:</label>
-              <div class="seg" style="margin-top:0;opacity:0.85;pointer-events:none;">
-                <button class="${!isViewer ? 'on' : ''}">Editor</button>
-                <button class="${isViewer ? 'on' : ''}">Lector</button>
-              </div>
-            </div>
             <div class="hint" style="margin-top:8px;font-size:11px;line-height:1.4;">
               ${isViewer
                 ? `<span style="display:flex;align-items:flex-start;gap:5px;">${getSVG('alert', '', 'flex-shrink:0;stroke:#e06c75;margin-top:1px;width:13px;height:13px;')} <span><b>Modo lectura activado</b>. Solo puedes visualizar la información de las metas compartidas, los gastos y el presupuesto.</span></span>`
@@ -6114,14 +6100,7 @@ function renderPlan(){
       ` : ''}
       ${partnerInfoHtml}
       ${isOwner && !isIndiv ? `
-      <div class="hint" style="margin-top:0">Comparte este código o enlace con tu pareja para sincronizar en tiempo real:</div>
-      <div style="background:rgba(28,58,44,.04);border:1px dashed var(--line);border-radius:10px;padding:12px;text-align:center;font-family:monospace;font-size:14.5px;color:var(--green);margin-top:8px;word-break:break-all;user-select:all;" id="valPlanId">
-        ${currentPlanId || 'Cargando código...'}
-      </div>
-      <div style="display:flex;gap:10px;margin-top:12px;">
-        <button class="mini" id="bCopyCode" style="flex:1;margin:0;">Copiar Código</button>
-        <button class="mini" id="bCopyLink" style="flex:1;margin:0;">Copiar Enlace</button>
-      </div>
+      <div class="hint" style="margin-top:0">El código para invitar a tu pareja está en <b>Código de invitación</b>, en la lista de Ajustes.</div>
       ` : ''}
       ${!isIndiv ? `
       <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px;">
@@ -6130,23 +6109,15 @@ function renderPlan(){
       ` : ''}
     `;
     logoutHtml = `
-      <div style="margin-top:20px;margin-bottom:20px;">
-        <button class="btn ghost" id="bLogout" style="width:100%;border-color:rgba(235,94,85,.3);color:#eb5e55;margin:0;">Cerrar sesión</button>
-      </div>
+      <button class="set-row" id="bLogout"><span class="n">Cerrar sesión</span>${chev}</button>
     `;
     respaldoHtml = `
-      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary><span class="sm-t">Respaldo y datos<em>Exporta o restaura tu plan</em></span></summary><div class="dpad">
+      <details id="detRespaldo" class="set-det" ${detRespaldoOpen ? 'open' : ''}><summary class="set-row"><span class="n">Respaldo y datos</span>${chev}</summary><div class="dpad">
         <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;display:flex;align-items:flex-start;gap:6px;">
           ${getSVG('cloud', '', 'flex-shrink:0;opacity:0.7;margin-top:1px;')}
           <span><b>Sincronización activa:</b> Tus datos se guardan de forma automática en tu cuenta en la nube. No necesitas respaldos manuales.</span>
         </div>
-        <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(155,103,28,.4);color:#9b671c;margin-bottom:12px;" ${dis}>Reiniciar saldos a $0</button>
-        <button class="btn danger" id="bReset" ${dis}>Borrar plan y todos los datos</button>
-        <div class="hint" style="margin-top:6px;font-size:11px;color:#b3261e;display:flex;align-items:flex-start;gap:5px;">
-          ${getSVG('alert', '', 'flex-shrink:0;stroke:#b3261e;width:12px;height:12px;margin-top:1px;')}
-          <span>Esta acción restablecerá tu app local y borrará de la nube el plan compartido y tus datos individuales. Los datos individuales de tu pareja siguen siendo suyos y no se tocan.</span>
-        </div>
-        <button class="btn ghost" id="bOnb" style="margin-top:12px" ${dis}>Ver el tutorial otra vez</button>
+        <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(155,103,28,.4);color:#9b671c;margin:0;" ${dis}>Reiniciar saldos a $0</button>
       </div></details>
     `;
   } else {
@@ -6187,35 +6158,116 @@ function renderPlan(){
       ` : ''}
     `;
     respaldoHtml = `
-      <details id="detRespaldo" ${detRespaldoOpen ? 'open' : ''}><summary><span class="sm-t">Respaldo y datos<em>Exporta o restaura tu plan</em></span></summary><div class="dpad">
+      <details id="detRespaldo" class="set-det" ${detRespaldoOpen ? 'open' : ''}><summary class="set-row"><span class="n">Respaldo y datos</span>${chev}</summary><div class="dpad">
         <div class="hint" style="margin-top:0;margin-bottom:12px;line-height:1.45;display:flex;align-items:flex-start;gap:6px;">
           ${getSVG('phone', '', 'flex-shrink:0;opacity:0.7;margin-top:1px;')}
           <span><b>Modo Local activo:</b> Tus datos solo se guardan en este teléfono. Genera un respaldo manual para transferir tus datos o no perderlos si cambias de dispositivo.</span>
         </div>
         <button class="mini" id="bExp">Generar respaldo</button><button class="mini" id="bImp" ${dis}>Restaurar</button>
         <textarea class="bktx" id="bTxt" placeholder="Aquí aparece el respaldo. Para restaurar, pega y toca Restaurar."></textarea>
-        <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(155,103,28,.4);color:#9b671c;margin-bottom:12px;" ${dis}>Reiniciar saldos a $0</button>
-        <button class="btn danger" id="bReset" ${dis}>Borrar plan y todos los datos</button>
-        <button class="btn ghost" id="bOnb" style="margin-top:10px" ${dis}>Ver el tutorial otra vez</button>
+        <button class="btn ghost" id="bResetSaldos" style="border-color:rgba(155,103,28,.4);color:#9b671c;margin:0;" ${dis}>Reiniciar saldos a $0</button>
       </div></details>
     `;
   }
  
   const nombresHtml = isIndiv
-    ? `<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary><span class="sm-t">Mi nombre<em>Cómo te llamas en la app</em></span></summary><div class="dpad">
+    ? `<details id="detNombres" class="set-det" ${detNombresOpen ? 'open' : ''}><summary class="set-row"><span class="n">Mi nombre</span><span class="v">${c.nombreP1}</span>${chev}</summary><div class="dpad">
         <label class="lbl">Mi nombre<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label>
        </div></details>`
-    : `<details id="detNombres" ${detNombresOpen ? 'open' : ''}><summary><span class="sm-t">Nombres de la pareja<em>Cómo se llaman en la app</em></span></summary><div class="dpad">
+    : `<details id="detNombres" class="set-det" ${detNombresOpen ? 'open' : ''}><summary class="set-row"><span class="n">Nombres</span><span class="v">${c.nombreP1} y ${c.nombreP2}</span>${chev}</summary><div class="dpad">
         <div class="row2"><label class="lbl">Persona 1<input class="sf" id="pNom1" value="${c.nombreP1.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label>
           <label class="lbl">Persona 2<input class="sf" id="pNom2" value="${c.nombreP2.replace(/"/g,'&quot;')}" style="margin-top:4px" ${dis}></label></div>
        </div></details>`;
 
   const perfilDetailHtml = isIndiv
     ? ''
-    : `<details id="detPerfil" ${detPerfilOpen ? 'open' : ''}><summary><span class="sm-t">Perfil de este teléfono<em>Quién eres aquí y cómo se reparte el ahorro</em></span></summary><div class="dpad">
+    : `<details id="detPerfil" class="set-det" ${detPerfilOpen ? 'open' : ''}><summary class="set-row"><span class="n">Perfil de este teléfono</span><span class="v">Soy ${perfilNombre(c.perfil)}</span>${chev}</summary><div class="dpad">
         <div class="hint" style="margin-top:0">Cada uno instala la app en su teléfono. Cada quien ve sus metas individuales privadas.</div>
         ${perfilHtml}
        </div></details>`;
+
+  /* Código de invitación: mismas condiciones que tenía dentro de syncHtml
+     (con cuenta, dueño del plan y en pareja). Fuera de esas, no existe. */
+  const codigoHtml = (currentUser && isOwner && !isIndiv)
+    ? `<details id="detCodigo" class="set-det" ${detCodigoOpen ? 'open' : ''}><summary class="set-row"><span class="n">Código de invitación</span><span class="v">${currentPlanId || '—'}</span>${chev}</summary><div class="dpad">
+        <div class="hint" style="margin-top:0">Comparte este código o enlace con tu pareja para sincronizar en tiempo real:</div>
+        <div style="background:rgba(28,58,44,.04);border:1px dashed var(--line);border-radius:10px;padding:12px;text-align:center;font-family:monospace;font-size:14.5px;color:var(--green);margin-top:8px;word-break:break-all;user-select:all;" id="valPlanId">
+          ${currentPlanId || 'Cargando código...'}
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="mini" id="bCopyCode" style="flex:1;margin:0;">Copiar Código</button>
+          <button class="mini" id="bCopyLink" style="flex:1;margin:0;">Copiar Enlace</button>
+        </div>
+       </div></details>`
+    : '';
+
+  /* Tarjeta de identidad. El estado sale de las mismas variables que ya
+     decidían qué pintaba syncHtml: currentUser, isOwner y planMeta. */
+  const ini = (n) => ((n || '').trim().charAt(0) || '?').toUpperCase();
+  let duoEstado, duoOk = false;
+  if (isIndiv) {
+    duoEstado = currentUser ? 'Copia de seguridad activa' : 'Copia de seguridad sin activar';
+    duoOk = !!currentUser;
+  } else if (!currentUser) {
+    duoEstado = 'Modo local, sin cuenta';
+  } else if (isOwner) {
+    if (planMeta && planMeta.partnerEmail) { duoEstado = 'Sincronizado con ' + c.nombreP2; duoOk = true; }
+    else { duoEstado = 'Esperando a tu pareja'; }
+  } else {
+    duoEstado = 'Conectado al plan de ' + ((planMeta && planMeta.ownerEmail) || 'tu pareja');
+    duoOk = true;
+  }
+  const duoHtml = `
+<details id="detInvitacion" class="set-duo-det" ${detInvitacionOpen ? 'open' : ''}>
+  <summary class="set-duo">
+    <span class="set-avs">
+      <span class="set-av" style="background:#c87a53">${ini(c.nombreP1)}</span>
+      ${isIndiv ? '' : `<span class="set-av" style="background:#a36a84">${ini(c.nombreP2)}</span>`}
+    </span>
+    <span class="set-duo-b">
+      <span class="n">${isIndiv ? c.nombreP1 : c.nombreP1 + ' y ' + c.nombreP2}</span>
+      <span class="s">${duoOk ? '<span class="dot"></span>' : ''}${duoEstado}</span>
+    </span>
+    ${chev}
+  </summary>
+  <div class="dpad">${syncHtml}</div>
+</details>`;
+
+  /* Quién edita qué. Solo con cuenta y en pareja: sin cuenta no hay roles
+     que mostrar (hoy tampoco los había). */
+  let rolesHtml = '';
+  if (currentUser && !isIndiv) {
+    const yo = perfilNombre(c.perfil);
+    const otro = c.perfil === 'p2' ? c.nombreP1 : c.nombreP2;
+    const isViewer = planMeta && planMeta.partnerRole === 'viewer';
+    let filaYo = '', filaOtro = '', pista = '';
+    if (isOwner) {
+      filaYo = `<div class="set-row static"><span class="n">Tú, ${yo}</span><span class="v">Dueño del plan</span></div>`;
+      if (planMeta && planMeta.partnerEmail) {
+        filaOtro = `<div class="set-row static"><span class="n">${otro}</span>
+          <span class="set-seg">
+            <button id="btnRoleEditor" class="${!isViewer ? 'on' : ''}">Editor</button>
+            <button id="btnRoleViewer" class="${isViewer ? 'on' : ''}">Lector</button>
+          </span></div>`;
+        pista = isViewer
+          ? 'Un Lector ve todo lo conjunto pero solo edita sus propias metas individuales.'
+          : 'Un Editor puede registrar movimientos, crear metas y cambiar la estrategia del plan.';
+      } else {
+        filaOtro = `<div class="set-row static"><span class="n">${otro}</span><span class="v">Sin conectar</span></div>`;
+        pista = 'Comparte el código de invitación para que tu pareja entre al plan y puedas elegir qué edita.';
+      }
+    } else {
+      filaYo = `<div class="set-row static"><span class="n">Tú, ${yo}</span><span class="v">${isViewer ? 'Lector' : 'Editor'}</span></div>`;
+      filaOtro = `<div class="set-row static"><span class="n">${otro}</span><span class="v">Dueño del plan</span></div>`;
+      pista = isViewer
+        ? 'Como Lector ves todo lo conjunto pero solo editas tus propias metas individuales. Tu pareja cambia esto desde su teléfono.'
+        : 'Como Editor puedes registrar movimientos, crear metas y cambiar la estrategia del plan.';
+    }
+    rolesHtml = `
+<div class="set-stitle">Quién edita qué</div>
+<div class="set-grp">${filaYo}${filaOtro}</div>
+<div class="set-hint">${pista}</div>`;
+  }
 
   $('r4').innerHTML=`
 <header style="display:flex;align-items:flex-start;gap:10px;">
@@ -6223,19 +6275,29 @@ function renderPlan(){
   <div><div class="ey">Configuración</div><h1>Ajustes</h1></div>
 </header>
 
-${perfilDetailHtml}
- 
-<details id="detInvitacion" ${detInvitacionOpen ? 'open' : ''}><summary><span class="sm-t">${isIndiv ? 'Copia de seguridad' : 'Sincronizar y Conectar Pareja'}<em>${isIndiv ? 'Guarda tu plan en la nube' : 'Vinculen sus teléfonos y elijan quién edita'}</em></span></summary><div class="dpad">
-  ${syncHtml}
-</div></details>
- 
-${nombresHtml}
- 
-${installHtml}
- 
-${respaldoHtml}
-${logoutHtml}
-<div style="text-align:center; margin:22px 0 8px; font-size:11.5px; color:rgba(246,241,230,.4); letter-spacing:.02em;">Nuestro Plan · v${APP_VERSION}</div>`;
+${duoHtml}
+
+${rolesHtml}
+
+<div class="set-stitle">Plan</div>
+<div class="set-grp">
+  ${nombresHtml}
+  <div class="set-row static"><span class="n">Modo</span><span class="v">${isIndiv ? 'Individual' : 'En pareja'}</span></div>
+  ${perfilDetailHtml}
+  ${codigoHtml}
+</div>
+
+<div class="set-stitle">Aplicación</div>
+<div class="set-grp">
+  ${installHtml}
+  <button class="set-row" id="bOnb" ${dis}><span class="n">Ver el tutorial otra vez</span>${chev}</button>
+  ${logoutHtml}
+  ${respaldoHtml}
+  <button class="set-row danger" id="bReset" ${dis}><span class="n">Borrar plan y datos</span>${chev}</button>
+</div>
+<div class="set-hint">Borrar el plan restablece la app en este teléfono y borra de la nube el plan compartido y tus datos individuales. Los datos individuales de tu pareja siguen siendo suyos y no se tocan.</div>
+
+<div class="set-ver">Nuestro Plan · v${APP_VERSION}</div>`;
   attachPlan();
 }
 function attachPlan(){
