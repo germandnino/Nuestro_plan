@@ -1894,16 +1894,6 @@ function renderInicio(){
   const c=state.config;
   const perfil=c.perfil;
   const esPareja = c.modo !== 'individual';
-  // Único cálculo del total del plan (compartido con Mi Mes).
-  const pat = patrimonioResumen();
-  const ahorrosCompartidos = pat.totalPareja;
-  const misIndividuales = pat.totalIndividual;
-  // En pareja el número grande es solo lo compartido, para que sea idéntico en ambos
-  // teléfonos. Pero si no hay NADA compartido no hay nada que mantener sincronizado, y
-  // encabezar con $0 esconde el saldo real: ahí el titular pasa a ser el propio.
-  const soloLoMio = esPareja && pat.totalPareja <= 0.5 && pat.totalIndividual > 0.5;
-  const patrimonioNeto = soloLoMio ? pat.totalIndividual : pat.total;
-  const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   // Ajustes salio del nav para dejarle el slot a Mi Mes: entra aqui como engranaje.
   const gearHtml = `<button id="btnGoAjustes" aria-label="Ajustes" style="background:none;border:none;cursor:pointer;color:rgba(246,241,230,.55);padding:8px;margin:-8px -8px 0 0;display:inline-flex;align-items:center;">${getSVG('sliders', '', 'width:22px;height:22px;')}</button>`;
@@ -1911,40 +1901,9 @@ function renderInicio(){
     ? `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="ey">${esc(c.nombreP1)}</div><h1>Mi plan</h1></div>${gearHtml}</header>`
     : `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="ey">${esc(c.nombreP1)} &amp; ${esc(c.nombreP2)}</div><h1>Nuestro plan</h1></div>${gearHtml}</header>`;
 
-  // 1. Patrimonio Neto Card
   // ¿Hay metas de ahorro creadas?
   const hayMetasAhorro = metasCompartidas().length > 0
     || metasIndividuales(perfil).length > 0;
-  const desgloseHtml = soloLoMio
-    ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Mis metas individuales: <b>${fmt(misIndividuales)}</b></span>
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Aún no tienen metas en común. Esto es tuyo y solo tú lo ves.</div>`
-    : esPareja
-    ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Individual: <b>${fmt(misIndividuales)}</b></span>
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tus ahorros individuales son privados y no entran en el total de la pareja.</div>`
-    : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + misIndividuales)}</b></span>
-      </div>`;
-  const patHtml = hayMetasAhorro
-    ? `
-    <div class="card dark">
-      <div class="k">${(esPareja && !soloLoMio) ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
-      <div class="num big" style="color:var(--cream);">${fmt(patrimonioNeto)}</div>
-      ${desgloseHtml}
-    </div>
-  `
-    : `
-    <div class="card dark" style="text-align:center; padding:22px 18px;">
-      <div style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:12px;background:rgba(217,168,74,.12);margin:0 auto 12px;">${getSVG('target', '', 'width:24px;height:24px;color:var(--gb);')}</div>
-      <div class="k" style="margin-bottom:4px;">${esPareja ? 'Su plan está listo para empezar' : 'Tu plan está listo para empezar'}</div>
-      <div style="font-size:12.5px; color:rgba(246,241,230,.7); line-height:1.45; max-width:300px; margin:0 auto 14px;">Crea ${esPareja ? 'su' : 'tu'} primera meta y empieza a separar el ahorro. Aquí ${esPareja ? 'verán' : 'verás'} crecer ${esPareja ? 'sus' : 'tus'} ahorros e inversiones.</div>
-      <button class="btn gold" id="btnCrearPrimeraMeta" style="margin:0; width:100%; max-width:280px; display:inline-flex; align-items:center; justify-content:center; gap:6px;">${getSVG('plus')} Crear ${esPareja ? 'nuestra' : 'mi'} primera meta</button>
-    </div>
-  `;
 
   // 2. Panel de Accesos Rápidos
   const shortcutsHtml = `
@@ -2074,19 +2033,25 @@ function renderInicio(){
     </div>
   `;
 
-  // Sin metas todavia, el tablero no tiene nada que mostrar: se conserva el
-  // arranque guiado con su CTA en vez de tarjetas vacias.
+  // Orden nuevo (docs/superpowers/design/Main.dc.html): el mes en curso encabeza, luego a
+  // dónde fue esa plata, luego el acumulado como línea secundaria. La dona, el histórico y
+  // el consejo bajan — siguen ahí, pero ya no compiten con la acción del mes.
+  // Sin metas todavía el tablero no tiene nada que mostrar: se conserva el arranque
+  // guiado con su CTA.
   const tableroHtml = hayMetasAhorro
-    ? `${drawSavingsDonut()}
+    ? `${drawHeroMes()}
+       ${drawSinAsignarCard()}
+       ${drawDestinoMes()}
+       ${drawAcumuladoRow()}
+       <div class="stitle">Cómo van sus metas</div>
+       ${drawSavingsDonut()}
        <div style="height:12px;"></div>
        ${drawStatsBI()}
        ${drawSavingsHistoryCard()}`
-    : shortcutsHtml;
+    : `${drawSinAsignarCard()}${shortcutsHtml}`;
 
   $('r0').innerHTML=`
     ${headerHtml}
-    ${patHtml}
-    ${drawSinAsignarCard()}
     ${tableroHtml}
     ${tipHtml}
     <div style="height:72px;"></div>
@@ -2094,6 +2059,9 @@ function renderInicio(){
 
   // Asignar clics
   $('btnGoAjustes').onclick = () => go(4);
+  if ($('btnHeroAdd')) $('btnHeroAdd').onclick = () => openAsistenteIngresoExtra();
+  if ($('btnHeroMes')) $('btnHeroMes').onclick = () => go(2);
+  if ($('btnAcumulado')) $('btnAcumulado').onclick = () => go(1);
   if ($('btnGoMiMes')) $('btnGoMiMes').onclick = () => go(2);
   if ($('btnGoAddMeta')) $('btnGoAddMeta').onclick = () => openMetaForm(null);
   if ($('btnGoAddExtra')) $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
