@@ -2613,7 +2613,9 @@ function drawDestinoMes(){
   const data = getMonthlyDistributionData(curMonth());
   if (data.length === 0) return '';
 
-  const mayor = data.reduce((mx,x) => Math.max(mx, x.amount), 0) || 1;
+  // El ancho va por valor absoluto: con retiros una meta puede quedar en negativo y una
+  // barra de ancho negativo no se pinta.
+  const mayor = data.reduce((mx,x) => Math.max(mx, Math.abs(x.amount)), 0) || 1;
   // En individual no hay de quién esconder nada: todas las metas son del único perfil,
   // así que la aclaración sobre el color privado no viene al caso.
   const hayPrivadas = state.config.modo !== 'individual' && data.some(x => x.dueno);
@@ -2623,9 +2625,9 @@ function drawDestinoMes(){
       <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${x.color};flex-shrink:0;"></span>
       <div style="flex:1;font-size:13px;color:rgba(246,241,230,.9);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)}</div>
       <div style="width:74px;height:7px;border-radius:4px;background:rgba(246,241,230,.12);overflow:hidden;flex-shrink:0;">
-        <i style="display:block;height:100%;width:${((x.amount/mayor)*100).toFixed(1)}%;border-radius:4px;background:${x.color};"></i>
+        <i style="display:block;height:100%;width:${((Math.abs(x.amount)/mayor)*100).toFixed(1)}%;border-radius:4px;background:${x.amount < 0 ? '#e06c75' : x.color};"></i>
       </div>
-      <div class="num" style="font-size:13.5px;width:66px;text-align:right;flex-shrink:0;color:var(--cream);">${fmtK(x.amount)}</div>
+      <div class="num" style="font-size:13.5px;width:66px;text-align:right;flex-shrink:0;color:${x.amount < 0 ? '#e06c75' : 'var(--cream)'};">${fmtK(x.amount)}</div>
     </div>`).join('');
 
   const pie = hayPrivadas
@@ -4423,13 +4425,22 @@ function colorDeMeta(m){
   return COL_TIPO[m.tipo] || COL_TIPO.sueno;
 }
 
-function getMonthlyDistributionData(mes) {
+// Movimiento del mes por meta. Por defecto NETO: resta de cada meta lo que salió de ella.
+// Sin eso el desglose no explicaba el neto que encabeza la pantalla — retirar de UNA meta
+// dejaba el reparto intacto (50/50) sumando más que el neto, y la meta de la que se retiró
+// ni siquiera aparecía.
+//
+// `{neto:false}` devuelve solo lo que entró. Lo pide el simulador a propósito: ahí la
+// pregunta es "cuánto le estás poniendo al mes" como base de proyección, y un retiro
+// puntual no baja tu ritmo de aporte.
+function getMonthlyDistributionData(mes, opts) {
+  const neto = !(opts && opts.neto === false);
   const c = state.config;
   const distMap = {}; // key: metaId, value: { id, name, amount, tipo, dueno, color }
 
   // Privacidad: nunca acumular metas individuales del otro perfil.
-  const add = (mId, amt) => {
-    if (!(amt > 0)) return;
+  const tocar = (mId, amt) => {
+    if (!amt) return;
     const m = metaById(mId);
     if (!m) return;
     if (m.dueno && m.dueno !== c.perfil) return;
@@ -4439,6 +4450,7 @@ function getMonthlyDistributionData(mes) {
     };
     distMap[mId].amount += amt;
   };
+  const add = (mId, amt) => { if (amt > 0) tocar(mId, amt); };
 
   // Privacidad: se ocultan además los movimientos privados del otro perfil.
   const monthlyIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes));
@@ -4471,7 +4483,20 @@ function getMonthlyDistributionData(mes) {
     }
   });
 
-  return Object.values(distMap).filter(x => x.amount > 0.5)
+  if (neto) {
+    // Se mueve exactamente lo que flujoDelMes cuenta, para que las dos cifras cuadren:
+    // las salidas restan de su meta y las patas entrantes huérfanas suman a la suya
+    // (entrantesHuerfanasUI ya las cuenta dentro de "entró").
+    state.gastos.forEach(g => {
+      if ((g.fecha || '').substring(0, 7) !== mes) return;
+      if (huerfanaVisible(g)) { tocar(g.meta, g.monto); return; }
+      if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return;
+      if (gastoDeMetaAjena(g, c.perfil)) return;
+      tocar(g.meta, -g.monto);
+    });
+  }
+
+  return Object.values(distMap).filter(x => Math.abs(x.amount) > 0.5)
     .sort((a,b) => b.amount - a.amount);
 }
 
@@ -4519,15 +4544,19 @@ function drawMonthlyDistributionBars(mes) {
     `;
   }
 
-  // Barras horizontales doradas: ancho proporcional al % del mes.
+  // Barras horizontales: ancho por valor absoluto contra el mayor movimiento del mes. Con
+  // retiros una meta puede quedar en negativo, y un ancho como % del total se dispararía
+  // (el total es el NETO, que puede ser mucho menor que el movimiento de una sola meta).
+  const mayorAbs = data.reduce((mx, x) => Math.max(mx, Math.abs(x.amount)), 0) || 1;
   const rows = data.slice().sort((a, b) => b.amount - a.amount).map(slice => {
-    const pct = slice.amount / total * 100;
-    const fill = 'linear-gradient(90deg, var(--gb), #e6c25a)';
+    const pct = (Math.abs(slice.amount) / mayorAbs) * 100;
+    const neg = slice.amount < 0;
+    const fill = neg ? '#e06c75' : 'linear-gradient(90deg, var(--gb), #e6c25a)';
     return `
       <div style="margin-bottom:13px;">
         <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:5px;">
           <span style="font-size:13px; font-weight:600; color:var(--cream); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${slice.name}</span>
-          <span class="num" style="font-size:12.5px; font-weight:700; color:var(--cream); flex-shrink:0; white-space:nowrap;">${fmtK(slice.amount)} <span style="color:rgba(246,241,230,.55); font-weight:600; font-size:11px; margin-left:2px;">${pct.toFixed(0)}%</span></span>
+          <span class="num" style="font-size:12.5px; font-weight:700; color:${neg ? '#e06c75' : 'var(--cream)'}; flex-shrink:0; white-space:nowrap;">${fmtK(slice.amount)}</span>
         </div>
         <div style="height:10px; background:rgba(246,241,230,0.08); border-radius:6px; overflow:hidden;">
           <div style="height:100%; width:${pct.toFixed(1)}%; background:${fill}; border-radius:6px; transition:width .45s ease;"></div>
@@ -5378,7 +5407,7 @@ function renderSimMetas(body){
   // el simulador en cero obliga a teclear a mano algo que la app ya sabe. Si tampoco hay
   // nada este mes, entonces sí arranca en cero.
   const aporteEst = aporteMensualEstimado(m);
-  const delMesActual = (getMonthlyDistributionData(curMonth()).find(x => x.id === m.id) || {}).amount || 0;
+  const delMesActual = (getMonthlyDistributionData(curMonth(), {neto:false}).find(x => x.id === m.id) || {}).amount || 0;
   const aporteBase = Math.round(aporteEst === null ? delMesActual : aporteEst);
   const tasaInit = Math.round(tasaSugeridaMeta(m) * 100);
 
