@@ -2908,7 +2908,10 @@ function renderMetas(){
         const meses=calcularTiempoRestante(m);
         if(meses!=null && meses>0) eta = meses<12 ? `~${meses} mes${meses!==1?'es':''}` : `~${Math.floor(meses/12)} año${Math.floor(meses/12)!==1?'s':''}`;
       }
-      const generico = `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      // Sin el porcentaje: desde el rediseño lo dice el número grande de la derecha, y
+      // repetirlo aquí ponía la misma cifra dos veces en la misma tarjeta. El "de" en vez
+      // de la barra sigue al diseño (MetasA2.dc.html): se lee como frase, no como quebrado.
+      const generico = `${fmt(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${eta?` · ${eta}`:''}`;
       let sub;
       const cdtVencido = m.tipo==='invertir' && m.colocado && m.vencimiento && m.vencimiento<=curMonth();
       if(m.tipo==='invertir'){
