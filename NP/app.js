@@ -4464,12 +4464,21 @@ function drawMonthlyDistributionBars(mes) {
     ? ''
     : `<div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">${rows}</div>`;
 
+  // Con el detalle plegado, el resumen por propósito es lo que hace que valga la pena
+  // desplegarlo. Agrupa las metas del mes por su propósito, en el orden de BUCKETS.
+  const porBucket = {};
+  data.forEach(x => { porBucket[x.tipo] = (porBucket[x.tipo] || 0) + x.amount; });
+  const resumenBuckets = BUCKETS
+    .filter(t => (porBucket[t] || 0) > 0.5)
+    .map(t => `${bucketLabel(t)} ${fmtK(porBucket[t])}`)
+    .join(' · ');
+  const resumenHtml = (_barrasMesCollapsed && resumenBuckets)
+    ? `<div style="font-size:12px;color:rgba(246,241,230,.6);margin-top:2px;">${resumenBuckets}</div>`
+    : '';
+
   return `
     <div style="margin-top:2px;">
-      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
-        <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Ahorrado este mes</span>
-        <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
-      </div>
+      ${resumenHtml}
       ${acumuladoRow}
       ${cierre}
     </div>
@@ -4691,7 +4700,7 @@ function renderMiMes(){
   const donutHtml = `
     <div class="card dark" style="padding:16px;">
       <div class="k${hayBarras ? ' mesdist-toggle' : ''}" style="margin:-6px 0 6px; padding:6px 0; min-height:32px; display:flex; align-items:center; justify-content:space-between; gap:10px;${hayBarras ? ' cursor:pointer;' : ''}">
-        <span>Distribución del Ahorro Realizado</span>
+        <span>Cómo se repartió</span>
         ${hayBarras ? `<span style="display:inline-flex; color:var(--cream); transform:rotate(${_barrasMesCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>` : ''}
       </div>
       ${drawMonthlyDistributionBars(mes)}
@@ -4712,8 +4721,9 @@ function renderMiMes(){
     ${drawSinAsignarCard()}
     <div style="display:flex; flex-direction:column; gap:12px;">
       ${metricsHtml}
-      ${donutHtml}
+      <div class="stitle" style="margin:6px 2px 0;">Movimientos${transactions.length ? ` · ${transactions.length}` : ''}</div>
       ${timelineHtml}
+      ${donutHtml}
     </div>
     <div style="margin-bottom:30px"></div>
   `;
