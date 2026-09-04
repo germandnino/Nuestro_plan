@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.57'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.58'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -4811,33 +4811,133 @@ function renderMiMes(){
    APRENDER — Hub de herramientas
    Cada tarjeta abre una pantalla-herramienta (overlay full-screen).
    ========================================================= */
+
+// Datos del plan real que alimentan la pantalla Aprender: la recomendación de arriba y
+// la línea de cada herramienta. Sin esto la pantalla es genérica y no se gana el espacio.
+function contextoAprender(){
+  const perfil = state.config.perfil;
+  const metas = [...metasCompartidas(), ...metasIndividuales(perfil)];
+  const colchon = metas.filter(m => m.tipo === 'imprevistos').reduce((s,m) => s + (m.saldo||0), 0);
+  const hayInversion = metas.some(m => m.tipo === 'invertir');
+  const prom = ahorroEstimado(null);
+  // El sueño más lejano con plazo estimable: es el que más se beneficia de invertir en
+  // vez de solo guardar, porque es donde la inflación tiene más tiempo de morder.
+  let lejano = null;
+  metas.filter(m => m.tipo === 'sueno' && (m.objetivo||0) > 0 && (m.saldo||0) < m.objetivo)
+    .forEach(m => {
+      const meses = calcularTiempoRestante(m);
+      if (meses != null && meses > 0 && (!lejano || meses > lejano.meses)) lejano = { meta: m, meses };
+    });
+  return { metas, colchon, hayInversion, prom, lejano };
+}
+
+// Un dato del plan por herramienta, cuando lo hay. Sin dato no se inventa la línea: una
+// ficha sin fila es mejor que una fila con un cero o un texto de relleno.
+function lineaDelPlan(id, ctx){
+  const esPareja = state.config.modo !== 'individual';
+  if (id === 'simulador' && ctx.metas.length > 0) {
+    return `Ya trae ${esPareja ? 'sus' : 'tus'} ${ctx.metas.length} ${ctx.metas.length === 1 ? 'meta cargada' : 'metas cargadas'}`;
+  }
+  if (id === 'ahorro' && ctx.prom != null && ctx.prom > 0.5) {
+    return `${esPareja ? 'Vienen' : 'Vienes'} ahorrando ${fmtK(ctx.prom)} al mes`;
+  }
+  if (id === 'inflacion' && ctx.colchon > 0.5) {
+    return `${esPareja ? 'Tienen' : 'Tienes'} ${fmtK(ctx.colchon)} en el colchón`;
+  }
+  if (id === 'invertir' && ctx.metas.length > 0) {
+    return `${ctx.metas.length} ${ctx.metas.length === 1 ? 'meta' : 'metas'} por encajar`;
+  }
+  return '';
+}
+
+// "Para tu plan, hoy": una sola recomendación, elegida por el estado real del plan. El
+// orden de las reglas es el orden de urgencia, no de preferencia.
+function recomendacionAprender(ctx){
+  const esPareja = state.config.modo !== 'individual';
+  const anios = ctx.lejano ? Math.floor(ctx.lejano.meses / 12) : 0;
+
+  if (ctx.lejano && ctx.lejano.meses >= 36) {
+    return {
+      tool: 'invertir',
+      k: `${esPareja ? 'Su' : 'Tu'} ${esc(ctx.lejano.meta.nombre)} está a ${anios} años`,
+      n: 'A ese plazo, guardar no basta',
+      d: `Con ${fmtK(ctx.lejano.meta.saldo||0)} ahorrados, la inflación se come parte del camino. Mira qué instrumentos encajan con un plazo así en Colombia.`,
+      cta: 'Ver dónde invertir'
+    };
+  }
+  if (ctx.colchon > 0.5 && !ctx.hayInversion) {
+    return {
+      tool: 'inflacion',
+      k: 'Plata quieta',
+      n: `${esPareja ? 'Tienen' : 'Tienes'} ${fmtK(ctx.colchon)} sin crecer`,
+      d: `El colchón tiene que estar disponible, pero mientras espera pierde valor. Mira cuánto cuesta tenerlo quieto un año.`,
+      cta: 'Ver el costo'
+    };
+  }
+  if (ctx.metas.length === 0 || ctx.prom == null) {
+    return {
+      tool: 'ahorro',
+      k: 'Primer paso',
+      n: `${esPareja ? 'Averigüen' : 'Averigua'} cuánto ${esPareja ? 'les' : 'te'} sobra al mes`,
+      d: `Antes de repartir hace falta saber cuánto hay. Esta herramienta lo calcula con ${esPareja ? 'sus' : 'tus'} ingresos y gastos reales.`,
+      cta: 'Calcular'
+    };
+  }
+  return {
+    tool: 'simulador',
+    k: 'Con lo que ya ahorran',
+    n: `${fmtK(ctx.prom)} al mes, proyectados`,
+    d: `Mira en qué se convierte ${esPareja ? 'su' : 'tu'} ahorro mensual con distintos rendimientos y plazos.`,
+    cta: 'Proyectar'
+  };
+}
+
 const LEARN_TOOLS = [
-  { id:'ahorro',    icon:'dollar',    color:'#0f9b30', title:'¿Cuánto puedo ahorrar?',     hook:'Juega con tus ingresos y gastos y mira cuánto te sobra al mes.' },
-  { id:'simulador', icon:'trending',  color:'#a3741c', title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
-  { id:'quiz',      icon:'lightbulb', color:'#7e4fae', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
-  { id:'inflacion', icon:'alert',     color:'#c0392b', title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
-  { id:'aporte',    icon:'users',     color:'#178a7e', title:'Aporte en pareja',           hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
-  { id:'invertir',  icon:'home',      color:'#2f78c2', title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.', wide:true },
+  { id:'ahorro',    icon:'dollar',    title:'¿Cuánto puedo ahorrar?',     hook:'Juega con tus ingresos y gastos y mira cuánto te sobra al mes.' },
+  { id:'simulador', icon:'trending',  title:'Simulador de inversión',     hook:'Proyecta cómo crecería tu plata invertida en el tiempo.' },
+  { id:'quiz',      icon:'lightbulb', title:'¿Qué inversor eres?',        hook:'Descubre tu perfil de riesgo en 2 minutos.' },
+  { id:'inflacion', icon:'alert',     title:'El costo de no invertir',    hook:'Cuánto pierde tu plata guardada bajo el colchón.' },
+  { id:'aporte',    icon:'users',     title:'Aporte en pareja',           hook:'Tres formas de repartir el gasto compartido, sin veredictos.', pareja:true },
+  { id:'invertir',  icon:'home',      title:'¿Dónde invertir en Colombia?', hook:'Instrumentos reales y cuál encaja con cada una de tus metas.' },
 ];
 
 function renderAprender(){
+  const ctx = contextoAprender();
+  const rec = recomendacionAprender(ctx);
   const visible = LEARN_TOOLS.filter(t => !t.pareja || state.config.modo === 'pareja');
-  const odd = visible.length % 2 === 1; // la ficha "wide" solo se ensancha si hay un slot impar que llenar
-  const cards = visible.map(t => `
-    <button class="learn-tool-btn${t.wide && odd ? ' wide' : ''}" data-tool="${esc(t.id)}" style="--tool-accent:${t.color}">
+
+  const heroHtml = `
+    <div class="stitle">Para tu plan, hoy</div>
+    <button class="learn-hero" data-tool="${esc(rec.tool)}">
+      <span class="lh-k">${rec.k}</span>
+      <span class="lh-n">${rec.n}</span>
+      <span class="lh-d">${rec.d}</span>
+      <span class="lh-cta">${rec.cta} ${getSVG('chevronDown', '', 'width:14px;height:14px;transform:rotate(-90deg);')}</span>
+    </button>`;
+
+  const cards = visible.map(t => {
+    const linea = lineaDelPlan(t.id, ctx);
+    return `
+    <button class="learn-tool-btn" data-tool="${esc(t.id)}">
       <span class="learn-tool-ic">${getSVG(t.icon)}</span>
       <span class="learn-tool-txt">
         <span class="learn-tool-tt">${t.title}</span>
         <span class="learn-tool-hk">${t.hook}</span>
+        ${linea ? `<span class="learn-tool-mine">${getSVG('check', '', 'width:12px;height:12px;')} ${linea}</span>` : ''}
       </span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
+
   $('r3').innerHTML = `
     <header>
       <div class="ey">Educación financiera</div>
       <h1>Aprender</h1>
       <p style="color:rgba(246,241,230,.65);font-size:13.5px;line-height:1.45;margin:6px 0 0;">Herramientas para entender tu plata y decidir mejor, sin tecnicismos.</p>
     </header>
+    ${heroHtml}
+    <div class="stitle">Todas las herramientas</div>
     <div class="learn-hub">${cards}</div>
+    <div style="height:24px;"></div>
   `;
   $('r3').querySelectorAll('[data-tool]').forEach(btn => {
     btn.onclick = () => openLearnTool(btn.dataset.tool);
@@ -4878,7 +4978,7 @@ function renderLearnPlaceholder(body, tool){
   body.innerHTML = `
     <header><div class="ey">Próximamente</div><h1>${tool.title}</h1></header>
     <div class="card" style="text-align:center;padding:28px 16px;">
-      <div class="learn-tool-ic" style="--tool-accent:${tool.color};margin:0 auto 12px;width:48px;height:48px;">${getSVG(tool.icon)}</div>
+      <div class="learn-tool-ic" style="margin:0 auto 12px;width:48px;height:48px;">${getSVG(tool.icon)}</div>
       <div class="muted" style="font-size:13.5px;line-height:1.5;">Estamos construyendo esta herramienta. Vuelve pronto.</div>
     </div>`;
 }
@@ -5839,7 +5939,7 @@ function renderLearnQuiz(body){
         <h1 style="margin:2px 0 0">¿Qué inversor eres?</h1>
       </header>
       <div class="card" style="text-align:center;border-color:${p.color}55;background:${p.color}14;padding:22px 16px">
-        <div class="learn-tool-ic" style="--tool-accent:${p.color};margin:0 auto 10px;width:52px;height:52px">${getSVG('user')}</div>
+        <div class="learn-tool-ic" style="background:${p.color}22;color:${p.color};margin:0 auto 10px;width:52px;height:52px">${getSVG('user')}</div>
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700">Eres un inversor</div>
         <div style="font-size:26px;font-weight:800;color:${p.color};font-family:var(--sans);margin:2px 0 8px">${p.name}</div>
         <div style="font-size:13px;color:rgba(246,241,230,.85);line-height:1.5">${p.desc}</div>
