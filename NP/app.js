@@ -1140,7 +1140,14 @@ function metasIndividuales(p){return state.metas.filter(m=>m.dueno===p&&m.tipo!=
 // Un gasto que toca una meta individual del otro perfil no es visible para este.
 function gastoDeMetaAjena(g, perfil){
   const m=metaById(g.meta);
-  return !!(m && m.dueno && m.dueno!==perfil);
+  // Si la meta ya no existe (sueño consumido, CDT liberado) el dueño quedó estampado en el
+  // propio gasto — consumirSueno y liberarCDT lo hacen justo para esto, y particionarEstado
+  // ya lo leía. Este filtro no, así que fallaba ABIERTO: el retiro de una meta privada
+  // aparecía en el timeline del otro perfil, contaba en su neto del mes y hasta le daba
+  // botón de borrar. Un gasto huérfano SIN duenoMeta es de una meta compartida (el estampado
+  // solo corre cuando m.dueno existe), así que ahí visible es lo correcto.
+  const dueno = m ? m.dueno : (g && g.duenoMeta);
+  return !!(dueno && dueno!==perfil);
 }
 // Una meta con cupo puede recibir plata del motor. objetivo 0 = abierta, nunca se llena.
 function metaConCupo(m){ return !!m && !(m.objetivo>0 && (m.saldo||0)>=m.objetivo); }
