@@ -2544,6 +2544,38 @@ function drawDestinoMes(){
     </div>`;
 }
 
+// El acumulado, ahora secundario. En pareja el número es solo lo compartido, para que
+// sea idéntico en los dos teléfonos; lo individual va debajo como línea propia. Esa
+// regla no cambió con el rediseño, solo bajó de tamaño.
+function drawAcumuladoRow(){
+  const c = state.config;
+  const esPareja = c.modo !== 'individual';
+  const pat = patrimonioResumen();
+  const soloLoMio = esPareja && pat.totalPareja <= 0.5 && pat.totalIndividual > 0.5;
+  const grande = soloLoMio ? pat.totalIndividual
+               : esPareja ? pat.totalPareja
+               : pat.totalPareja + pat.totalIndividual;
+  const indivColor = c.perfil === 'p1' ? '#c87a53' : '#a36a84';
+
+  const etiqueta = soloLoMio ? 'Tuyo, privado'
+                 : esPareja ? 'De los dos'
+                 : 'Tus ahorros e inversiones';
+  const sub = (!soloLoMio && esPareja && pat.totalIndividual > 0.5)
+    ? `<div style="font-size:11.5px;color:rgba(246,241,230,.55);margin-top:3px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${indivColor};margin-right:4px;"></span>Tuyo, privado: ${fmt(pat.totalIndividual)}</div>`
+    : '';
+
+  return `
+    <div class="stitle">Acumulado</div>
+    <button id="btnAcumulado" style="width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(246,241,230,.04);border:1px solid rgba(246,241,230,.08);border-radius:14px;padding:12px 14px;margin-bottom:12px;color:var(--cream);font:inherit;">
+      <div style="min-width:0;">
+        <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:rgba(246,241,230,.55);">${etiqueta}</div>
+        <div class="num" style="font-size:22px;line-height:1;margin-top:3px;color:var(--cream);">${fmt(grande)}</div>
+        ${sub}
+      </div>
+      <span style="display:inline-flex;color:rgba(246,241,230,.4);flex-shrink:0;">${getSVG('chevronDown', '', 'width:18px;height:18px;transform:rotate(-90deg);')}</span>
+    </button>`;
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
