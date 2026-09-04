@@ -2455,7 +2455,8 @@ function sinContraparteVisible(g){
 }
 function entrantesHuerfanasUI(mes){
   // (g.fecha||'') cierra la asimetría con ahorroMesScope y mesesConDatosScope, que sí
-  // protegen el acceso: un gasto sin fecha tumbaría el render de Inicio y de Mi Mes.
+  // protegen el acceso. Los otros dos puntos que leen g.fecha sin guarda están en
+  // renderMiMes (totalOut y listGastos) y llevan la misma protección.
   return state.gastos
     .filter(g => (g.fecha||'').substring(0, 7) === mes && huerfanaVisible(g))
     .reduce((s, g) => s + g.monto, 0);
@@ -4419,7 +4420,7 @@ function renderMiMes(){
   // ingreso de origen) y los movimientos privados del otro perfil.
   const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied + entrantesHuerfanasUI(mes);
   const totalOut = state.gastos.filter(g => {
-    if (g.fecha.substring(0, 7) !== mes) return false;
+    if ((g.fecha||'').substring(0, 7) !== mes) return false;
     // Salidas reales + patas huérfanas salientes: en ambos casos la plata dejó
     // una meta compartida y no hay contraparte visible que la compense.
     if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
@@ -4438,7 +4439,7 @@ function renderMiMes(){
   }));
 
   const listGastos = state.gastos.filter(g => {
-    if (g.fecha.substring(0, 7) !== mes) return false;
+    if ((g.fecha||'').substring(0, 7) !== mes) return false;
     if (gastoDeMetaAjena(g, perfilActivo)) return false; // toca meta individual ajena
     return true;
   }).map(g => ({
