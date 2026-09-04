@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.55'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.56'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -82,7 +82,8 @@ function getSVG(name, cls='', style='') {
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
     user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
     check: '<polyline points="20 6 9 17 4 12"></polyline>',
-    lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>'
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>',
+    clock: '<circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline>'
   };
   const path = icons[name] || '';
   const cAttr = cls ? ` class="${cls}"` : '';
@@ -2092,7 +2093,7 @@ function heroMeta(m){
 
 // Barra de propósitos (nivel 1): muestra y edita config.buckets para los buckets PRESENTES.
 // Los % se normalizan a 100 sobre los buckets presentes al guardar.
-function drawBucketBar(dueno){
+function drawBucketBar(dueno, embebido = false){
   const todos = bucketsConMetas(dueno);            // todos los propósitos que el usuario tiene (incl. llenos)
   if(todos.length <= 1) return '';                 // con 0-1 propósitos no hay nada que repartir a nivel 1
   const editables = bucketsPresentes(dueno);       // solo los que tienen cupo (no llenos) → reciben %
@@ -2149,6 +2150,18 @@ function drawBucketBar(dueno){
     const legend = todos.filter(t=>(cfg[t]||0)>0).map(t=>
       `<span class="blgnd"><i style="background:${col[t]}"></i>${meta[t].lbl} ${cfg[t]||0}%</span>`
     ).join('');
+    if (embebido) {
+      return `<div class="bucketbar-toggle" style="cursor:pointer;">
+        <div class="k" style="margin-bottom:7px;">Cómo se repartió</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="bucketbar-seg" style="flex-grow:1; margin-bottom:0;">${segs}</div>
+          <div style="color:var(--cream); display:flex; align-items:center;">
+            ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}
+          </div>
+        </div>
+        <div class="bucketbar-legend">${legend || '<span class="blgnd" style="opacity:.6">Sin asignar</span>'}</div>
+      </div>`;
+    }
     return `
       <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:11px 14px; cursor:pointer; transition: background 0.2s;">
         <div class="k" style="margin-bottom:7px;">${titulo}</div>
@@ -2161,6 +2174,18 @@ function drawBucketBar(dueno){
         <div class="bucketbar-legend">${legend || '<span class="blgnd" style="opacity:.6">Sin asignar</span>'}</div>
       </div>
     `;
+  }
+
+  if (embebido) {
+    return `<div class="bucketbar-toggle" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer;">
+        <div class="k" style="margin-bottom:0;">Cómo se repartió</div>
+        <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
+          ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7; transform: rotate(180deg);')}
+        </div>
+      </div>
+      <div class="bucketbar-seg">${segs}</div>
+      <div class="bucketbar-suma">${getSVG('check','','width:13px;height:13px;')} Suma 100%</div>
+      <div class="bucketsliders">${rows}</div>`;
   }
 
   return `
@@ -2176,6 +2201,47 @@ function drawBucketBar(dueno){
       <div class="bucketsliders">${rows}</div>
     </div>
   `;
+}
+
+// Ficha del mes fusionada con el reparto (docs/superpowers/design/MetasA2.dc.html). El
+// neto es el titular; entró y salió quedan como línea de apoyo. Debajo, cómo se repartió
+// ese ahorro entre propósitos — la misma barra de siempre, con sus sliders detrás del
+// toggle. `flujoDelMes` es el mismo que cita Mi Mes.
+function drawMesYReparto(dueno){
+  const mes = curMonth();
+  const f = flujoDelMes(mes);
+  const reparto = drawBucketBar(dueno, true);
+  const nombreMes = fmtMes(mes).split(' ')[0];
+  const netoCol = f.neto >= 0 ? 'var(--gb)' : '#e06c75';
+
+  const sep = reparto
+    ? `<div style="height:1px;background:rgba(246,241,230,.09);margin:13px 0 11px;"></div>`
+    : '';
+
+  // El signo va por fuera: fmt() con negativos lo mete DESPUÉS del peso ("$-300.000"),
+  // que en una cifra de este tamaño se lee como error de tipeo.
+  const netoTxt = `${f.neto >= 0 ? '+' : '−'}${fmt(Math.abs(f.neto))}`;
+
+  // Entró y salió solo se ganan la línea cuando dicen algo que el neto no dice. Si no
+  // salió nada, el neto ES lo que entró, y repetirlo abajo en otro formato ($2.550.000
+  // arriba, $2,6M abajo) se lee como dos cifras que no cuadran.
+  const ioHtml = f.salio > 0.5
+    ? `<div style="display:flex;gap:14px;margin-top:6px;font-size:12px;color:rgba(246,241,230,.6);">
+        <span>Entró <b style="color:rgba(246,241,230,.85);">${fmtK(f.entro)}</b></span>
+        <span>Salió <b style="color:rgba(246,241,230,.85);">${fmtK(f.salio)}</b></span>
+      </div>`
+    : '';
+
+  return `
+    <div class="card dark" style="padding:14px; margin-bottom:12px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+        <div class="k" style="margin-bottom:0;">${esc(nombreMes)}</div>
+        <div class="num" style="font-size:23px;line-height:1;color:${netoCol};">${netoTxt}</div>
+      </div>
+      ${ioHtml}
+      ${sep}
+      ${reparto}
+    </div>`;
 }
 
 function drawSavingsDonut() {
@@ -2565,6 +2631,24 @@ function ahorroMesUI(mes){
     .reduce((s, i) => s + i.monto, 0) + entrantesHuerfanasUI(mes);
 }
 
+// Entró, salió y neto de un mes, con los mismos filtros de privacidad que el timeline.
+// Lo consumen Mi Mes y la ficha del mes de Metas: si cada pantalla lo recalculara por su
+// cuenta acabarían mostrando cifras distintas del mismo mes.
+function flujoDelMes(mes){
+  const entry = state.log.find(e => e.mes === mes);
+  const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
+  const perfilActivo = state.config.perfil;
+  const entro = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar))
+    .reduce((s, ing) => s + ing.monto, 0) + baseApplied + entrantesHuerfanasUI(mes);
+  const salio = state.gastos.filter(g => {
+    if ((g.fecha || '').substring(0, 7) !== mes) return false;
+    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
+    if (gastoDeMetaAjena(g, perfilActivo)) return false;
+    return true;
+  }).reduce((s, g) => s + g.monto, 0);
+  return { entro, salio, neto: entro - salio };
+}
+
 // Una pata marcada solo cuenta como movimiento del mes cuando su contraparte NO llegó
 // a este dispositivo. Si las dos están visibles — una transferencia entre una meta
 // compartida y una meta individual PROPIA, donde la pata saneada vuelve por shared y
@@ -2789,40 +2873,42 @@ function renderMetas(){
       ${allowCreate ? `<button class="btn" data-addmeta="${tipo}" style="margin:0;border:1.5px solid ${accent};color:${accent};background:${bg};display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px;padding:12px 18px;">${getSVG('target')} ${label}</button>` : ''}
     </div>`;
   };
-  let subTabsHtml = `
-    <div class="seg dark-seg" style="margin-bottom:10px;">
-      <button id="btnTabAhorros" class="${curMetasSubTab===0?'on':''}">Mis metas</button>
-      <button id="btnTabLogros" class="${curMetasSubTab===1?'on':''}">Logros</button>
-    </div>
-  `;
+  // Logros salió de la fila de conmutación a un enlace del encabezado (MetasA2.dc.html):
+  // eran dos filas apiladas de botones antes del primer dato, y Logros es un archivo que
+  // se visita de vez en cuando, no un modo entre los que se alterna a diario.
   
   let contentHtml = '';
   
   if (curMetasSubTab === 0) {
+    // Aporte del mes por meta, para la línea "+$X este mes" de cada tarjeta. Se calcula
+    // una vez por render y no por tarjeta: getMonthlyDistributionData recorre todos los
+    // movimientos del mes y llamarlo dentro del map sería cuadrático.
+    const aporteMesPorMeta = {};
+    getMonthlyDistributionData(curMonth()).forEach(x => { aporteMesPorMeta[x.id] = x.amount; });
     const card=(m)=>{
       const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
       const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
-      // El % dentro del bucket solo tiene sentido con 2+ metas del mismo tipo; con una sola
-      // recibe el 100% y mostrarlo confunde.
-      const variasEnBucket = metasDeBucket(m.tipo, m.dueno||null).length > 1;
-      const pctBadge = (!isPersonal && variasEnBucket)
-        ? (canEdit
-            ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
-             <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}">
-             <span class="pct-sign">%</span>
-           </div>`
-            : `<span class="pill${flashCls}">${m.aportePct||0}%</span>`)
-        : '';
+      // El número grande es el PROGRESO, no el % de aporte: era la confusión principal
+      // de esta pantalla — "Viaje a Japón" mostraba 60% (aporte) sobre 27% (progreso real).
+      // El aportePct se sigue editando en el formulario de la meta (campo fPct).
+      const progresoHtml = isPersonal ? '' : (m.tipo === 'invertir'
+        ? `<div class="metacard-prog"><div class="metacard-prog-v" style="color:var(--gold);">↗</div><div class="metacard-prog-l">crece</div></div>`
+        : (pct != null
+            ? `<div class="metacard-prog${flashCls}"><div class="metacard-prog-v">${Math.round(pct)}%</div><div class="metacard-prog-l">lleno</div></div>`
+            : ''));
       // ETA útil (sueño/colchón con objetivo y aún no lleno).
       let eta='';
       if(m.tipo!=='invertir' && obj && m.saldo<obj){
         const meses=calcularTiempoRestante(m);
         if(meses!=null && meses>0) eta = meses<12 ? `~${meses} mes${meses!==1?'es':''}` : `~${Math.floor(meses/12)} año${Math.floor(meses/12)!==1?'s':''}`;
       }
-      const generico = `${fmt(m.saldo)}${obj?` / ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      // Sin el porcentaje: desde el rediseño lo dice el número grande de la derecha, y
+      // repetirlo aquí ponía la misma cifra dos veces en la misma tarjeta. El "de" en vez
+      // de la barra sigue al diseño (MetasA2.dc.html): se lee como frase, no como quebrado.
+      const generico = `${fmt(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${eta?` · ${eta}`:''}`;
       let sub;
       const cdtVencido = m.tipo==='invertir' && m.colocado && m.vencimiento && m.vencimiento<=curMonth();
       if(m.tipo==='invertir'){
@@ -2869,6 +2955,10 @@ function renderMetas(){
         : ((!m.dueno && !isPersonal && !canEditShared())
             ? `<span class="btn-card-edit metacard-lock" title="Solo el Editor puede modificar metas compartidas" aria-label="Bloqueado: solo el Editor" style="opacity:.45;cursor:not-allowed;display:inline-flex;align-items:center;justify-content:center;">${getSVG('lock', '', 'width:13px;height:13px;pointer-events:none;')}</span>`
             : '');
+      const delMes = aporteMesPorMeta[m.id] || 0;
+      const feedHtml = delMes > 0.5
+        ? `<div class="metacard-feed">${getSVG('clock', '', 'width:11px;height:11px;opacity:.7;')} <span style="color:var(--green);font-weight:700;">+${fmtK(delMes)} este mes</span></div>`
+        : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
@@ -2876,8 +2966,9 @@ function renderMetas(){
           <div class="metacard-main">
             <div class="metacard-title"><span class="metacard-name">${m.nombre}</span></div>
             <div class="metacard-sub">${sub}</div>
+            ${feedHtml}
           </div>
-          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${pctBadge}${editBtn}`))}
+          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${progresoHtml}${editBtn}`))}
         </div>
       </div>`;
     };
@@ -2891,7 +2982,7 @@ function renderMetas(){
 
     if (isIndiv) {
       // Modo individual: un solo scope (el perfil). Sin toggle.
-      adviceHtml = drawBucketBar(state.config.perfil);
+      adviceHtml = drawMesYReparto(state.config.perfil);
       const metasIndivCount = metasIndividuales(state.config.perfil).length;
       if (metasIndivCount > 0) {
         listHtml = drawSeccionesPorBucket(state.config.perfil, card);
@@ -2909,7 +3000,7 @@ function renderMetas(){
         </div>
       `;
       if (scope === 'shared') {
-        adviceHtml = drawBucketBar(null);
+        adviceHtml = drawMesYReparto(null);
         const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
         if (nonDebtShared.length > 0) {
           listHtml = drawSeccionesPorBucket(null, card);
@@ -2917,7 +3008,7 @@ function renderMetas(){
           listHtml = emptyMetaCTA('sueno', 'No tienen metas comunes creadas.');
         }
       } else {
-        adviceHtml = drawBucketBar(state.config.perfil);
+        adviceHtml = drawMesYReparto(state.config.perfil);
         const indivs = metasIndividuales(state.config.perfil);
         if (indivs.length > 0) {
           indivHtml = drawSeccionesPorBucket(state.config.perfil, card);
@@ -2942,21 +3033,22 @@ function renderMetas(){
     contentHtml = drawLogros();
   }
 
-  let h = `<header>
-    <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
-    <h1>Metas</h1>
+  const enLogros = curMetasSubTab === 1;
+  let h = `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+    <div>
+      <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
+      <h1>${enLogros ? 'Logros' : 'Metas'}</h1>
+    </div>
+    <button id="btnVerLogros" style="background:none;border:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700;color:var(--gb);padding:10px 0 0;white-space:nowrap;">${enLogros ? '← Metas' : 'Logros →'}</button>
   </header>`;
 
   $('r1').innerHTML = `
     ${h}
-    ${subTabsHtml}
     ${contentHtml}
   `;
 
-  const tabAhorros = $('btnTabAhorros');
-  if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 0; rerender(); };
-  const tabLogros = $('btnTabLogros');
-  if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 1; rerender(); };
+  const btnLogros = $('btnVerLogros');
+  if (btnLogros) btnLogros.onclick = () => { curMetasSubTab = enLogros ? 0 : 1; rerender(); };
 
   $('r1').querySelectorAll('.distahorros-toggle').forEach(el => {
     el.onclick = () => {
@@ -4537,25 +4629,12 @@ function renderMiMes(){
   const mes=selectedMonth || curMonth();
   const canEdit=canEditShared();
   
-  const entry = state.log.find(e => e.mes === mes);
-  const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
-  
   // Privacidad: la pareja solo ve movimientos de metas conjuntas. Se ocultan los
   // ingresos privados del otro perfil y los gastos que tocan una meta individual ajena.
   const perfilActivo = state.config.perfil;
 
-  // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
-  // ingreso de origen) y los movimientos privados del otro perfil.
-  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied + entrantesHuerfanasUI(mes);
-  const totalOut = state.gastos.filter(g => {
-    if ((g.fecha||'').substring(0, 7) !== mes) return false;
-    // Salidas reales + patas huérfanas salientes: en ambos casos la plata dejó
-    // una meta compartida y no hay contraparte visible que la compense.
-    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
-    if (gastoDeMetaAjena(g, perfilActivo)) return false; // retiro de meta individual ajena
-    return true;
-  }).reduce((sum, g) => sum + g.monto, 0);
-  const netSaved = totalIn - totalOut;
+  // flujoDelMes es la misma fuente que usa la ficha del mes de Metas.
+  const { entro: totalIn, salio: totalOut, neto: netSaved } = flujoDelMes(mes);
   const listIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).map(ing => ({
     type: 'ingreso',
     id: ing.id,
