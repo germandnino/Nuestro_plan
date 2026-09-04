@@ -2217,16 +2217,27 @@ function drawMesYReparto(dueno){
     ? `<div style="height:1px;background:rgba(246,241,230,.09);margin:13px 0 11px;"></div>`
     : '';
 
+  // El signo va por fuera: fmt() con negativos lo mete DESPUÉS del peso ("$-300.000"),
+  // que en una cifra de este tamaño se lee como error de tipeo.
+  const netoTxt = `${f.neto >= 0 ? '+' : '−'}${fmt(Math.abs(f.neto))}`;
+
+  // Entró y salió solo se ganan la línea cuando dicen algo que el neto no dice. Si no
+  // salió nada, el neto ES lo que entró, y repetirlo abajo en otro formato ($2.550.000
+  // arriba, $2,6M abajo) se lee como dos cifras que no cuadran.
+  const ioHtml = f.salio > 0.5
+    ? `<div style="display:flex;gap:14px;margin-top:6px;font-size:12px;color:rgba(246,241,230,.6);">
+        <span>Entró <b style="color:rgba(246,241,230,.85);">${fmtK(f.entro)}</b></span>
+        <span>Salió <b style="color:rgba(246,241,230,.85);">${fmtK(f.salio)}</b></span>
+      </div>`
+    : '';
+
   return `
     <div class="card dark" style="padding:14px; margin-bottom:12px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
         <div class="k" style="margin-bottom:0;">${esc(nombreMes)}</div>
-        <div class="num" style="font-size:23px;line-height:1;color:${netoCol};">${f.neto >= 0 ? '+' : ''}${fmt(f.neto)}</div>
+        <div class="num" style="font-size:23px;line-height:1;color:${netoCol};">${netoTxt}</div>
       </div>
-      <div style="display:flex;gap:14px;margin-top:6px;font-size:12px;color:rgba(246,241,230,.6);">
-        <span>Entró <b style="color:rgba(246,241,230,.85);">${fmtK(f.entro)}</b></span>
-        <span>Salió <b style="color:rgba(246,241,230,.85);">${fmtK(f.salio)}</b></span>
-      </div>
+      ${ioHtml}
       ${sep}
       ${reparto}
     </div>`;
