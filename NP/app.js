@@ -2415,6 +2415,13 @@ function mesesConDatosUI(){
 // Un ingreso pertenece a un scope: `dueno` nulo = lo compartido; 'p1'/'p2' = lo
 // individual de ese perfil. Los sobrantes sin asignar no son de ningún scope —
 // ya se contaron en el ingreso que los originó.
+// El scope de "lo que ve quien mira": en pareja es lo común (null); en individual NO hay
+// común — todo movimiento se marca privado al crearse — así que hay que pedir el del
+// perfil. Pedir null en individual devuelve vacío y la app se comporta como si el usuario
+// no tuviera historial: sin promedio, sin comparación y sin sugerencias en Aprender.
+function scopeVista(){
+  return state.config.modo === 'individual' ? state.config.perfil : null;
+}
 function ingresoDeScope(i, dueno){
   if(!i || i.sinAsignar) return false;
   return dueno ? !!(i.privado && i.duenoPriv === dueno) : !i.privado;
@@ -2517,7 +2524,7 @@ function resumenMesInicio(){
   // el titular es el total y el promedio se toma del scope del propio perfil.
   const ahorro = esPareja ? Math.max(0, total - privadoVisible) : total;
   const privado = esPareja ? privadoVisible : 0;
-  const promedio = esPareja ? ahorroEstimado(null) : ahorroEstimado(state.config.perfil);
+  const promedio = ahorroEstimado(scopeVista());
   const hoy = new Date();
   const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
   const diasRestantes = finDeMes - hoy.getDate();
@@ -2607,7 +2614,9 @@ function drawDestinoMes(){
   if (data.length === 0) return '';
 
   const mayor = data.reduce((mx,x) => Math.max(mx, x.amount), 0) || 1;
-  const hayPrivadas = data.some(x => x.dueno);
+  // En individual no hay de quién esconder nada: todas las metas son del único perfil,
+  // así que la aclaración sobre el color privado no viene al caso.
+  const hayPrivadas = state.config.modo !== 'individual' && data.some(x => x.dueno);
 
   const filas = data.map((x,i) => `
     <div style="display:flex;align-items:center;gap:10px;padding:7px 0;${i>0?'border-top:1px solid rgba(246,241,230,.07);':''}">
@@ -2806,7 +2815,7 @@ function drawSavingsHistoryCard() {
   // mes en curso a medias, y daba una cifra distinta a la del titular: dos "promedios"
   // en la misma pantalla. El respaldo es la media de las barras, por si no hay ningún
   // mes cerrado todavía.
-  const avgVal = ahorroEstimado(null)
+  const avgVal = ahorroEstimado(scopeVista())
     ?? (historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length);
   const N = historyData.length;
   
@@ -4892,7 +4901,7 @@ function contextoAprender(){
   const metas = [...metasCompartidas(), ...metasIndividuales(perfil)];
   const colchon = metas.filter(m => m.tipo === 'imprevistos').reduce((s,m) => s + (m.saldo||0), 0);
   const hayInversion = metas.some(m => m.tipo === 'invertir');
-  const prom = ahorroEstimado(null);
+  const prom = ahorroEstimado(scopeVista());
   // El sueño más lejano con plazo estimable: es el que más se beneficia de invertir en
   // vez de solo guardar, porque es donde la inflación tiene más tiempo de morder.
   let lejano = null;
@@ -5366,8 +5375,13 @@ function renderSimMetas(body){
   const usaMeses = m.objetivo > 0 && m.tipo !== 'invertir'; // sueño/colchón con objetivo → meses
   // Sin historial no hay línea base: el simulador arranca en cero y el usuario mueve
   // los deslizadores. Math.round(null) daría 0 igual, pero por accidente.
+  // Sin meses cerrados no hay promedio que calcular, pero sí puede haber plata puesta
+  // ESTE mes: en un plan recién empezado ese es el único dato real que existe, y arrancar
+  // el simulador en cero obliga a teclear a mano algo que la app ya sabe. Si tampoco hay
+  // nada este mes, entonces sí arranca en cero.
   const aporteEst = aporteMensualEstimado(m);
-  const aporteBase = aporteEst === null ? 0 : Math.round(aporteEst);
+  const delMesActual = (getMonthlyDistributionData(curMonth()).find(x => x.id === m.id) || {}).amount || 0;
+  const aporteBase = Math.round(aporteEst === null ? delMesActual : aporteEst);
   const tasaInit = Math.round(tasaSugeridaMeta(m) * 100);
 
   // Estado local de la simulación.
@@ -5518,8 +5532,8 @@ function renderSimLibre(body){
   const sugAhorro = handoff && handoff.monto > 0 ? Math.round(handoff.monto / SNAP) * SNAP : 0;
   // El peso del bucket ya es el % del ahorro que va a inversión; sumar los aportePct de las
   // metas daría 100 por bucket (o 200 con una compartida y una individual), no el % real.
-  const pctInv = pesosBuckets(null).invertir || 0;
-  const ahorroReal = ahorroEstimado(null) || 0;
+  const pctInv = pesosBuckets(scopeVista()).invertir || 0;
+  const ahorroReal = ahorroEstimado(scopeVista()) || 0;
   const sugPlan = ahorroReal > 0 && pctInv > 0 ? Math.round((ahorroReal * pctInv/100) / SNAP) * SNAP : 0;
 
   const S = {
@@ -5680,7 +5694,12 @@ function renderLearnInflacion(body){
   const posFromMonto = m => Math.round(POS * Math.pow(Math.max(0, Math.min(MAX, m)) / MAX, 1 / P));
   const formatInt = n => (n || 0).toLocaleString('es-CO');
 
-  const S = { monto: 10000000, years: 10, infl: 0.06 }; // inflación CO ~6%
+  // Arranca con el colchón real de quien mira, que es justo la plata que la ficha de
+  // Aprender señala como quieta. Antes entraba con $10.000.000 fijos: la tarjeta prometía
+  // "tienen $7,4M sin crecer" y la herramienta abría con una cifra que no era la suya.
+  // Sin colchón se queda en el ejemplo genérico, que sigue sirviendo para explicar la idea.
+  const colchonReal = Math.round(contextoAprender().colchon / SNAP) * SNAP;
+  const S = { monto: (colchonReal > 0 ? Math.min(MAX, colchonReal) : 10000000), years: 10, infl: 0.06 }; // inflación CO ~6%
 
   body.innerHTML = `
     <header style="padding-top:8px">
