@@ -50,7 +50,10 @@ const store={
 const APP_VERSION='1.0.59'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
-const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
+// Un decimal solo donde informa. Bajo 100k, redondear a miles enteros borra plata que
+// se nota ($27.900 se volvía $28k); de 100k para arriba el decimal aporta menos del 1%
+// y solo alarga la cifra. El decimal aparece únicamente si existe: 824000 sigue siendo $824k.
+const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=100000)return sg+'$'+Math.round(n/1000)+'k';if(n>=1000)return sg+'$'+(n/1000).toLocaleString('es-CO',{maximumFractionDigits:1})+'k';return sg+'$'+n;};
 const parse=s=>parseInt(String(s).replace(/\D/g,''),10)||0;
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
@@ -2905,21 +2908,23 @@ function renderMetas(){
       // Sin el porcentaje: desde el rediseño lo dice el número grande de la derecha, y
       // repetirlo aquí ponía la misma cifra dos veces en la misma tarjeta. El "de" en vez
       // de la barra sigue al diseño (MetasA2.dc.html): se lee como frase, no como quebrado.
-      const generico = `${fmt(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      // Todo en formato compacto: la tarjeta es de dos líneas y $27.900 junto al reparto
+      // la apretaba hasta los puntos suspensivos. fmtK conserva el decimal bajo 100k.
+      const generico = `${fmtK(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
       let sub;
       const cdtVencido = m.tipo==='invertir' && m.colocado && m.vencimiento && m.vencimiento<=curMonth();
       if(m.tipo==='invertir'){
         if(m.colocado){
           // Inversión fija (CDT): no crece por aportes; muestra estado fija/vencida.
-          if(cdtVencido) sub = `${fmt(m.saldo)} · <b style="color:var(--gold)">Vencida · acción pendiente</b>`;
-          else if(m.vencimiento) sub = `${fmt(m.saldo)} · Fija · vence ${fmtMes(m.vencimiento)}`;
-          else sub = `${fmt(m.saldo)} · Fija`;
+          if(cdtVencido) sub = `${fmtK(m.saldo)} · <b style="color:var(--gold)">Vencida · acción pendiente</b>`;
+          else if(m.vencimiento) sub = `${fmtK(m.saldo)} · Fija · vence ${fmtMes(m.vencimiento)}`;
+          else sub = `${fmtK(m.saldo)} · Fija`;
         } else {
           const {alcanzado, siguiente} = hitoInversion(m.saldo);
           const h = !alcanzado
             ? `primer hito ${fmtK(siguiente)}`
             : `hito ${fmtK(alcanzado)}${siguiente?` → ${fmtK(siguiente)}`:''}`;
-          sub = `↗ ${fmt(m.saldo)} · ${h}`;
+          sub = `↗ ${fmtK(m.saldo)} · ${h}`;
         }
       } else if(m.tipo==='imprevistos'){
         // Estado terminal propio: "Protegido" (revolvente, no se "completa"). Unidad: meses de respaldo si hay gasto de referencia.
@@ -2933,7 +2938,7 @@ function renderMetas(){
             ? `${prot} · ${mAct} ${unidad} de respaldo`
             : (obj>0 ? `${mAct} / ${fm(obj/m.gastoRef)} meses${eta?` · ${eta}`:''}` : `${mAct} ${unidad} de respaldo`);
         } else {
-          sub = lleno ? `${prot} · ${fmt(m.saldo)}` : generico;
+          sub = lleno ? `${prot} · ${fmtK(m.saldo)}` : generico;
         }
       } else if(m.tipo==='sueno' && obj>0 && m.saldo>=obj){
         // Estado terminal del sueño: cumplido (único que celebra). Acción: consumir → Logros.
