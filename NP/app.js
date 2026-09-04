@@ -2499,13 +2499,25 @@ function ahorroEstimado(dueno){
 // es cero", porque decir "vas 100% por encima de $0" no informa nada.
 function resumenMesInicio(){
   const mes = curMonth();
-  const ahorro = ahorroMesUI(mes);
-  // Cuánto de ese ahorro es privado tuyo. El titular NO es "el mes de los dos": cada
-  // teléfono suma lo común más lo propio y nunca lo privado del otro, así que para el
-  // mismo mes los dos ven cifras distintas. Sin decirlo, cada uno cree ver el mes entero.
-  const privado = especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
+  const esPareja = state.config.modo !== 'individual';
+  const total = ahorroMesUI(mes);
+  const privadoVisible = especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
     .reduce((s, i) => s + (i.privado ? i.monto : 0), 0);
-  const promedio = ahorroEstimado(null);
+
+  // En pareja el titular es SOLO lo común, la misma regla que ya sigue el acumulado
+  // (ver patrimonioResumen): la cifra del mes queda idéntica en los dos teléfonos, que es
+  // lo que permite hablar de "nuestro mes". Lo privado propio va aparte, en su línea.
+  //
+  // Además arregla una comparación que no cuadraba: el titular sumaba lo privado pero
+  // ahorroEstimado(null) promedia SOLO lo común, así que el numerador y el denominador
+  // eran de universos distintos y salían desviaciones absurdas — un mes con $2M comunes y
+  // $2,4M privados se anunciaba como "120% por encima de su promedio de $2M".
+  //
+  // En individual no hay "común" que separar: todo movimiento se marca privado, así que
+  // el titular es el total y el promedio se toma del scope del propio perfil.
+  const ahorro = esPareja ? Math.max(0, total - privadoVisible) : total;
+  const privado = esPareja ? privadoVisible : 0;
+  const promedio = esPareja ? ahorroEstimado(null) : ahorroEstimado(state.config.perfil);
   const hoy = new Date();
   const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
   const diasRestantes = finDeMes - hoy.getDate();
@@ -2521,7 +2533,7 @@ function resumenMesInicio(){
     delta = Math.round(((ahorro - promedio) / promedio) * 100);
   }
 
-  return { mes, ahorro, privado, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
+  return { mes, ahorro, privado, total, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
 }
 
 // Tarjeta titular de Inicio: el mes en curso. Sustituye al patrimonio como número
@@ -2555,7 +2567,7 @@ function drawHeroMes(){
   // Solo aparece cuando de verdad hay algo privado en el mes: si todo fue común, la
   // aclaración sobraría y le quitaría aire al titular.
   const privHtml = r.privado > 0.5
-    ? `<div style="font-size:11.5px;color:rgba(246,241,230,.5);margin-top:4px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.config.perfil === 'p1' ? '#c87a53' : '#a36a84'};margin-right:4px;"></span>Incluye ${fmtK(r.privado)} tuyo, privado</div>`
+    ? `<div style="font-size:11.5px;color:rgba(246,241,230,.5);margin-top:4px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.config.perfil === 'p1' ? '#c87a53' : '#a36a84'};margin-right:4px;"></span>Además ${fmtK(r.privado)} tuyo, privado</div>`
     : '';
 
   const marcaHtml = r.pctPromedio != null
