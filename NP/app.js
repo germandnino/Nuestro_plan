@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.56'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.57'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -4464,12 +4464,21 @@ function drawMonthlyDistributionBars(mes) {
     ? ''
     : `<div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(246,241,230,0.08);">${rows}</div>`;
 
+  // Con el detalle plegado, el resumen por propósito es lo que hace que valga la pena
+  // desplegarlo. Agrupa las metas del mes por su propósito, en el orden de BUCKETS.
+  const porBucket = {};
+  data.forEach(x => { porBucket[x.tipo] = (porBucket[x.tipo] || 0) + x.amount; });
+  const resumenBuckets = BUCKETS
+    .filter(t => (porBucket[t] || 0) > 0.5)
+    .map(t => `${bucketLabel(t)} ${fmtK(porBucket[t])}`)
+    .join(' · ');
+  const resumenHtml = (_barrasMesCollapsed && resumenBuckets)
+    ? `<div style="font-size:12px;color:rgba(246,241,230,.6);margin-top:2px;">${resumenBuckets}</div>`
+    : '';
+
   return `
     <div style="margin-top:2px;">
-      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
-        <span style="font-size:11.5px; font-weight:700; color:var(--cream); letter-spacing:0.06em; text-transform:uppercase;">Ahorrado este mes</span>
-        <span class="num" style="font-size:22px; font-weight:800; color:var(--gb);">${fmtK(total)}</span>
-      </div>
+      ${resumenHtml}
       ${acumuladoRow}
       ${cierre}
     </div>
@@ -4616,7 +4625,6 @@ function drawTransactionTimeline(transactions, canEdit) {
   
   return `
     <div style="background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:12px 14px;">
-      <div style="font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700; color:var(--gs); margin-bottom:8px; border-bottom:1px solid rgba(246,241,230,0.05); padding-bottom:6px;">Movimientos del mes</div>
       <div style="display:flex; flex-direction:column; max-height:300px; overflow-y:auto; padding-right:4px;">
         ${itemsHtml}
       </div>
@@ -4671,29 +4679,27 @@ function renderMiMes(){
   
   const transactions = processTransactionsForDisplay(rawAll);
   
+  // El neto es la única cifra grande de la pantalla (docs/superpowers/design/MiMesA.dc.html).
+  // Entró y salió bajan a una línea de apoyo: antes eran tres tiles del mismo tamaño y
+  // ninguno mandaba. El signo va por fuera porque fmt() con negativos lo mete después del
+  // peso ("$-300.000"), que a este tamaño se lee como error de tipeo.
+  const netoTxt = `${netSaved >= 0 ? '+' : '−'}${fmt(Math.abs(netSaved))}`;
   const metricsHtml = `
-    <div class="card" style="padding:16px; display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; text-align:center;">
-      <div>
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Ingresos</div>
-        <div style="font-size:15px; font-weight:700; color:var(--green); margin-top:4px;" class="num">+${fmtK(totalIn)}</div>
+    <div style="margin:2px 0 4px;">
+      <div style="font-size:11px;font-weight:700;color:rgba(246,241,230,.55);text-transform:uppercase;letter-spacing:.1em;">Neto del mes</div>
+      <div class="num" style="font-size:34px;line-height:1;margin-top:5px;color:${netSaved >= 0 ? 'var(--gb)' : '#e06c75'};">${netoTxt}</div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:12.5px;color:rgba(246,241,230,.6);">
+        <span>Entró <b style="color:rgba(246,241,230,.88);">${fmtK(totalIn)}</b></span>
+        <span>Salió <b style="color:rgba(246,241,230,.88);">${fmtK(totalOut)}</b></span>
       </div>
-      <div style="border-left:1px solid var(--line); border-right:1px solid var(--line);">
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Retiros</div>
-        <div style="font-size:15px; font-weight:700; color:#e06c75; margin-top:4px;" class="num">-${fmtK(totalOut)}</div>
-      </div>
-      <div>
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Neto</div>
-        <div style="font-size:15px; font-weight:700; color:${netSaved >= 0 ? 'var(--gold)' : '#e06c75'}; margin-top:4px;" class="num">${netSaved >= 0 ? '+' : ''}${fmtK(netSaved)}</div>
-      </div>
-    </div>
-  `;
+    </div>`;
   
   // El chevron solo tiene sentido si hay barras que plegar.
   const hayBarras = getMonthlyDistributionData(mes).length > 0;
   const donutHtml = `
     <div class="card dark" style="padding:16px;">
       <div class="k${hayBarras ? ' mesdist-toggle' : ''}" style="margin:-6px 0 6px; padding:6px 0; min-height:32px; display:flex; align-items:center; justify-content:space-between; gap:10px;${hayBarras ? ' cursor:pointer;' : ''}">
-        <span>Distribución del Ahorro Realizado</span>
+        <span>Cómo se repartió</span>
         ${hayBarras ? `<span style="display:inline-flex; color:var(--cream); transform:rotate(${_barrasMesCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>` : ''}
       </div>
       ${drawMonthlyDistributionBars(mes)}
@@ -4704,8 +4710,7 @@ function renderMiMes(){
 
   $('r2').innerHTML=`
     <header>
-      <div class="ey">Movimientos del mes</div>
-      <div style="display:flex; align-items:center; gap:12px; margin-top:2px;">
+      <div style="display:flex; align-items:center; gap:12px;">
         <button id="btnPrevMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">‹</button>
         <h1 id="mMesDisplay" style="font-size:26px; margin:0; cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--cream);"></h1>
         <button id="btnNextMonth" style="background:none; border:none; color:rgba(246,241,230, 0.65); font-size:32px; font-weight:300; cursor:pointer; padding:0 4px; line-height:1; display:flex; align-items:center; justify-content:center;">›</button>
@@ -4714,8 +4719,9 @@ function renderMiMes(){
     ${drawSinAsignarCard()}
     <div style="display:flex; flex-direction:column; gap:12px;">
       ${metricsHtml}
-      ${donutHtml}
+      <div class="stitle" style="margin:6px 2px 0;">Movimientos${transactions.length ? ` · ${transactions.length}` : ''}</div>
       ${timelineHtml}
+      ${donutHtml}
     </div>
     <div style="margin-bottom:30px"></div>
   `;
