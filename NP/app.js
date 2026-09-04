@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.54'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.55'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 const fmtK=n=>{n=Math.round(n||0);const sg=n<0?'-':'';n=Math.abs(n);if(n>=1000000)return sg+'$'+(n/1000000).toLocaleString('es-CO',{maximumFractionDigits:1})+'M';if(n>=1000)return sg+'$'+Math.round(n/1000)+'k';return sg+'$'+n;};
@@ -1894,16 +1894,6 @@ function renderInicio(){
   const c=state.config;
   const perfil=c.perfil;
   const esPareja = c.modo !== 'individual';
-  // Único cálculo del total del plan (compartido con Mi Mes).
-  const pat = patrimonioResumen();
-  const ahorrosCompartidos = pat.totalPareja;
-  const misIndividuales = pat.totalIndividual;
-  // En pareja el número grande es solo lo compartido, para que sea idéntico en ambos
-  // teléfonos. Pero si no hay NADA compartido no hay nada que mantener sincronizado, y
-  // encabezar con $0 esconde el saldo real: ahí el titular pasa a ser el propio.
-  const soloLoMio = esPareja && pat.totalPareja <= 0.5 && pat.totalIndividual > 0.5;
-  const patrimonioNeto = soloLoMio ? pat.totalIndividual : pat.total;
-  const indivColor = perfil === 'p1' ? '#c87a53' : '#a36a84';
 
   // Ajustes salio del nav para dejarle el slot a Mi Mes: entra aqui como engranaje.
   const gearHtml = `<button id="btnGoAjustes" aria-label="Ajustes" style="background:none;border:none;cursor:pointer;color:rgba(246,241,230,.55);padding:8px;margin:-8px -8px 0 0;display:inline-flex;align-items:center;">${getSVG('sliders', '', 'width:22px;height:22px;')}</button>`;
@@ -1911,40 +1901,19 @@ function renderInicio(){
     ? `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="ey">${esc(c.nombreP1)}</div><h1>Mi plan</h1></div>${gearHtml}</header>`
     : `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;"><div><div class="ey">${esc(c.nombreP1)} &amp; ${esc(c.nombreP2)}</div><h1>Nuestro plan</h1></div>${gearHtml}</header>`;
 
-  // 1. Patrimonio Neto Card
   // ¿Hay metas de ahorro creadas?
   const hayMetasAhorro = metasCompartidas().length > 0
     || metasIndividuales(perfil).length > 0;
-  const desgloseHtml = soloLoMio
-    ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Mis metas individuales: <b>${fmt(misIndividuales)}</b></span>
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Aún no tienen metas en común. Esto es tuyo y solo tú lo ves.</div>`
-    : esPareja
-    ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Compartido: <b>${fmt(ahorrosCompartidos)}</b></span>
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${indivColor}; margin-right:4px;"></span>Individual: <b>${fmt(misIndividuales)}</b></span>
-      </div>
-      <div style="margin-top:6px;font-size:11px;color:rgba(246,241,230,.45);">Tus ahorros individuales son privados y no entran en el total de la pareja.</div>`
-    : `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(246,241,230,.12); display:flex; justify-content:space-between; align-items:center; font-size:12.5px;">
-        <span class="muted"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fcf8e; margin-right:4px;"></span>Ahorros: <b>${fmt(ahorrosCompartidos + misIndividuales)}</b></span>
-      </div>`;
-  const patHtml = hayMetasAhorro
-    ? `
-    <div class="card dark">
-      <div class="k">${(esPareja && !soloLoMio) ? 'Nuestros ahorros e inversiones' : 'Mis ahorros e inversiones'}</div>
-      <div class="num big" style="color:var(--cream);">${fmt(patrimonioNeto)}</div>
-      ${desgloseHtml}
-    </div>
-  `
-    : `
+
+  // Arranque guiado. El rediseño de Inicio no toca esta pantalla: sin metas no hay mes
+  // que encabezar ni reparto que mostrar, así que sigue mandando el CTA de la primera meta.
+  const bienvenidaHtml = `
     <div class="card dark" style="text-align:center; padding:22px 18px;">
       <div style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:12px;background:rgba(217,168,74,.12);margin:0 auto 12px;">${getSVG('target', '', 'width:24px;height:24px;color:var(--gb);')}</div>
       <div class="k" style="margin-bottom:4px;">${esPareja ? 'Su plan está listo para empezar' : 'Tu plan está listo para empezar'}</div>
       <div style="font-size:12.5px; color:rgba(246,241,230,.7); line-height:1.45; max-width:300px; margin:0 auto 14px;">Crea ${esPareja ? 'su' : 'tu'} primera meta y empieza a separar el ahorro. Aquí ${esPareja ? 'verán' : 'verás'} crecer ${esPareja ? 'sus' : 'tus'} ahorros e inversiones.</div>
       <button class="btn gold" id="btnCrearPrimeraMeta" style="margin:0; width:100%; max-width:280px; display:inline-flex; align-items:center; justify-content:center; gap:6px;">${getSVG('plus')} Crear ${esPareja ? 'nuestra' : 'mi'} primera meta</button>
-    </div>
-  `;
+    </div>`;
 
   // 2. Panel de Accesos Rápidos
   const shortcutsHtml = `
@@ -2074,19 +2043,25 @@ function renderInicio(){
     </div>
   `;
 
-  // Sin metas todavia, el tablero no tiene nada que mostrar: se conserva el
-  // arranque guiado con su CTA en vez de tarjetas vacias.
+  // Orden nuevo (docs/superpowers/design/Main.dc.html): el mes en curso encabeza, luego a
+  // dónde fue esa plata, luego el acumulado como línea secundaria. La dona, el histórico y
+  // el consejo bajan — siguen ahí, pero ya no compiten con la acción del mes.
+  // Sin metas todavía el tablero no tiene nada que mostrar: se conserva el arranque
+  // guiado con su CTA.
   const tableroHtml = hayMetasAhorro
-    ? `${drawSavingsDonut()}
+    ? `${drawHeroMes()}
+       ${drawSinAsignarCard()}
+       ${drawDestinoMes()}
+       ${drawAcumuladoRow()}
+       <div class="stitle">Cómo van sus metas</div>
+       ${drawSavingsDonut()}
        <div style="height:12px;"></div>
        ${drawStatsBI()}
        ${drawSavingsHistoryCard()}`
-    : shortcutsHtml;
+    : `${bienvenidaHtml}${drawSinAsignarCard()}${shortcutsHtml}`;
 
   $('r0').innerHTML=`
     ${headerHtml}
-    ${patHtml}
-    ${drawSinAsignarCard()}
     ${tableroHtml}
     ${tipHtml}
     <div style="height:72px;"></div>
@@ -2094,6 +2069,9 @@ function renderInicio(){
 
   // Asignar clics
   $('btnGoAjustes').onclick = () => go(4);
+  if ($('btnHeroAdd')) $('btnHeroAdd').onclick = () => openAsistenteIngresoExtra();
+  if ($('btnHeroMes')) $('btnHeroMes').onclick = () => go(2);
+  if ($('btnAcumulado')) $('btnAcumulado').onclick = () => go(1);
   if ($('btnGoMiMes')) $('btnGoMiMes').onclick = () => go(2);
   if ($('btnGoAddMeta')) $('btnGoAddMeta').onclick = () => openMetaForm(null);
   if ($('btnGoAddExtra')) $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
@@ -2272,9 +2250,7 @@ function drawSavingsDonut() {
       <span>Distribución de Ahorros</span>
       <span style="display:inline-flex; color:var(--cream); transform:rotate(${_distAhorrosCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>
     </div>
-    <div style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:rgba(246,241,230,.5);">Total acumulado</div>
-    <div class="num" style="font-family:var(--serif); font-size:28px; font-weight:600; color:var(--cream); line-height:1.1; margin-bottom:12px;">${fmtK(total)}</div>
-    <div style="display:flex; gap:2px; height:12px; margin-bottom:9px;">${segmentos}</div>
+    <div style="display:flex; gap:2px; height:12px; margin-bottom:12px;">${segmentos}</div>
     <div style="display:flex; flex-wrap:wrap; gap:6px 14px;">${leyenda}</div>
     ${detalle}
   </div>`;
@@ -2438,6 +2414,150 @@ function ahorroEstimado(dueno){
   return ventana.reduce((s,mes)=> s + ahorroMesScope(mes, dueno), 0) / ventana.length;
 }
 
+// Datos de la tarjeta del mes en Inicio. `promedio` es null en un plan sin meses
+// cerrados: la tarjeta tiene que distinguir "no hay con qué comparar" de "el promedio
+// es cero", porque decir "vas 100% por encima de $0" no informa nada.
+function resumenMesInicio(){
+  const mes = curMonth();
+  const ahorro = ahorroMesUI(mes);
+  const promedio = ahorroEstimado(null);
+  const hoy = new Date();
+  const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const diasRestantes = finDeMes - hoy.getDate();
+
+  // Techo del riel: lo más alto entre lo que llevan y su promedio, con 15% de aire para
+  // que una barra al tope no se lea como "ya terminaron".
+  const techo = Math.max(ahorro, promedio || 0) * 1.15 || 1;
+  const pctAhorro = Math.min(100, Math.max(0, (ahorro / techo) * 100));
+  const pctPromedio = promedio != null ? Math.min(100, Math.max(0, (promedio / techo) * 100)) : null;
+
+  let delta = null;
+  if (promedio != null && promedio > 0.5) {
+    delta = Math.round(((ahorro - promedio) / promedio) * 100);
+  }
+
+  return { mes, ahorro, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
+}
+
+// Tarjeta titular de Inicio: el mes en curso. Sustituye al patrimonio como número
+// grande — el acumulado casi no cambia de un día a otro y no sugiere ninguna acción,
+// mientras que "cuánto llevo este mes" sí. Ver docs/superpowers/design/Main.dc.html.
+function drawHeroMes(){
+  const r = resumenMesInicio();
+  const esPareja = state.config.modo !== 'individual';
+
+  const diasTxt = r.diasRestantes <= 0
+    ? 'último día del mes'
+    : r.diasRestantes === 1 ? 'queda 1 día' : `quedan ${r.diasRestantes} días`;
+
+  let cmpHtml;
+  if (r.delta == null) {
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">Aún no hay meses cerrados con qué comparar.</div>`;
+  } else if (r.ahorro <= 0.5) {
+    // Sin esta rama, el primer día de cada mes la tarjeta le dice a todo el mundo "van
+    // 100% por debajo de su promedio". Es exacto y es un regaño automático por un estado
+    // normal: el mes apenas arranca. Aquí el promedio se enuncia como referencia, no
+    // como vara.
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">${esPareja?'Todavía no han aportado este mes':'Todavía no has aportado este mes'}. ${esPareja?'Su':'Tu'} promedio es ${fmtK(r.promedio)}.</div>`;
+  } else if (r.delta === 0) {
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.75);margin-top:5px;">${esPareja?'Van':'Vas'} justo en ${esPareja?'su':'tu'} promedio de ${fmtK(r.promedio)}</div>`;
+  } else {
+    const arriba = r.delta > 0;
+    const col = arriba ? '#3fcf8e' : '#e0a341';
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.75);margin-top:5px;">${esPareja?'Van':'Vas'} <b style="color:${col};">${Math.abs(r.delta)}% por ${arriba?'encima':'debajo'}</b> de ${esPareja?'su':'tu'} promedio de ${fmtK(r.promedio)}</div>`;
+  }
+
+  const marcaHtml = r.pctPromedio != null
+    ? `<span style="position:absolute;top:-4px;bottom:-4px;left:${r.pctPromedio.toFixed(1)}%;width:2px;background:rgba(246,241,230,.55);border-radius:1px;"></span>`
+    : '';
+  const escalaHtml = r.pctPromedio != null
+    ? `<div style="display:flex;justify-content:space-between;font-size:10.5px;color:rgba(246,241,230,.45);margin-top:6px;"><span>$0</span><span>promedio ${fmtK(r.promedio)}</span><span>${fmtK(r.techo)}</span></div>`
+    : '';
+
+  return `
+  <div class="card dark" style="padding:16px;position:relative;overflow:hidden;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+      <div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gb);">${esc(fmtMes(r.mes))}</div>
+      <div style="font-size:11px;color:rgba(246,241,230,.5);">${diasTxt}</div>
+    </div>
+    <div class="num" style="font-size:38px;line-height:1;margin-top:6px;color:var(--cream);">${fmt(r.ahorro)}</div>
+    ${cmpHtml}
+    <div style="margin-top:14px;height:10px;border-radius:6px;background:rgba(246,241,230,.13);position:relative;overflow:hidden;">
+      <i style="position:absolute;left:0;top:0;bottom:0;width:${r.pctAhorro.toFixed(1)}%;background:var(--gb);border-radius:6px;"></i>
+      ${marcaHtml}
+    </div>
+    ${escalaHtml}
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn gold" id="btnHeroAdd" style="flex:1;margin:0;padding:11px 8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;">${getSVG('plus')} Añadir dinero</button>
+      <button class="btn ghost" id="btnHeroMes" style="flex:1;margin:0;padding:11px 8px;font-size:13px;font-weight:700;border:1px solid rgba(246,241,230,.35) !important;color:var(--cream) !important;background:transparent !important;">Ver el mes</button>
+    </div>
+  </div>`;
+}
+
+// "A dónde fue" el ahorro del mes. Las metas individuales propias van con nombre y en
+// el color privado; las del otro perfil ni llegan hasta acá (getMonthlyDistributionData
+// las filtra). Ver docs/superpowers/design/Main.dc.html.
+function drawDestinoMes(){
+  const data = getMonthlyDistributionData(curMonth());
+  if (data.length === 0) return '';
+
+  const mayor = data.reduce((mx,x) => Math.max(mx, x.amount), 0) || 1;
+  const hayPrivadas = data.some(x => x.dueno);
+
+  const filas = data.map((x,i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;${i>0?'border-top:1px solid rgba(246,241,230,.07);':''}">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${x.color};flex-shrink:0;"></span>
+      <div style="flex:1;font-size:13px;color:rgba(246,241,230,.9);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)}</div>
+      <div style="width:74px;height:7px;border-radius:4px;background:rgba(246,241,230,.12);overflow:hidden;flex-shrink:0;">
+        <i style="display:block;height:100%;width:${((x.amount/mayor)*100).toFixed(1)}%;border-radius:4px;background:${x.color};"></i>
+      </div>
+      <div class="num" style="font-size:13.5px;width:66px;text-align:right;flex-shrink:0;color:var(--cream);">${fmtK(x.amount)}</div>
+    </div>`).join('');
+
+  const pie = hayPrivadas
+    ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(246,241,230,.07);font-size:11px;color:rgba(246,241,230,.45);">Las metas en color ${state.config.perfil === 'p1' ? 'terracota' : 'ciruela'} son tuyas y solo tú las ves.</div>`
+    : '';
+
+  return `
+    <div class="stitle">A dónde fue</div>
+    <div style="background:rgba(246,241,230,.05);border:1px solid rgba(246,241,230,.09);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
+      ${filas}
+      ${pie}
+    </div>`;
+}
+
+// El acumulado, ahora secundario. En pareja el número es solo lo compartido, para que
+// sea idéntico en los dos teléfonos; lo individual va debajo como línea propia. Esa
+// regla no cambió con el rediseño, solo bajó de tamaño.
+function drawAcumuladoRow(){
+  const c = state.config;
+  const esPareja = c.modo !== 'individual';
+  const pat = patrimonioResumen();
+  const soloLoMio = esPareja && pat.totalPareja <= 0.5 && pat.totalIndividual > 0.5;
+  const grande = soloLoMio ? pat.totalIndividual
+               : esPareja ? pat.totalPareja
+               : pat.totalPareja + pat.totalIndividual;
+  const indivColor = c.perfil === 'p1' ? '#c87a53' : '#a36a84';
+
+  const etiqueta = soloLoMio ? 'Tuyo, privado'
+                 : esPareja ? 'De los dos'
+                 : 'Tus ahorros e inversiones';
+  const sub = (!soloLoMio && esPareja && pat.totalIndividual > 0.5)
+    ? `<div style="font-size:11.5px;color:rgba(246,241,230,.55);margin-top:3px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${indivColor};margin-right:4px;"></span>Tuyo, privado: ${fmt(pat.totalIndividual)}</div>`
+    : '';
+
+  return `
+    <div class="stitle">Acumulado</div>
+    <button id="btnAcumulado" style="width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(246,241,230,.04);border:1px solid rgba(246,241,230,.08);border-radius:14px;padding:12px 14px;margin-bottom:12px;color:var(--cream);font:inherit;">
+      <div style="min-width:0;">
+        <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:rgba(246,241,230,.55);">${etiqueta}</div>
+        <div class="num" style="font-size:22px;line-height:1;margin-top:3px;color:var(--cream);">${fmt(grande)}</div>
+        ${sub}
+      </div>
+      <span style="display:inline-flex;color:rgba(246,241,230,.4);flex-shrink:0;">${getSVG('chevronDown', '', 'width:18px;height:18px;transform:rotate(-90deg);')}</span>
+    </button>`;
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
@@ -2468,7 +2588,6 @@ function drawStatsBI(){
   if (n === 0) return '';
   const ahorros = meses.map(ahorroMesUI);
   const totalAhorrado = ahorros.reduce((s, v) => s + v, 0);
-  const avgAhorro = totalAhorrado / n;
 
   let bestIdx = 0;
   ahorros.forEach((v, i) => { if (v > ahorros[bestIdx]) bestIdx = i; });
@@ -2487,16 +2606,6 @@ function drawStatsBI(){
     if (mesAnterior(meses[i]) === meses[i - 1]) racha++; else break;
   }
 
-  const lastAhorro = ahorros[n - 1];
-  let trend = '';
-  if (avgAhorro > 0 && n >= 2) {
-    const diff = Math.round((lastAhorro - avgAhorro) / avgAhorro * 100);
-    if (diff !== 0) {
-      const up = diff > 0;
-      trend = `<span style="font-size:11px;font-weight:700;color:${up ? '#0f8f2c' : '#c0673f'};margin-left:6px;">${up ? '↑' : '↓'} ${Math.abs(diff)}%</span>`;
-    }
-  }
-
   const tile = (label, value, sub) => `
     <div style="background:rgba(246,241,230,.04); border-radius:10px; padding:11px 12px;">
       <div style="font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:var(--gb); margin-bottom:4px;">${label}</div>
@@ -2505,7 +2614,6 @@ function drawStatsBI(){
     </div>`;
 
   let tiles = '';
-  tiles += tile('Ahorro mensual prom.', `${fmtK(avgAhorro)}${trend}`, '');
   // Es la suma de lo que ha entrado al plan, no el saldo actual (la dona de arriba muestra ese).
   tiles += tile('Total aportado', fmtK(totalAhorrado), 'en movimientos');
   tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
@@ -2552,7 +2660,13 @@ function drawSavingsHistoryCard() {
   }));
 
   const maxVal = Math.max(...historyData.map(d => d.ahorro), 500000);
-  const avgVal = historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length;
+  // El promedio de referencia es el mismo que cita la tarjeta del mes (ahorroEstimado:
+  // SMA de 6 meses cerrados). Antes se promediaban las barras dibujadas, que incluyen el
+  // mes en curso a medias, y daba una cifra distinta a la del titular: dos "promedios"
+  // en la misma pantalla. El respaldo es la media de las barras, por si no hay ningún
+  // mes cerrado todavía.
+  const avgVal = ahorroEstimado(null)
+    ?? (historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length);
   const N = historyData.length;
   
   const graphWidth = 250;
@@ -4129,9 +4243,19 @@ function getCreatorName(creadoPor) {
   return 'Usuario';
 }
 
+// Color de una meta en las vistas de reparto. Los tres tipos comparten paleta con la
+// dona (drawSavingsDonut, ~2226); las metas individuales propias van en el color privado
+// del perfil, el mismo que Inicio usa para el desglose del acumulado.
+const COL_TIPO = { imprevistos:'#3f8a8a', sueno:'#d9a84a', invertir:'#5aa67e' };
+function colorDeMeta(m){
+  if(!m) return COL_TIPO.sueno;
+  if(m.dueno) return m.dueno === 'p1' ? '#c87a53' : '#a36a84';
+  return COL_TIPO[m.tipo] || COL_TIPO.sueno;
+}
+
 function getMonthlyDistributionData(mes) {
   const c = state.config;
-  const distMap = {}; // key: metaId, value: { name, amount, color }
+  const distMap = {}; // key: metaId, value: { id, name, amount, tipo, dueno, color }
 
   // Privacidad: nunca acumular metas individuales del otro perfil.
   const add = (mId, amt) => {
@@ -4139,7 +4263,10 @@ function getMonthlyDistributionData(mes) {
     const m = metaById(mId);
     if (!m) return;
     if (m.dueno && m.dueno !== c.perfil) return;
-    if (!distMap[mId]) distMap[mId] = { name: m.nombre, amount: 0, color: null };
+    if (!distMap[mId]) distMap[mId] = {
+      id: mId, name: m.nombre, amount: 0,
+      tipo: m.tipo, dueno: m.dueno || null, color: colorDeMeta(m)
+    };
     distMap[mId].amount += amt;
   };
 
@@ -4174,7 +4301,8 @@ function getMonthlyDistributionData(mes) {
     }
   });
 
-  return Object.values(distMap).filter(x => x.amount > 0.5);
+  return Object.values(distMap).filter(x => x.amount > 0.5)
+    .sort((a,b) => b.amount - a.amount);
 }
 
 function drawMonthlyDistributionBars(mes) {
