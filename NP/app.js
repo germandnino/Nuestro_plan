@@ -2092,7 +2092,7 @@ function heroMeta(m){
 
 // Barra de propósitos (nivel 1): muestra y edita config.buckets para los buckets PRESENTES.
 // Los % se normalizan a 100 sobre los buckets presentes al guardar.
-function drawBucketBar(dueno){
+function drawBucketBar(dueno, embebido = false){
   const todos = bucketsConMetas(dueno);            // todos los propósitos que el usuario tiene (incl. llenos)
   if(todos.length <= 1) return '';                 // con 0-1 propósitos no hay nada que repartir a nivel 1
   const editables = bucketsPresentes(dueno);       // solo los que tienen cupo (no llenos) → reciben %
@@ -2149,6 +2149,18 @@ function drawBucketBar(dueno){
     const legend = todos.filter(t=>(cfg[t]||0)>0).map(t=>
       `<span class="blgnd"><i style="background:${col[t]}"></i>${meta[t].lbl} ${cfg[t]||0}%</span>`
     ).join('');
+    if (embebido) {
+      return `<div class="bucketbar-toggle" style="cursor:pointer;">
+        <div class="k" style="margin-bottom:7px;">Cómo se repartió</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="bucketbar-seg" style="flex-grow:1; margin-bottom:0;">${segs}</div>
+          <div style="color:var(--cream); display:flex; align-items:center;">
+            ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}
+          </div>
+        </div>
+        <div class="bucketbar-legend">${legend || '<span class="blgnd" style="opacity:.6">Sin asignar</span>'}</div>
+      </div>`;
+    }
     return `
       <div class="card dark bucketbar-collapsed bucketbar-toggle" style="margin-bottom:12px; padding:11px 14px; cursor:pointer; transition: background 0.2s;">
         <div class="k" style="margin-bottom:7px;">${titulo}</div>
@@ -2161,6 +2173,18 @@ function drawBucketBar(dueno){
         <div class="bucketbar-legend">${legend || '<span class="blgnd" style="opacity:.6">Sin asignar</span>'}</div>
       </div>
     `;
+  }
+
+  if (embebido) {
+    return `<div class="bucketbar-toggle" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; cursor:pointer;">
+        <div class="k" style="margin-bottom:0;">Cómo se repartió</div>
+        <div style="color:var(--cream); display:flex; align-items:center; margin-left:8px;">
+          ${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7; transform: rotate(180deg);')}
+        </div>
+      </div>
+      <div class="bucketbar-seg">${segs}</div>
+      <div class="bucketbar-suma">${getSVG('check','','width:13px;height:13px;')} Suma 100%</div>
+      <div class="bucketsliders">${rows}</div>`;
   }
 
   return `
@@ -2176,6 +2200,36 @@ function drawBucketBar(dueno){
       <div class="bucketsliders">${rows}</div>
     </div>
   `;
+}
+
+// Ficha del mes fusionada con el reparto (docs/superpowers/design/MetasA2.dc.html). El
+// neto es el titular; entró y salió quedan como línea de apoyo. Debajo, cómo se repartió
+// ese ahorro entre propósitos — la misma barra de siempre, con sus sliders detrás del
+// toggle. `flujoDelMes` es el mismo que cita Mi Mes.
+function drawMesYReparto(dueno){
+  const mes = curMonth();
+  const f = flujoDelMes(mes);
+  const reparto = drawBucketBar(dueno, true);
+  const nombreMes = fmtMes(mes).split(' ')[0];
+  const netoCol = f.neto >= 0 ? 'var(--gb)' : '#e06c75';
+
+  const sep = reparto
+    ? `<div style="height:1px;background:rgba(246,241,230,.09);margin:13px 0 11px;"></div>`
+    : '';
+
+  return `
+    <div class="card dark" style="padding:14px; margin-bottom:12px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+        <div class="k" style="margin-bottom:0;">${esc(nombreMes)}</div>
+        <div class="num" style="font-size:23px;line-height:1;color:${netoCol};">${f.neto >= 0 ? '+' : ''}${fmt(f.neto)}</div>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:6px;font-size:12px;color:rgba(246,241,230,.6);">
+        <span>Entró <b style="color:rgba(246,241,230,.85);">${fmtK(f.entro)}</b></span>
+        <span>Salió <b style="color:rgba(246,241,230,.85);">${fmtK(f.salio)}</b></span>
+      </div>
+      ${sep}
+      ${reparto}
+    </div>`;
 }
 
 function drawSavingsDonut() {
@@ -2909,7 +2963,7 @@ function renderMetas(){
 
     if (isIndiv) {
       // Modo individual: un solo scope (el perfil). Sin toggle.
-      adviceHtml = drawBucketBar(state.config.perfil);
+      adviceHtml = drawMesYReparto(state.config.perfil);
       const metasIndivCount = metasIndividuales(state.config.perfil).length;
       if (metasIndivCount > 0) {
         listHtml = drawSeccionesPorBucket(state.config.perfil, card);
@@ -2927,7 +2981,7 @@ function renderMetas(){
         </div>
       `;
       if (scope === 'shared') {
-        adviceHtml = drawBucketBar(null);
+        adviceHtml = drawMesYReparto(null);
         const nonDebtShared = metasCompartidas().sort((a,b)=>(a.prioridad||0)-(b.prioridad||0));
         if (nonDebtShared.length > 0) {
           listHtml = drawSeccionesPorBucket(null, card);
@@ -2935,7 +2989,7 @@ function renderMetas(){
           listHtml = emptyMetaCTA('sueno', 'No tienen metas comunes creadas.');
         }
       } else {
-        adviceHtml = drawBucketBar(state.config.perfil);
+        adviceHtml = drawMesYReparto(state.config.perfil);
         const indivs = metasIndividuales(state.config.perfil);
         if (indivs.length > 0) {
           indivHtml = drawSeccionesPorBucket(state.config.perfil, card);
