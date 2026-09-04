@@ -2952,9 +2952,12 @@ function renderMetas(){
         : ((!m.dueno && !isPersonal && !canEditShared())
             ? `<span class="btn-card-edit metacard-lock" title="Solo el Editor puede modificar metas compartidas" aria-label="Bloqueado: solo el Editor" style="opacity:.45;cursor:not-allowed;display:inline-flex;align-items:center;justify-content:center;">${getSVG('lock', '', 'width:13px;height:13px;pointer-events:none;')}</span>`
             : '');
+      // El aporte del mes se funde en la línea de apoyo en vez de ocupar su propia fila:
+      // la tarjeta pasa de tres líneas a dos. Va sin la palabra "este mes" — la pantalla
+      // entera habla del mes en curso y el rótulo se lo llevaba todo el ancho.
       const delMes = aporteMesPorMeta[m.id] || 0;
-      const feedTxt = delMes > 0.5
-        ? `<span class="metacard-got">${getSVG('clock', '', 'width:11px;height:11px;opacity:.7;')} <span style="color:var(--green);font-weight:700;">+${fmtK(delMes)} este mes</span></span>`
+      const delMesTxt = delMes > 0.5
+        ? ` · <span style="color:var(--green);font-weight:700;">+${fmtK(delMes)}</span>`
         : '';
       // El % de aporte vive aquí, rotulado. Un "60%" suelto en grande se leía como
       // progreso — que es justo lo que ahora dice el número de la derecha. Rotulado y en
@@ -2971,17 +2974,16 @@ function renderMetas(){
             ? `<span class="metacard-aporte${flashCls}">Recibe <span class="inline-pct-container"><input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}"><span class="pct-sign">%</span></span></span>`
             : `<span class="metacard-aporte${flashCls}">Recibe ${m.aportePct||0}%</span>`)
         : '';
-      const feedHtml = (feedTxt || pctTxt)
-        ? `<div class="metacard-feed">${feedTxt}${pctTxt}</div>`
-        : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
           ${dragHandle}
           <div class="metacard-main">
             <div class="metacard-title"><span class="metacard-name">${m.nombre}</span></div>
-            <div class="metacard-sub">${sub}</div>
-            ${feedHtml}
+            <div class="metacard-linea">
+              <span class="metacard-sub">${sub}${delMesTxt}</span>
+              ${pctTxt}
+            </div>
           </div>
           ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : editBtn)}
         </div>
