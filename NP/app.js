@@ -2240,9 +2240,7 @@ function drawSavingsDonut() {
       <span>Distribución de Ahorros</span>
       <span style="display:inline-flex; color:var(--cream); transform:rotate(${_distAhorrosCollapsed ? '0' : '180'}deg); transition:transform .2s;">${getSVG('chevronDown', '', 'width:16px; height:16px; opacity:0.7;')}</span>
     </div>
-    <div style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:rgba(246,241,230,.5);">Total acumulado</div>
-    <div class="num" style="font-family:var(--serif); font-size:28px; font-weight:600; color:var(--cream); line-height:1.1; margin-bottom:12px;">${fmtK(total)}</div>
-    <div style="display:flex; gap:2px; height:12px; margin-bottom:9px;">${segmentos}</div>
+    <div style="display:flex; gap:2px; height:12px; margin-bottom:12px;">${segmentos}</div>
     <div style="display:flex; flex-wrap:wrap; gap:6px 14px;">${leyenda}</div>
     ${detalle}
   </div>`;
@@ -2574,7 +2572,6 @@ function drawStatsBI(){
   if (n === 0) return '';
   const ahorros = meses.map(ahorroMesUI);
   const totalAhorrado = ahorros.reduce((s, v) => s + v, 0);
-  const avgAhorro = totalAhorrado / n;
 
   let bestIdx = 0;
   ahorros.forEach((v, i) => { if (v > ahorros[bestIdx]) bestIdx = i; });
@@ -2593,16 +2590,6 @@ function drawStatsBI(){
     if (mesAnterior(meses[i]) === meses[i - 1]) racha++; else break;
   }
 
-  const lastAhorro = ahorros[n - 1];
-  let trend = '';
-  if (avgAhorro > 0 && n >= 2) {
-    const diff = Math.round((lastAhorro - avgAhorro) / avgAhorro * 100);
-    if (diff !== 0) {
-      const up = diff > 0;
-      trend = `<span style="font-size:11px;font-weight:700;color:${up ? '#0f8f2c' : '#c0673f'};margin-left:6px;">${up ? '↑' : '↓'} ${Math.abs(diff)}%</span>`;
-    }
-  }
-
   const tile = (label, value, sub) => `
     <div style="background:rgba(246,241,230,.04); border-radius:10px; padding:11px 12px;">
       <div style="font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:var(--gb); margin-bottom:4px;">${label}</div>
@@ -2611,7 +2598,6 @@ function drawStatsBI(){
     </div>`;
 
   let tiles = '';
-  tiles += tile('Ahorro mensual prom.', `${fmtK(avgAhorro)}${trend}`, '');
   // Es la suma de lo que ha entrado al plan, no el saldo actual (la dona de arriba muestra ese).
   tiles += tile('Total aportado', fmtK(totalAhorrado), 'en movimientos');
   tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
