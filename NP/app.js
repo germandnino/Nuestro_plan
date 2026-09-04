@@ -2453,6 +2453,12 @@ function drawHeroMes(){
   let cmpHtml;
   if (r.delta == null) {
     cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">Aún no hay meses cerrados con qué comparar.</div>`;
+  } else if (r.ahorro <= 0.5) {
+    // Sin esta rama, el primer día de cada mes la tarjeta le dice a todo el mundo "van
+    // 100% por debajo de su promedio". Es exacto y es un regaño automático por un estado
+    // normal: el mes apenas arranca. Aquí el promedio se enuncia como referencia, no
+    // como vara.
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">${esPareja?'Todavía no han aportado este mes':'Todavía no has aportado este mes'}. ${esPareja?'Su':'Tu'} promedio es ${fmtK(r.promedio)}.</div>`;
   } else if (r.delta === 0) {
     cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.75);margin-top:5px;">${esPareja?'Van':'Vas'} justo en ${esPareja?'su':'tu'} promedio de ${fmtK(r.promedio)}</div>`;
   } else {
