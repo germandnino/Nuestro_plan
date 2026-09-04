@@ -6007,7 +6007,7 @@ function renderPlan(){
       <li>Presiona <b>Agregar</b> arriba a la derecha.</li>
     </ol>
   </div>
-  <div id="pwaGenericHint" style="margin-top:10px;font-size:12px;color:rgba(246,241,230,.5);line-height:1.4">
+  <div id="pwaGenericHint" style="margin-top:10px;font-size:12px;color:var(--gs);line-height:1.4">
     ${isIOS() ? '' : 'Si tu navegador no muestra el botón de instalación directa, abre el menú de opciones (tres puntos) y selecciona <b>Instalar aplicación</b> o <b>Agregar a pantalla de inicio</b>.'}
   </div>
 </div></details>
