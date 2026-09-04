@@ -2512,6 +2512,38 @@ function drawHeroMes(){
   </div>`;
 }
 
+// "A dónde fue" el ahorro del mes. Las metas individuales propias van con nombre y en
+// el color privado; las del otro perfil ni llegan hasta acá (getMonthlyDistributionData
+// las filtra). Ver docs/superpowers/design/Main.dc.html.
+function drawDestinoMes(){
+  const data = getMonthlyDistributionData(curMonth());
+  if (data.length === 0) return '';
+
+  const mayor = data.reduce((mx,x) => Math.max(mx, x.amount), 0) || 1;
+  const hayPrivadas = data.some(x => x.dueno);
+
+  const filas = data.map((x,i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;${i>0?'border-top:1px solid rgba(246,241,230,.07);':''}">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${x.color};flex-shrink:0;"></span>
+      <div style="flex:1;font-size:13px;color:rgba(246,241,230,.9);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)}</div>
+      <div style="width:74px;height:7px;border-radius:4px;background:rgba(246,241,230,.12);overflow:hidden;flex-shrink:0;">
+        <i style="display:block;height:100%;width:${((x.amount/mayor)*100).toFixed(1)}%;border-radius:4px;background:${x.color};"></i>
+      </div>
+      <div class="num" style="font-size:13.5px;width:66px;text-align:right;flex-shrink:0;">${fmtK(x.amount)}</div>
+    </div>`).join('');
+
+  const pie = hayPrivadas
+    ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(246,241,230,.07);font-size:11px;color:rgba(246,241,230,.45);">Las metas en color ${state.config.perfil === 'p1' ? 'terracota' : 'ciruela'} son tuyas y solo tú las ves.</div>`
+    : '';
+
+  return `
+    <div class="stitle">A dónde fue</div>
+    <div class="card" style="padding:12px 14px;">
+      ${filas}
+      ${pie}
+    </div>`;
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
