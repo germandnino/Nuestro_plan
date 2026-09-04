@@ -2080,7 +2080,6 @@ function renderInicio(){
   $('btnGoAjustes').onclick = () => go(4);
   if ($('btnHeroAdd')) $('btnHeroAdd').onclick = () => openAsistenteIngresoExtra();
   if ($('btnHeroMes')) $('btnHeroMes').onclick = () => go(2);
-  if ($('btnAcumulado')) $('btnAcumulado').onclick = () => go(1);
   if ($('btnGoMiMes')) $('btnGoMiMes').onclick = () => go(2);
   if ($('btnGoAddMeta')) $('btnGoAddMeta').onclick = () => openMetaForm(null);
   if ($('btnGoAddExtra')) $('btnGoAddExtra').onclick = () => openAsistenteIngresoExtra();
@@ -2615,22 +2614,24 @@ function pieAcumulado(){
   if (grande <= 0.5 && pat.totalIndividual <= 0.5) return '';
   const indivColor = c.perfil === 'p1' ? '#c87a53' : '#a36a84';
 
-  const etiqueta = soloLoMio ? 'Tuyo' : esPareja ? 'De los dos' : 'Acumulado';
+  // Va rotulado y completo: "de los dos $21.000.000" a secas, debajo de la cifra del mes,
+  // se leía como si fuera del mes. La palabra "acumulado" es la que separa las dos.
+  const etiqueta = soloLoMio ? 'Tu acumulado, privado'
+                 : esPareja ? 'Acumulado de los dos'
+                 : 'Acumulado';
   const priv = (!soloLoMio && esPareja && pat.totalIndividual > 0.5)
-    ? `<span style="color:rgba(246,241,230,.5);"> · <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${indivColor};margin-right:3px;"></span>tuyo ${fmtK(pat.totalIndividual)}</span>`
+    ? `<span style="color:rgba(246,241,230,.45);"> · <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${indivColor};margin-right:3px;"></span>tuyo ${fmtK(pat.totalIndividual)}</span>`
     : '';
 
-  // El acumulado vive dentro de la ficha del mes, no en su propia tarjeta: es una cifra
-  // que casi no se mueve y no pide ninguna acción, así que una sección entera para ella
-  // era mucha pantalla. Aquí cierra el paquete — cuánto llevan este mes, y cuánto suman
-  // en total — y sigue llevando a Metas, que es donde está el desglose por meta.
+  // Sin enlace ni chevron: es un dato para leer, no una acción. El desglose por meta ya
+  // está a un toque en el nav de abajo, y el chevron prometía algo que no valía el viaje.
   return `
-    <button id="btnAcumulado" style="width:100%;margin-top:13px;padding-top:11px;border:none;border-top:1px solid rgba(246,241,230,.1);background:none;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;">
-      <span style="font-size:12px;color:rgba(246,241,230,.6);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        <span style="font-weight:700;color:rgba(246,241,230,.75);">${etiqueta} <span class="num">${fmt(grande)}</span></span>${priv}
+    <div style="margin-top:13px;padding-top:11px;border-top:1px solid rgba(246,241,230,.1);display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;">
+      <span style="color:rgba(246,241,230,.55);white-space:nowrap;">${etiqueta}</span>
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">
+        <span class="num" style="font-weight:700;color:rgba(246,241,230,.8);">${fmt(grande)}</span>${priv}
       </span>
-      <span style="display:inline-flex;color:rgba(246,241,230,.35);flex-shrink:0;">${getSVG('chevronDown', '', 'width:15px;height:15px;transform:rotate(-90deg);')}</span>
-    </button>`;
+    </div>`;
 }
 
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
