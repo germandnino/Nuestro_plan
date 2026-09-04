@@ -2463,6 +2463,55 @@ function resumenMesInicio(){
   return { mes, ahorro, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
 }
 
+// Tarjeta titular de Inicio: el mes en curso. Sustituye al patrimonio como número
+// grande — el acumulado casi no cambia de un día a otro y no sugiere ninguna acción,
+// mientras que "cuánto llevo este mes" sí. Ver docs/superpowers/design/Main.dc.html.
+function drawHeroMes(){
+  const r = resumenMesInicio();
+  const esPareja = state.config.modo !== 'individual';
+
+  const diasTxt = r.diasRestantes <= 0
+    ? 'último día del mes'
+    : r.diasRestantes === 1 ? 'queda 1 día' : `quedan ${r.diasRestantes} días`;
+
+  let cmpHtml;
+  if (r.delta == null) {
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">Aún no hay meses cerrados con qué comparar.</div>`;
+  } else if (r.delta === 0) {
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.75);margin-top:5px;">${esPareja?'Van':'Vas'} justo en ${esPareja?'su':'tu'} promedio de ${fmtK(r.promedio)}</div>`;
+  } else {
+    const arriba = r.delta > 0;
+    const col = arriba ? '#3fcf8e' : '#e0a341';
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.75);margin-top:5px;">${esPareja?'Van':'Vas'} <b style="color:${col};">${Math.abs(r.delta)}% por ${arriba?'encima':'debajo'}</b> de ${esPareja?'su':'tu'} promedio de ${fmtK(r.promedio)}</div>`;
+  }
+
+  const marcaHtml = r.pctPromedio != null
+    ? `<span style="position:absolute;top:-4px;bottom:-4px;left:${r.pctPromedio.toFixed(1)}%;width:2px;background:rgba(246,241,230,.55);border-radius:1px;"></span>`
+    : '';
+  const escalaHtml = r.pctPromedio != null
+    ? `<div style="display:flex;justify-content:space-between;font-size:10.5px;color:rgba(246,241,230,.45);margin-top:6px;"><span>$0</span><span>promedio ${fmtK(r.promedio)}</span><span>${fmtK(r.techo)}</span></div>`
+    : '';
+
+  return `
+  <div class="card dark" style="padding:16px;position:relative;overflow:hidden;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+      <div style="font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--gb);">${esc(fmtMes(r.mes))}</div>
+      <div style="font-size:11px;color:rgba(246,241,230,.5);">${diasTxt}</div>
+    </div>
+    <div class="num" style="font-size:38px;line-height:1;margin-top:6px;color:var(--cream);">${fmt(r.ahorro)}</div>
+    ${cmpHtml}
+    <div style="margin-top:14px;height:10px;border-radius:6px;background:rgba(246,241,230,.13);position:relative;overflow:hidden;">
+      <i style="position:absolute;left:0;top:0;bottom:0;width:${r.pctAhorro.toFixed(1)}%;background:var(--gb);border-radius:6px;"></i>
+      ${marcaHtml}
+    </div>
+    ${escalaHtml}
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn gold" id="btnHeroAdd" style="flex:1;margin:0;padding:11px 8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;">${getSVG('plus')} Añadir dinero</button>
+      <button class="btn ghost" id="btnHeroMes" style="flex:1;margin:0;padding:11px 8px;font-size:13px;font-weight:700;border:1px solid rgba(246,241,230,.35) !important;color:var(--cream) !important;background:transparent !important;">Ver el mes</button>
+    </div>
+  </div>`;
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
