@@ -2072,6 +2072,12 @@ function renderInicio(){
   `;
 
   // Asignar clics
+  // El chevron de Distribución de Ahorros se enganchaba en renderMetas (r1) desde la
+  // v1.0.51, pero drawSavingsDonut pinta en Inicio (r0): llevaba ocho versiones sin hacer
+  // nada. Va donde de verdad está la tarjeta.
+  $('r0').querySelectorAll('.distahorros-toggle').forEach(el => {
+    el.onclick = () => { _distAhorrosCollapsed = !_distAhorrosCollapsed; renderInicio(); };
+  });
   $('btnGoAjustes').onclick = () => go(4);
   if ($('btnHeroAdd')) $('btnHeroAdd').onclick = () => openAsistenteIngresoExtra();
   if ($('btnHeroMes')) $('btnHeroMes').onclick = () => go(2);
@@ -3071,13 +3077,6 @@ function renderMetas(){
 
   const btnLogros = $('btnVerLogros');
   if (btnLogros) btnLogros.onclick = () => { curMetasSubTab = enLogros ? 0 : 1; rerender(); };
-
-  $('r1').querySelectorAll('.distahorros-toggle').forEach(el => {
-    el.onclick = () => {
-      _distAhorrosCollapsed = !_distAhorrosCollapsed;
-      rerender();
-    };
-  });
 
   $('r1').querySelectorAll('.bucketbar-toggle').forEach(btn => {
     btn.onclick = () => {
