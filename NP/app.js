@@ -2650,8 +2650,9 @@ function pieAcumulado(){
   const etiqueta = soloLoMio ? 'Tu acumulado, privado'
                  : esPareja ? 'Acumulado de los dos'
                  : 'Acumulado';
+  // Hereda el tono del monto: la línea entera son dos tonos y un peso, no tres de cada.
   const priv = (!soloLoMio && esPareja && pat.totalIndividual > 0.5)
-    ? `<span style="color:rgba(246,241,230,.45);"> · <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${indivColor};margin-right:3px;"></span>tuyo ${fmtK(pat.totalIndividual)}</span>`
+    ? ` · <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${indivColor};margin-right:3px;"></span>tuyo ${fmtK(pat.totalIndividual)}`
     : '';
 
   // Sin enlace ni chevron: es un dato para leer, no una acción. El desglose por meta ya
@@ -2659,9 +2660,7 @@ function pieAcumulado(){
   return `
     <div style="margin-top:13px;padding-top:11px;border-top:1px solid rgba(246,241,230,.1);display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;font-variant-numeric:tabular-nums;">
       <span style="color:rgba(246,241,230,.55);white-space:nowrap;">${etiqueta}</span>
-      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">
-        <span style="font-weight:700;color:rgba(246,241,230,.8);">${fmt(grande)}</span>${priv}
-      </span>
+      <span style="font-weight:600;color:rgba(246,241,230,.75);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${fmtK(grande)}${priv}</span>
     </div>`;
 }
 
