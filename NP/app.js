@@ -4671,22 +4671,20 @@ function renderMiMes(){
   
   const transactions = processTransactionsForDisplay(rawAll);
   
+  // El neto es la única cifra grande de la pantalla (docs/superpowers/design/MiMesA.dc.html).
+  // Entró y salió bajan a una línea de apoyo: antes eran tres tiles del mismo tamaño y
+  // ninguno mandaba. El signo va por fuera porque fmt() con negativos lo mete después del
+  // peso ("$-300.000"), que a este tamaño se lee como error de tipeo.
+  const netoTxt = `${netSaved >= 0 ? '+' : '−'}${fmt(Math.abs(netSaved))}`;
   const metricsHtml = `
-    <div class="card" style="padding:16px; display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; text-align:center;">
-      <div>
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Ingresos</div>
-        <div style="font-size:15px; font-weight:700; color:var(--green); margin-top:4px;" class="num">+${fmtK(totalIn)}</div>
+    <div style="margin:2px 0 4px;">
+      <div style="font-size:11px;font-weight:700;color:rgba(246,241,230,.55);text-transform:uppercase;letter-spacing:.1em;">Neto del mes</div>
+      <div class="num" style="font-size:34px;line-height:1;margin-top:5px;color:${netSaved >= 0 ? 'var(--gb)' : '#e06c75'};">${netoTxt}</div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:12.5px;color:rgba(246,241,230,.6);">
+        <span>Entró <b style="color:rgba(246,241,230,.88);">${fmtK(totalIn)}</b></span>
+        <span>Salió <b style="color:rgba(246,241,230,.88);">${fmtK(totalOut)}</b></span>
       </div>
-      <div style="border-left:1px solid var(--line); border-right:1px solid var(--line);">
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Retiros</div>
-        <div style="font-size:15px; font-weight:700; color:#e06c75; margin-top:4px;" class="num">-${fmtK(totalOut)}</div>
-      </div>
-      <div>
-        <div style="font-size:11px; font-weight:700; color:var(--gs); text-transform:uppercase; letter-spacing:0.05em;">Neto</div>
-        <div style="font-size:15px; font-weight:700; color:${netSaved >= 0 ? 'var(--gold)' : '#e06c75'}; margin-top:4px;" class="num">${netSaved >= 0 ? '+' : ''}${fmtK(netSaved)}</div>
-      </div>
-    </div>
-  `;
+    </div>`;
   
   // El chevron solo tiene sentido si hay barras que plegar.
   const hayBarras = getMonthlyDistributionData(mes).length > 0;
