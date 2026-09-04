@@ -2056,7 +2056,6 @@ function renderInicio(){
     ? `${drawHeroMes()}
        ${drawSinAsignarCard()}
        ${drawDestinoMes()}
-       ${drawAcumuladoRow()}
        <div class="stitle">Cómo van sus metas</div>
        ${drawSavingsDonut()}
        <div style="height:12px;"></div>
@@ -2566,6 +2565,7 @@ function drawHeroMes(){
       <button class="btn gold" id="btnHeroAdd" style="flex:1;margin:0;padding:11px 8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:6px;">${getSVG('plus')} Añadir dinero</button>
       <button class="btn ghost" id="btnHeroMes" style="flex:1;margin:0;padding:11px 8px;font-size:13px;font-weight:700;border:1px solid rgba(246,241,230,.35) !important;color:var(--cream) !important;background:transparent !important;">Ver el mes</button>
     </div>
+    ${pieAcumulado()}
   </div>`;
 }
 
@@ -2604,7 +2604,7 @@ function drawDestinoMes(){
 // El acumulado, ahora secundario. En pareja el número es solo lo compartido, para que
 // sea idéntico en los dos teléfonos; lo individual va debajo como línea propia. Esa
 // regla no cambió con el rediseño, solo bajó de tamaño.
-function drawAcumuladoRow(){
+function pieAcumulado(){
   const c = state.config;
   const esPareja = c.modo !== 'individual';
   const pat = patrimonioResumen();
@@ -2612,24 +2612,24 @@ function drawAcumuladoRow(){
   const grande = soloLoMio ? pat.totalIndividual
                : esPareja ? pat.totalPareja
                : pat.totalPareja + pat.totalIndividual;
+  if (grande <= 0.5 && pat.totalIndividual <= 0.5) return '';
   const indivColor = c.perfil === 'p1' ? '#c87a53' : '#a36a84';
 
-  const etiqueta = soloLoMio ? 'Tuyo, privado'
-                 : esPareja ? 'De los dos'
-                 : 'Tus ahorros e inversiones';
-  const sub = (!soloLoMio && esPareja && pat.totalIndividual > 0.5)
-    ? `<div style="font-size:11.5px;color:rgba(246,241,230,.55);margin-top:3px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${indivColor};margin-right:4px;"></span>Tuyo, privado: ${fmt(pat.totalIndividual)}</div>`
+  const etiqueta = soloLoMio ? 'Tuyo' : esPareja ? 'De los dos' : 'Acumulado';
+  const priv = (!soloLoMio && esPareja && pat.totalIndividual > 0.5)
+    ? `<span style="color:rgba(246,241,230,.5);"> · <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${indivColor};margin-right:3px;"></span>tuyo ${fmtK(pat.totalIndividual)}</span>`
     : '';
 
+  // El acumulado vive dentro de la ficha del mes, no en su propia tarjeta: es una cifra
+  // que casi no se mueve y no pide ninguna acción, así que una sección entera para ella
+  // era mucha pantalla. Aquí cierra el paquete — cuánto llevan este mes, y cuánto suman
+  // en total — y sigue llevando a Metas, que es donde está el desglose por meta.
   return `
-    <div class="stitle">Acumulado</div>
-    <button id="btnAcumulado" style="width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(246,241,230,.04);border:1px solid rgba(246,241,230,.08);border-radius:14px;padding:12px 14px;margin-bottom:12px;color:var(--cream);font:inherit;">
-      <div style="min-width:0;">
-        <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:rgba(246,241,230,.55);">${etiqueta}</div>
-        <div class="num" style="font-size:22px;line-height:1;margin-top:3px;color:var(--cream);">${fmt(grande)}</div>
-        ${sub}
-      </div>
-      <span style="display:inline-flex;color:rgba(246,241,230,.4);flex-shrink:0;">${getSVG('chevronDown', '', 'width:18px;height:18px;transform:rotate(-90deg);')}</span>
+    <button id="btnAcumulado" style="width:100%;margin-top:13px;padding-top:11px;border:none;border-top:1px solid rgba(246,241,230,.1);background:none;font:inherit;color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;">
+      <span style="font-size:12px;color:rgba(246,241,230,.6);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <span style="font-weight:700;color:rgba(246,241,230,.75);">${etiqueta} <span class="num">${fmt(grande)}</span></span>${priv}
+      </span>
+      <span style="display:inline-flex;color:rgba(246,241,230,.35);flex-shrink:0;">${getSVG('chevronDown', '', 'width:15px;height:15px;transform:rotate(-90deg);')}</span>
     </button>`;
 }
 
