@@ -2565,6 +2565,24 @@ function ahorroMesUI(mes){
     .reduce((s, i) => s + i.monto, 0) + entrantesHuerfanasUI(mes);
 }
 
+// Entró, salió y neto de un mes, con los mismos filtros de privacidad que el timeline.
+// Lo consumen Mi Mes y la ficha del mes de Metas: si cada pantalla lo recalculara por su
+// cuenta acabarían mostrando cifras distintas del mismo mes.
+function flujoDelMes(mes){
+  const entry = state.log.find(e => e.mes === mes);
+  const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
+  const perfilActivo = state.config.perfil;
+  const entro = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar))
+    .reduce((s, ing) => s + ing.monto, 0) + baseApplied + entrantesHuerfanasUI(mes);
+  const salio = state.gastos.filter(g => {
+    if ((g.fecha || '').substring(0, 7) !== mes) return false;
+    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
+    if (gastoDeMetaAjena(g, perfilActivo)) return false;
+    return true;
+  }).reduce((s, g) => s + g.monto, 0);
+  return { entro, salio, neto: entro - salio };
+}
+
 // Una pata marcada solo cuenta como movimiento del mes cuando su contraparte NO llegó
 // a este dispositivo. Si las dos están visibles — una transferencia entre una meta
 // compartida y una meta individual PROPIA, donde la pata saneada vuelve por shared y
@@ -4537,25 +4555,12 @@ function renderMiMes(){
   const mes=selectedMonth || curMonth();
   const canEdit=canEditShared();
   
-  const entry = state.log.find(e => e.mes === mes);
-  const baseApplied = (entry && entry.aplicado && entry.reparto) ? (entry.reparto.entra || 0) : 0;
-  
   // Privacidad: la pareja solo ve movimientos de metas conjuntas. Se ocultan los
   // ingresos privados del otro perfil y los gastos que tocan una meta individual ajena.
   const perfilActivo = state.config.perfil;
 
-  // Mismo criterio que ahorroMesUI(): se excluyen los sobrantes sin asignar (ya contados en su
-  // ingreso de origen) y los movimientos privados del otro perfil.
-  const totalIn = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar)).reduce((sum, ing) => sum + ing.monto, 0) + baseApplied + entrantesHuerfanasUI(mes);
-  const totalOut = state.gastos.filter(g => {
-    if ((g.fecha||'').substring(0, 7) !== mes) return false;
-    // Salidas reales + patas huérfanas salientes: en ambos casos la plata dejó
-    // una meta compartida y no hay contraparte visible que la compense.
-    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
-    if (gastoDeMetaAjena(g, perfilActivo)) return false; // retiro de meta individual ajena
-    return true;
-  }).reduce((sum, g) => sum + g.monto, 0);
-  const netSaved = totalIn - totalOut;
+  // flujoDelMes es la misma fuente que usa la ficha del mes de Metas.
+  const { entro: totalIn, salio: totalOut, neto: netSaved } = flujoDelMes(mes);
   const listIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).map(ing => ({
     type: 'ingreso',
     id: ing.id,
