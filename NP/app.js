@@ -2409,6 +2409,14 @@ function mesesConDatosUI(){
     const mes = (g.fecha || '').substring(0, 7);
     if (mes) set[mes] = true;
   });
+  // Un mes cuyo único movimiento fue un retiro también cuenta. Sin esto desaparecía de la
+  // curva de evolución y de "Constancia": el mes existía en Mi Mes pero no en Inicio.
+  state.gastos.forEach(g => {
+    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return;
+    if (gastoDeMetaAjena(g, state.config.perfil)) return;
+    const mes = (g.fecha || '').substring(0, 7);
+    if (mes) set[mes] = true;
+  });
   return Object.keys(set).sort();
 }
 /* ---------- estimación de ahorro desde el historial ---------- */
@@ -2421,6 +2429,16 @@ function mesesConDatosUI(){
 // no tuviera historial: sin promedio, sin comparación y sin sugerencias en Aprender.
 function scopeVista(){
   return state.config.modo === 'individual' ? state.config.perfil : null;
+}
+// ¿Esta salida pertenece al scope? Compartido = meta sin dueño; individual = meta de ese
+// perfil. Con la meta ya borrada cae al duenoMeta estampado, igual que gastoDeMetaAjena.
+// Solo cuenta lo que de verdad sale del plan: las transferencias entre metas visibles se
+// compensan solas y no cambian cuánto se ahorró.
+function gastoDeScope(g, dueno){
+  if (!g || (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g)))) return false;
+  const m = metaById(g.meta);
+  const d = m ? (m.dueno || null) : (g.duenoMeta || null);
+  return dueno ? d === dueno : d === null;
 }
 function ingresoDeScope(i, dueno){
   if(!i || i.sinAsignar) return false;
@@ -2439,9 +2457,14 @@ function huerfanaVisible(g){
 function ahorroMesScope(mes, dueno){
   const ing = state.ingresos.reduce((s,i)=>
     (i.mes === mes && ingresoDeScope(i, dueno)) ? s + (i.monto||0) : s, 0);
-  if(dueno) return ing;
+  // NETO: los retiros bajan el ahorro del mes. Este número alimenta ahorroEstimado, que a
+  // su vez alimenta el ETA de TODAS las metas: contarlo en bruto prometía fechas de llegada
+  // que el plan no iba a cumplir, porque la plata que entró volvió a salir.
+  const sal = state.gastos.reduce((s,g)=>
+    ((g.fecha||'').substring(0,7) === mes && gastoDeScope(g, dueno)) ? s + (g.monto||0) : s, 0);
+  if(dueno) return ing - sal;
   return ing + state.gastos.reduce((s,g)=>
-    (g.fecha && g.fecha.substring(0,7) === mes && huerfanaVisible(g)) ? s + (g.monto||0) : s, 0);
+    (g.fecha && g.fecha.substring(0,7) === mes && huerfanaVisible(g)) ? s + (g.monto||0) : s, 0) - sal;
 }
 
 // Meses 'YYYY-MM' con movimientos en ese scope, en orden ascendente.
@@ -2458,6 +2481,13 @@ function mesesConDatosScope(dueno){
       const mes = g.fecha.substring(0,7);
       if(YM.test(mes)) set[mes] = true;
     }
+  });
+  // Un mes en el que SOLO se retiró también es un mes con datos: si no, desaparece de la
+  // serie y el promedio se calcula como si ese mes no hubiera existido.
+  state.gastos.forEach(g=>{
+    if(!gastoDeScope(g, dueno)) return;
+    const mes = (g.fecha||'').substring(0,7);
+    if(YM.test(mes)) set[mes] = true;
   });
   return Object.keys(set).sort();
 }
@@ -2507,9 +2537,9 @@ function ahorroEstimado(dueno){
 function resumenMesInicio(){
   const mes = curMonth();
   const esPareja = state.config.modo !== 'individual';
-  const total = ahorroMesUI(mes);
-  const privadoVisible = especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
-    .reduce((s, i) => s + (i.privado ? i.monto : 0), 0);
+  // NETO, y del desglose que flujoDelMes ya calcula: restar el privado BRUTO de un total
+  // NETO daría una cifra que no es ninguna de las dos cuando hubo retiros privados.
+  const f = flujoDelMes(mes);
 
   // En pareja el titular es SOLO lo común, la misma regla que ya sigue el acumulado
   // (ver patrimonioResumen): la cifra del mes queda idéntica en los dos teléfonos, que es
@@ -2522,8 +2552,8 @@ function resumenMesInicio(){
   //
   // En individual no hay "común" que separar: todo movimiento se marca privado, así que
   // el titular es el total y el promedio se toma del scope del propio perfil.
-  const ahorro = esPareja ? Math.max(0, total - privadoVisible) : total;
-  const privado = esPareja ? privadoVisible : 0;
+  const ahorro = esPareja ? f.netoComun : f.neto;
+  const privado = esPareja ? f.netoPriv : 0;
   const promedio = ahorroEstimado(scopeVista());
   const hoy = new Date();
   const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
@@ -2531,7 +2561,9 @@ function resumenMesInicio(){
 
   // Techo del riel: lo más alto entre lo que llevan y su promedio, con 15% de aire para
   // que una barra al tope no se lea como "ya terminaron".
-  const techo = Math.max(ahorro, promedio || 0) * 1.15 || 1;
+  // Con retiros el mes puede cerrar en negativo; el techo se mide en valor absoluto para
+  // que el riel siga teniendo escala.
+  const techo = Math.max(Math.abs(ahorro), promedio || 0) * 1.15 || 1;
   const pctAhorro = Math.min(100, Math.max(0, (ahorro / techo) * 100));
   const pctPromedio = promedio != null ? Math.min(100, Math.max(0, (promedio / techo) * 100)) : null;
 
@@ -2540,7 +2572,7 @@ function resumenMesInicio(){
     delta = Math.round(((ahorro - promedio) / promedio) * 100);
   }
 
-  return { mes, ahorro, privado, total, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
+  return { mes, ahorro, privado, total: f.neto, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
 }
 
 // Tarjeta titular de Inicio: el mes en curso. Sustituye al patrimonio como número
@@ -2675,8 +2707,16 @@ function pieAcumulado(){
     </div>`;
 }
 
+// Ahorro NETO del mes: lo que entró menos lo que salió. Es la cifra que responde "cuánto
+// ahorré este mes", y la que consumen el titular de Inicio, la curva de evolución y las
+// estadísticas. ahorroMesUI (bruto) se queda como base de REPARTO: los retiros no se
+// reparten, así que proyectar cuánto va a cada propósito se hace sobre lo que entró.
+function ahorroNetoMesUI(mes){
+  return flujoDelMes(mes).neto;
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
-// ya contados en su ingreso de origen).
+// ya contados en su ingreso de origen). BRUTO: no resta retiros. Ver ahorroNetoMesUI.
 function ahorroMesUI(mes){
   return especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
     .reduce((s, i) => s + i.monto, 0) + entrantesHuerfanasUI(mes);
@@ -2738,7 +2778,8 @@ function drawStatsBI(){
   const meses = mesesConDatosUI();
   const n = meses.length;
   if (n === 0) return '';
-  const ahorros = meses.map(ahorroMesUI);
+  // NETO: un mes en el que se retiró más de lo que entró cuenta como lo que fue.
+  const ahorros = meses.map(ahorroNetoMesUI);
   const totalAhorrado = ahorros.reduce((s, v) => s + v, 0);
 
   let bestIdx = 0;
@@ -2748,9 +2789,14 @@ function drawStatsBI(){
   // la app dejó de capturar el ingreso cuando el onboarding quitó las nóminas, así que
   // el tile nunca se renderizaba. Para reactivarla hace falta una fuente de ingreso.
 
-  let racha = n ? 1 : 0;
-  for (let i = meses.length - 1; i > 0; i--) {
-    if (mesPrevio(meses[i]) === meses[i - 1]) racha++; else break;
+  // Constancia cuenta solo los meses en los que de verdad se ahorró: un mes que cerró en
+  // negativo entra en la curva y en el total —porque esa plata salió— pero retirar no es
+  // ahorrar, y contarlo como mes de constancia premiaría lo contrario de lo que mide.
+  const mesesAhorrados = meses.filter((mm, i) => ahorros[i] > 0);
+  const nAhorrados = mesesAhorrados.length;
+  let racha = nAhorrados ? 1 : 0;
+  for (let i = mesesAhorrados.length - 1; i > 0; i--) {
+    if (mesPrevio(mesesAhorrados[i]) === mesesAhorrados[i - 1]) racha++; else break;
   }
 
   const tile = (label, value, sub) => `
@@ -2762,9 +2808,9 @@ function drawStatsBI(){
 
   let tiles = '';
   // Es la suma de lo que ha entrado al plan, no el saldo actual (la dona de arriba muestra ese).
-  tiles += tile('Total aportado', fmtK(totalAhorrado), 'en movimientos');
+  tiles += tile('Total ahorrado', fmtK(totalAhorrado), 'neto de retiros');
   tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
-  tiles += tile('Constancia', `${n} ${n === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
+  tiles += tile('Constancia', `${nAhorrados} ${nAhorrados === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
 
   return `<div class="card dark" style="padding:18px 16px; margin-bottom:12px;">
     <div class="k" style="margin-bottom:14px;">Estadísticas</div>
@@ -2793,7 +2839,7 @@ function drawSavingsHistoryCard() {
       <div class="k" style="color:rgba(246,241,230,.5)">Evolución del Ahorro</div>
       <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-top:10px;">
         <span style="font-size:12.5px; color:rgba(246,241,230,.7);">${fmtMes(unico)}</span>
-        <span class="num" style="font-size:18px; font-weight:700; color:var(--cream);">${fmtK(ahorroMesUI(unico))}</span>
+        <span class="num" style="font-size:18px; font-weight:700; color:var(--cream);">${fmtK(ahorroNetoMesUI(unico))}</span>
       </div>
       <div style="font-size:12px; color:rgba(246,241,230,.5); line-height:1.45; margin-top:8px;">
         Llevas un mes con movimientos. El próximo mes podrás comparar y verás la curva.
@@ -2803,10 +2849,12 @@ function drawSavingsHistoryCard() {
 
   const historyData = mesesUI.slice(-6).map(m => ({
     mesLabel: fmtMes(m),
-    ahorro: ahorroMesUI(m)
+    ahorro: ahorroNetoMesUI(m)
   }));
 
-  const maxVal = Math.max(...historyData.map(d => d.ahorro), 500000);
+  // Con retiros un mes puede cerrar en negativo, así que la escala se mide en valor
+  // absoluto y las barras negativas cuelgan HACIA ABAJO de la línea base.
+  const maxVal = Math.max(...historyData.map(d => Math.abs(d.ahorro)), 500000);
   // El promedio de referencia es el mismo que cita la tarjeta del mes (ahorroEstimado:
   // SMA de 6 meses cerrados). Antes se promediaban las barras dibujadas, que incluyen el
   // mes en curso a medias, y daba una cifra distinta a la del titular: dos "promedios"
@@ -2823,16 +2871,20 @@ function drawSavingsHistoryCard() {
   const colWidth = graphWidth / N;
   const barWidth = Math.min(26, colWidth * 0.5);
 
+  const hayNegativos = historyData.some(d => d.ahorro < 0);
   let barElements = '';
   historyData.forEach((d, i) => {
-    const barHeight = Math.max(4, (d.ahorro / maxVal) * plotH);
+    const neg = d.ahorro < 0;
+    const barHeight = Math.max(4, (Math.abs(d.ahorro) / maxVal) * plotH);
     const x = startX + i * colWidth + (colWidth - barWidth) / 2;
-    const y = startY - barHeight;
+    const y = neg ? startY : startY - barHeight;
+    const fill = neg ? '#e06c75' : (d.ahorro >= avgVal ? 'var(--gb)' : 'rgba(246,241,230,.25)');
+    const yTexto = neg ? startY + barHeight + 11 : y - 6;
 
     barElements += `
-      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${d.ahorro >= avgVal ? 'var(--gb)' : 'rgba(246,241,230,.25)'}" rx="3" ry="3" />
-      <text x="${x + barWidth/2}" y="${y - 6}" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="var(--cream)" font-weight="600">${fmtK(d.ahorro)}</text>
-      <text x="${x + barWidth/2}" y="${startY + 16}" text-anchor="middle" font-family="var(--sans)" font-size="8.5" fill="rgba(246,241,230,.4)" font-weight="600">${d.mesLabel.split(' ')[0]}</text>
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${fill}" rx="3" ry="3" />
+      <text x="${x + barWidth/2}" y="${yTexto}" text-anchor="middle" font-family="var(--sans)" font-size="9" fill="${neg ? '#e06c75' : 'var(--cream)'}" font-weight="600">${fmtK(d.ahorro)}</text>
+      <text x="${x + barWidth/2}" y="${startY + (hayNegativos ? 62 : 16)}" text-anchor="middle" font-family="var(--sans)" font-size="8.5" fill="rgba(246,241,230,.4)" font-weight="600">${d.mesLabel.split(' ')[0]}</text>
     `;
   });
 
