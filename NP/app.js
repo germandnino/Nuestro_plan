@@ -2538,7 +2538,7 @@ function drawDestinoMes(){
 
   return `
     <div class="stitle">A dónde fue</div>
-    <div class="card" style="padding:12px 14px;">
+    <div style="background:rgba(246,241,230,.05);border:1px solid rgba(246,241,230,.09);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
       ${filas}
       ${pie}
     </div>`;
