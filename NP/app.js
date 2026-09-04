@@ -2500,6 +2500,11 @@ function ahorroEstimado(dueno){
 function resumenMesInicio(){
   const mes = curMonth();
   const ahorro = ahorroMesUI(mes);
+  // Cuánto de ese ahorro es privado tuyo. El titular NO es "el mes de los dos": cada
+  // teléfono suma lo común más lo propio y nunca lo privado del otro, así que para el
+  // mismo mes los dos ven cifras distintas. Sin decirlo, cada uno cree ver el mes entero.
+  const privado = especialesVisibles(state.ingresos.filter(i => i.mes === mes && !i.sinAsignar))
+    .reduce((s, i) => s + (i.privado ? i.monto : 0), 0);
   const promedio = ahorroEstimado(null);
   const hoy = new Date();
   const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
@@ -2516,7 +2521,7 @@ function resumenMesInicio(){
     delta = Math.round(((ahorro - promedio) / promedio) * 100);
   }
 
-  return { mes, ahorro, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
+  return { mes, ahorro, privado, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
 }
 
 // Tarjeta titular de Inicio: el mes en curso. Sustituye al patrimonio como número
@@ -2547,6 +2552,12 @@ function drawHeroMes(){
     cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.75);margin-top:5px;">${esPareja?'Van':'Vas'} <b style="color:${col};">${Math.abs(r.delta)}% por ${arriba?'encima':'debajo'}</b> de ${esPareja?'su':'tu'} promedio de ${fmtK(r.promedio)}</div>`;
   }
 
+  // Solo aparece cuando de verdad hay algo privado en el mes: si todo fue común, la
+  // aclaración sobraría y le quitaría aire al titular.
+  const privHtml = r.privado > 0.5
+    ? `<div style="font-size:11.5px;color:rgba(246,241,230,.5);margin-top:4px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.config.perfil === 'p1' ? '#c87a53' : '#a36a84'};margin-right:4px;"></span>Incluye ${fmtK(r.privado)} tuyo, privado</div>`
+    : '';
+
   const marcaHtml = r.pctPromedio != null
     ? `<span style="position:absolute;top:-4px;bottom:-4px;left:${r.pctPromedio.toFixed(1)}%;width:2px;background:rgba(246,241,230,.55);border-radius:1px;"></span>`
     : '';
@@ -2562,6 +2573,7 @@ function drawHeroMes(){
     </div>
     <div class="num" style="font-size:38px;line-height:1;margin-top:6px;color:var(--cream);">${fmt(r.ahorro)}</div>
     ${cmpHtml}
+    ${privHtml}
     <div style="margin-top:14px;height:10px;border-radius:6px;background:rgba(246,241,230,.13);position:relative;overflow:hidden;">
       <i style="position:absolute;left:0;top:0;bottom:0;width:${r.pctAhorro.toFixed(1)}%;background:var(--gb);border-radius:6px;"></i>
       ${marcaHtml}
@@ -2663,7 +2675,24 @@ function flujoDelMes(mes){
     if (gastoDeMetaAjena(g, perfilActivo)) return false;
     return true;
   }).reduce((s, g) => s + g.monto, 0);
-  return { entro, salio, neto: entro - salio };
+  // Desglose de lo privado propio. Este neto NO es "el mes de los dos": cada teléfono ve
+  // lo común más lo suyo, y nunca lo privado del otro, así que para el mismo mes los dos
+  // ven cifras distintas. Sin decirlo, cada uno cree estar mirando el mes de la pareja.
+  const entroPriv = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes && !ing.sinAsignar))
+    .reduce((s, ing) => s + (ing.privado ? ing.monto : 0), 0);
+  const salioPriv = state.gastos.filter(g => {
+    if ((g.fecha || '').substring(0, 7) !== mes) return false;
+    if (g.mov !== 'salida' && !(g.haciaPrivado && sinContraparteVisible(g))) return false;
+    const m = metaById(g.meta);
+    const dueno = m ? m.dueno : g.duenoMeta;
+    return dueno === perfilActivo;
+  }).reduce((s, g) => s + g.monto, 0);
+
+  return {
+    entro, salio, neto: entro - salio,
+    entroPriv, salioPriv, netoPriv: entroPriv - salioPriv,
+    netoComun: (entro - entroPriv) - (salio - salioPriv)
+  };
 }
 
 // Una pata marcada solo cuenta como movimiento del mes cuando su contraparte NO llegó
@@ -4673,7 +4702,8 @@ function renderMiMes(){
   const perfilActivo = state.config.perfil;
 
   // flujoDelMes es la misma fuente que usa la ficha del mes de Metas.
-  const { entro: totalIn, salio: totalOut, neto: netSaved } = flujoDelMes(mes);
+  const flujoMes = flujoDelMes(mes);
+  const { entro: totalIn, salio: totalOut, neto: netSaved } = flujoMes;
   const listIngresos = especialesVisibles(state.ingresos.filter(ing => ing.mes === mes)).map(ing => ({
     type: 'ingreso',
     id: ing.id,
@@ -4723,6 +4753,7 @@ function renderMiMes(){
         <span>Entró <b style="color:rgba(246,241,230,.88);">${fmtK(totalIn)}</b></span>
         <span>Salió <b style="color:rgba(246,241,230,.88);">${fmtK(totalOut)}</b></span>
       </div>
+      ${flujoMes.netoPriv > 0.5 ? `<div style="font-size:11.5px;color:rgba(246,241,230,.5);margin-top:6px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.config.perfil === 'p1' ? '#c87a53' : '#a36a84'};margin-right:4px;"></span>Incluye ${fmtK(flujoMes.netoPriv)} tuyo, privado</div>` : ''}
     </div>`;
   
   // El chevron solo tiene sentido si hay barras que plegar.
