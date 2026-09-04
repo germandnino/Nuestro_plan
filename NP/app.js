@@ -1905,6 +1905,16 @@ function renderInicio(){
   const hayMetasAhorro = metasCompartidas().length > 0
     || metasIndividuales(perfil).length > 0;
 
+  // Arranque guiado. El rediseño de Inicio no toca esta pantalla: sin metas no hay mes
+  // que encabezar ni reparto que mostrar, así que sigue mandando el CTA de la primera meta.
+  const bienvenidaHtml = `
+    <div class="card dark" style="text-align:center; padding:22px 18px;">
+      <div style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:12px;background:rgba(217,168,74,.12);margin:0 auto 12px;">${getSVG('target', '', 'width:24px;height:24px;color:var(--gb);')}</div>
+      <div class="k" style="margin-bottom:4px;">${esPareja ? 'Su plan está listo para empezar' : 'Tu plan está listo para empezar'}</div>
+      <div style="font-size:12.5px; color:rgba(246,241,230,.7); line-height:1.45; max-width:300px; margin:0 auto 14px;">Crea ${esPareja ? 'su' : 'tu'} primera meta y empieza a separar el ahorro. Aquí ${esPareja ? 'verán' : 'verás'} crecer ${esPareja ? 'sus' : 'tus'} ahorros e inversiones.</div>
+      <button class="btn gold" id="btnCrearPrimeraMeta" style="margin:0; width:100%; max-width:280px; display:inline-flex; align-items:center; justify-content:center; gap:6px;">${getSVG('plus')} Crear ${esPareja ? 'nuestra' : 'mi'} primera meta</button>
+    </div>`;
+
   // 2. Panel de Accesos Rápidos
   const shortcutsHtml = `
     <div class="stitle">¿Qué quieres hacer hoy?</div>
@@ -2048,7 +2058,7 @@ function renderInicio(){
        <div style="height:12px;"></div>
        ${drawStatsBI()}
        ${drawSavingsHistoryCard()}`
-    : `${drawSinAsignarCard()}${shortcutsHtml}`;
+    : `${bienvenidaHtml}${drawSinAsignarCard()}${shortcutsHtml}`;
 
   $('r0').innerHTML=`
     ${headerHtml}
