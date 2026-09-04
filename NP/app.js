@@ -2873,12 +2873,9 @@ function renderMetas(){
       ${allowCreate ? `<button class="btn" data-addmeta="${tipo}" style="margin:0;border:1.5px solid ${accent};color:${accent};background:${bg};display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px;padding:12px 18px;">${getSVG('target')} ${label}</button>` : ''}
     </div>`;
   };
-  let subTabsHtml = `
-    <div class="seg dark-seg" style="margin-bottom:10px;">
-      <button id="btnTabAhorros" class="${curMetasSubTab===0?'on':''}">Mis metas</button>
-      <button id="btnTabLogros" class="${curMetasSubTab===1?'on':''}">Logros</button>
-    </div>
-  `;
+  // Logros salió de la fila de conmutación a un enlace del encabezado (MetasA2.dc.html):
+  // eran dos filas apiladas de botones antes del primer dato, y Logros es un archivo que
+  // se visita de vez en cuando, no un modo entre los que se alterna a diario.
   
   let contentHtml = '';
   
@@ -3036,21 +3033,22 @@ function renderMetas(){
     contentHtml = drawLogros();
   }
 
-  let h = `<header>
-    <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
-    <h1>Metas</h1>
+  const enLogros = curMetasSubTab === 1;
+  let h = `<header style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+    <div>
+      <div class="ey">${isIndiv ? 'Mis' : 'Nuestras'}</div>
+      <h1>${enLogros ? 'Logros' : 'Metas'}</h1>
+    </div>
+    <button id="btnVerLogros" style="background:none;border:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700;color:var(--gb);padding:10px 0 0;white-space:nowrap;">${enLogros ? '← Metas' : 'Logros →'}</button>
   </header>`;
 
   $('r1').innerHTML = `
     ${h}
-    ${subTabsHtml}
     ${contentHtml}
   `;
 
-  const tabAhorros = $('btnTabAhorros');
-  if (tabAhorros) tabAhorros.onclick = () => { curMetasSubTab = 0; rerender(); };
-  const tabLogros = $('btnTabLogros');
-  if (tabLogros) tabLogros.onclick = () => { curMetasSubTab = 1; rerender(); };
+  const btnLogros = $('btnVerLogros');
+  if (btnLogros) btnLogros.onclick = () => { curMetasSubTab = enLogros ? 0 : 1; rerender(); };
 
   $('r1').querySelectorAll('.distahorros-toggle').forEach(el => {
     el.onclick = () => {
