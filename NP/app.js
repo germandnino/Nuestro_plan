@@ -2891,15 +2891,11 @@ function renderMetas(){
       const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
-      // El número grande es el PROGRESO, no el % de aporte: era la confusión principal
-      // de esta pantalla — "Viaje a Japón" mostraba 60% (aporte) sobre 27% (progreso real).
-      // El aporte no desapareció: bajó a una línea rotulada más abajo, porque ajustarlo
-      // exige ver a la vez las demás metas del propósito.
-      const progresoHtml = isPersonal ? '' : (m.tipo === 'invertir'
-        ? `<div class="metacard-prog"><div class="metacard-prog-v" style="color:var(--gold);">↗</div><div class="metacard-prog-l">crece</div></div>`
-        : (pct != null
-            ? `<div class="metacard-prog${flashCls}"><div class="metacard-prog-v">${Math.round(pct)}%</div><div class="metacard-prog-l">lleno</div></div>`
-            : ''));
+      // El progreso lo cuenta la barra de relleno del fondo (card-fill) y la cifra de la
+      // línea de apoyo. Tuvo un bloque grande a la derecha, pero se llevaba 34px de alto
+      // por tarjeta para repetir lo que el relleno ya dice, y con la fila del reparto la
+      // tarjeta se volvió demasiado gruesa. Lo que NO puede volver es un porcentaje suelto
+      // y prominente: ese se leía como progreso siendo el aporte.
       // ETA útil (sueño/colchón con objetivo y aún no lleno).
       let eta='';
       if(m.tipo!=='invertir' && obj && m.saldo<obj){
@@ -2909,7 +2905,7 @@ function renderMetas(){
       // Sin el porcentaje: desde el rediseño lo dice el número grande de la derecha, y
       // repetirlo aquí ponía la misma cifra dos veces en la misma tarjeta. El "de" en vez
       // de la barra sigue al diseño (MetasA2.dc.html): se lee como frase, no como quebrado.
-      const generico = `${fmt(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${eta?` · ${eta}`:''}`;
+      const generico = `${fmt(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
       let sub;
       const cdtVencido = m.tipo==='invertir' && m.colocado && m.vencimiento && m.vencimiento<=curMonth();
       if(m.tipo==='invertir'){
@@ -2987,7 +2983,7 @@ function renderMetas(){
             <div class="metacard-sub">${sub}</div>
             ${feedHtml}
           </div>
-          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${progresoHtml}${editBtn}`))}
+          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : editBtn)}
         </div>
       </div>`;
     };
@@ -3110,8 +3106,10 @@ function renderMetas(){
     };
   });
 
-  // Enfocar el input cuando se toca el contenedor de la píldora de porcentaje (facilidad táctil en móvil)
-  $('r1').querySelectorAll('.inline-pct-container').forEach(container => {
+  // Enfocar el input al tocar. El objetivo táctil es toda la frase "Recibe 45%", no solo
+  // la cajita: la cajita se adelgazó para que la tarjeta no creciera de alto, y sola
+  // quedaría por debajo del tamaño mínimo cómodo en móvil.
+  $('r1').querySelectorAll('.metacard-aporte').forEach(container => {
     container.onclick = (e) => {
       const input = container.querySelector('.inline-pct-input');
       if (input && document.activeElement !== input) {
