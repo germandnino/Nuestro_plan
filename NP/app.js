@@ -5939,7 +5939,7 @@ function renderLearnQuiz(body){
         <h1 style="margin:2px 0 0">¿Qué inversor eres?</h1>
       </header>
       <div class="card" style="text-align:center;border-color:${p.color}55;background:${p.color}14;padding:22px 16px">
-        <div class="learn-tool-ic" style="--tool-accent:${p.color};margin:0 auto 10px;width:52px;height:52px">${getSVG('user')}</div>
+        <div class="learn-tool-ic" style="background:${p.color}22;color:${p.color};margin:0 auto 10px;width:52px;height:52px">${getSVG('user')}</div>
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:rgba(246,241,230,.6);font-weight:700">Eres un inversor</div>
         <div style="font-size:26px;font-weight:800;color:${p.color};font-family:var(--sans);margin:2px 0 8px">${p.name}</div>
         <div style="font-size:13px;color:rgba(246,241,230,.85);line-height:1.5">${p.desc}</div>
