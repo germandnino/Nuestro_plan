@@ -2529,7 +2529,7 @@ function drawDestinoMes(){
       <div style="width:74px;height:7px;border-radius:4px;background:rgba(246,241,230,.12);overflow:hidden;flex-shrink:0;">
         <i style="display:block;height:100%;width:${((x.amount/mayor)*100).toFixed(1)}%;border-radius:4px;background:${x.color};"></i>
       </div>
-      <div class="num" style="font-size:13.5px;width:66px;text-align:right;flex-shrink:0;">${fmtK(x.amount)}</div>
+      <div class="num" style="font-size:13.5px;width:66px;text-align:right;flex-shrink:0;color:var(--cream);">${fmtK(x.amount)}</div>
     </div>`).join('');
 
   const pie = hayPrivadas
