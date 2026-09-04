@@ -20,6 +20,31 @@ service cloud.firestore {
       return isPartner(planId) && (!('partnerRole' in data) || data.partnerRole != 'viewer');
     }
 
+    // El Lector no escribe el documento compartido, con UNA excepción: sacar de ahí sus
+    // propios datos privados al migrar al split de bolsillos. Sin esto, sus movimientos y
+    // metas individuales se quedan en shared para siempre — él no puede escribir shared y
+    // el Editor no puede moverlos, porque solo el dueño de un dato puede escribir su
+    // bolsillo (ver syncLimpiarMisDatosDeShared en NP/app.js).
+    //
+    // La excepción es de una sola dirección: toca solo las cuatro listas y solo si
+    // ENCOGEN. No puede agregar ni modificar, ni tocar config ni log.
+    //
+    // get(k, []) es deliberado: un plan viejo sin 'logros' rompería la comparación, y una
+    // regla que falla al evaluarse deniega.
+    //
+    // Lo que esto NO impide: un Lector decidido podría vaciar las listas compartidas. Las
+    // reglas no pueden inspeccionar de quién es cada elemento de una lista. El modelo de
+    // amenaza aquí es "mi pareja usa la app normalmente", no un adversario.
+    function soloQuitaLoSuyo() {
+      return resource != null
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['metas', 'ingresos', 'gastos', 'logros', 'lastEditBy'])
+        && request.resource.data.get('metas', []).size()    <= resource.data.get('metas', []).size()
+        && request.resource.data.get('ingresos', []).size() <= resource.data.get('ingresos', []).size()
+        && request.resource.data.get('gastos', []).size()   <= resource.data.get('gastos', []).size()
+        && request.resource.data.get('logros', []).size()   <= resource.data.get('logros', []).size();
+    }
+
     match /meta/{planId} {
       // Leer: miembros, o cualquier autenticado con el código de invitación
       allow read: if isSignedIn() && (
@@ -52,8 +77,11 @@ service cloud.firestore {
 
     match /planes/{planId}/shared/{docId} {
       allow read: if isMember(planId);
-      // Phase B: Estricto - Solo owner o partner con rol diferente de 'viewer' pueden escribir
-      allow write: if isOwner(planId) || partnerCanWrite(planId);
+      // Escribe el owner, o el partner cuyo rol no sea 'viewer'. El Lector solo puede
+      // hacer la limpieza de su propia migración, y solo sobre shared/data.
+      allow write: if isOwner(planId)
+                      || partnerCanWrite(planId)
+                      || (isPartner(planId) && docId == 'data' && soloQuitaLoSuyo());
     }
 
     match /planes/{planId}/bolsillos/{uid} {

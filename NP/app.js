@@ -943,7 +943,7 @@ async function syncSaveShared(planId, stateToSave) {
 }
 
 // El bolsillo es privado por transporte: las reglas de Firestore solo dejan a cada
-// uid leer y escribir el suyo (firestore.rules, match /planes/{planId}/bolsillos/{uid}).
+// uid leer y escribir el suyo (firestore.rules.strict, /planes/{planId}/bolsillos/{uid}).
 async function syncSaveBolsillo(planId, uid, bolsillo) {
   await db.collection('planes').doc(planId)
     .collection('bolsillos').doc(uid)
