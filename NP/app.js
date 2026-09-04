@@ -2746,14 +2746,9 @@ function drawStatsBI(){
   // la app dejó de capturar el ingreso cuando el onboarding quitó las nóminas, así que
   // el tile nunca se renderizaba. Para reactivarla hace falta una fuente de ingreso.
 
-  const mesAnterior = (mes) => {
-    const [y, m] = mes.split('-').map(Number);
-    const d = new Date(y, m - 2, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  };
   let racha = n ? 1 : 0;
   for (let i = meses.length - 1; i > 0; i--) {
-    if (mesAnterior(meses[i]) === meses[i - 1]) racha++; else break;
+    if (mesPrevio(meses[i]) === meses[i - 1]) racha++; else break;
   }
 
   const tile = (label, value, sub) => `
@@ -3566,7 +3561,10 @@ function updateDeriv(){
   const c=state.config;
   const p=c.perfil;
   const obj=$('fObj')?parse($('fObj').value):0;const fecha=$('fFechaTrigger')?$('fFechaTrigger').dataset.val:'';
-  const pct=$('fPct')?Math.min(100,parse($('fPct').value)):0;
+  // Sin hermana en el propósito el formulario no pinta el campo de %, pero el motor sí le
+  // manda el 100% del bucket (repartirEnBucket con una sola elegible). Leer 0 dejaba la
+  // proyección vacía justo en la meta que más claro tiene su destino.
+  const pct=$('fPct')?Math.min(100,parse($('fPct').value)):100;
   const saldo=$('fSaldo')?parse($('fSaldo').value):0;
 
   // La estimación sale del historial del scope de la meta: una meta individual se
