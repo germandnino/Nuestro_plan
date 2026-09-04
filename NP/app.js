@@ -82,7 +82,8 @@ function getSVG(name, cls='', style='') {
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
     user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
     check: '<polyline points="20 6 9 17 4 12"></polyline>',
-    lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>'
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>',
+    clock: '<circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline>'
   };
   const path = icons[name] || '';
   const cAttr = cls ? ` class="${cls}"` : '';
@@ -2882,23 +2883,25 @@ function renderMetas(){
   let contentHtml = '';
   
   if (curMetasSubTab === 0) {
+    // Aporte del mes por meta, para la línea "+$X este mes" de cada tarjeta. Se calcula
+    // una vez por render y no por tarjeta: getMonthlyDistributionData recorre todos los
+    // movimientos del mes y llamarlo dentro del map sería cuadrático.
+    const aporteMesPorMeta = {};
+    getMonthlyDistributionData(curMonth()).forEach(x => { aporteMesPorMeta[x.id] = x.amount; });
     const card=(m)=>{
       const obj=m.objetivo||0, pct=obj?Math.min(100,m.saldo/obj*100):null;
       const isPersonal = m.tipo === 'personal';
       const showFill = pct!=null && m.tipo!=='invertir'; // inversión exenta (P7)
       const dragHandle = isPersonal ? '' : `<span class="drag-handle" style="cursor:grab;color:var(--gs);touch-action:none;user-select:none;display:inline-flex;align-items:center">${getSVG('drag', '', 'opacity:0.6;width:14px;height:14px;')}</span>`;
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
-      // El % dentro del bucket solo tiene sentido con 2+ metas del mismo tipo; con una sola
-      // recibe el 100% y mostrarlo confunde.
-      const variasEnBucket = metasDeBucket(m.tipo, m.dueno||null).length > 1;
-      const pctBadge = (!isPersonal && variasEnBucket)
-        ? (canEdit
-            ? `<div class="inline-pct-container${flashCls}" title="Toca para editar el % del ahorro">
-             <input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}">
-             <span class="pct-sign">%</span>
-           </div>`
-            : `<span class="pill${flashCls}">${m.aportePct||0}%</span>`)
-        : '';
+      // El número grande es el PROGRESO, no el % de aporte: era la confusión principal
+      // de esta pantalla — "Viaje a Japón" mostraba 60% (aporte) sobre 27% (progreso real).
+      // El aportePct se sigue editando en el formulario de la meta (campo fPct).
+      const progresoHtml = isPersonal ? '' : (m.tipo === 'invertir'
+        ? `<div class="metacard-prog"><div class="metacard-prog-v" style="color:var(--gold);">↗</div><div class="metacard-prog-l">crece</div></div>`
+        : (pct != null
+            ? `<div class="metacard-prog${flashCls}"><div class="metacard-prog-v">${Math.round(pct)}%</div><div class="metacard-prog-l">lleno</div></div>`
+            : ''));
       // ETA útil (sueño/colchón con objetivo y aún no lleno).
       let eta='';
       if(m.tipo!=='invertir' && obj && m.saldo<obj){
@@ -2952,6 +2955,10 @@ function renderMetas(){
         : ((!m.dueno && !isPersonal && !canEditShared())
             ? `<span class="btn-card-edit metacard-lock" title="Solo el Editor puede modificar metas compartidas" aria-label="Bloqueado: solo el Editor" style="opacity:.45;cursor:not-allowed;display:inline-flex;align-items:center;justify-content:center;">${getSVG('lock', '', 'width:13px;height:13px;pointer-events:none;')}</span>`
             : '');
+      const delMes = aporteMesPorMeta[m.id] || 0;
+      const feedHtml = delMes > 0.5
+        ? `<div class="metacard-feed">${getSVG('clock', '', 'width:11px;height:11px;opacity:.7;')} <span style="color:var(--green);font-weight:700;">+${fmtK(delMes)} este mes</span></div>`
+        : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
         <div class="metacard-row">
@@ -2959,8 +2966,9 @@ function renderMetas(){
           <div class="metacard-main">
             <div class="metacard-title"><span class="metacard-name">${m.nombre}</span></div>
             <div class="metacard-sub">${sub}</div>
+            ${feedHtml}
           </div>
-          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${pctBadge}${editBtn}`))}
+          ${suenoCumplido ? consumirBtn : (cdtVencido ? resolverBtn : (m.colocado ? editBtn : `${progresoHtml}${editBtn}`))}
         </div>
       </div>`;
     };
