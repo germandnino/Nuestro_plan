@@ -2438,6 +2438,31 @@ function ahorroEstimado(dueno){
   return ventana.reduce((s,mes)=> s + ahorroMesScope(mes, dueno), 0) / ventana.length;
 }
 
+// Datos de la tarjeta del mes en Inicio. `promedio` es null en un plan sin meses
+// cerrados: la tarjeta tiene que distinguir "no hay con qué comparar" de "el promedio
+// es cero", porque decir "vas 100% por encima de $0" no informa nada.
+function resumenMesInicio(){
+  const mes = curMonth();
+  const ahorro = ahorroMesUI(mes);
+  const promedio = ahorroEstimado(null);
+  const hoy = new Date();
+  const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const diasRestantes = finDeMes - hoy.getDate();
+
+  // Techo del riel: lo más alto entre lo que llevan y su promedio, con 15% de aire para
+  // que una barra al tope no se lea como "ya terminaron".
+  const techo = Math.max(ahorro, promedio || 0) * 1.15 || 1;
+  const pctAhorro = Math.min(100, Math.max(0, (ahorro / techo) * 100));
+  const pctPromedio = promedio != null ? Math.min(100, Math.max(0, (promedio / techo) * 100)) : null;
+
+  let delta = null;
+  if (promedio != null && promedio > 0.5) {
+    delta = Math.round(((ahorro - promedio) / promedio) * 100);
+  }
+
+  return { mes, ahorro, promedio, delta, diasRestantes, techo, pctAhorro, pctPromedio };
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen).
 function ahorroMesUI(mes){
