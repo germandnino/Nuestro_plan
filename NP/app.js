@@ -2645,10 +2645,10 @@ function pieAcumulado(){
   // Sin enlace ni chevron: es un dato para leer, no una acción. El desglose por meta ya
   // está a un toque en el nav de abajo, y el chevron prometía algo que no valía el viaje.
   return `
-    <div style="margin-top:13px;padding-top:11px;border-top:1px solid rgba(246,241,230,.1);display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;">
+    <div style="margin-top:13px;padding-top:11px;border-top:1px solid rgba(246,241,230,.1);display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;font-variant-numeric:tabular-nums;">
       <span style="color:rgba(246,241,230,.55);white-space:nowrap;">${etiqueta}</span>
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">
-        <span class="num" style="font-weight:700;color:rgba(246,241,230,.8);">${fmt(grande)}</span>${priv}
+        <span style="font-weight:700;color:rgba(246,241,230,.8);">${fmt(grande)}</span>${priv}
       </span>
     </div>`;
 }
