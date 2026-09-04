@@ -2893,7 +2893,8 @@ function renderMetas(){
       const flashCls = (m.id === _pctFlashId) ? ' pct-flash' : '';
       // El número grande es el PROGRESO, no el % de aporte: era la confusión principal
       // de esta pantalla — "Viaje a Japón" mostraba 60% (aporte) sobre 27% (progreso real).
-      // El aportePct se sigue editando en el formulario de la meta (campo fPct).
+      // El aporte no desapareció: bajó a una línea rotulada más abajo, porque ajustarlo
+      // exige ver a la vez las demás metas del propósito.
       const progresoHtml = isPersonal ? '' : (m.tipo === 'invertir'
         ? `<div class="metacard-prog"><div class="metacard-prog-v" style="color:var(--gold);">↗</div><div class="metacard-prog-l">crece</div></div>`
         : (pct != null
@@ -2956,8 +2957,26 @@ function renderMetas(){
             ? `<span class="btn-card-edit metacard-lock" title="Solo el Editor puede modificar metas compartidas" aria-label="Bloqueado: solo el Editor" style="opacity:.45;cursor:not-allowed;display:inline-flex;align-items:center;justify-content:center;">${getSVG('lock', '', 'width:13px;height:13px;pointer-events:none;')}</span>`
             : '');
       const delMes = aporteMesPorMeta[m.id] || 0;
-      const feedHtml = delMes > 0.5
-        ? `<div class="metacard-feed">${getSVG('clock', '', 'width:11px;height:11px;opacity:.7;')} <span style="color:var(--green);font-weight:700;">+${fmtK(delMes)} este mes</span></div>`
+      const feedTxt = delMes > 0.5
+        ? `<span class="metacard-got">${getSVG('clock', '', 'width:11px;height:11px;opacity:.7;')} <span style="color:var(--green);font-weight:700;">+${fmtK(delMes)} este mes</span></span>`
+        : '';
+      // El % de aporte vive aquí, rotulado. Un "60%" suelto en grande se leía como
+      // progreso — que es justo lo que ahora dice el número de la derecha. Rotulado y en
+      // segundo plano no se confunde, y sigue editándose en sitio: al cambiarlo, las
+      // demás metas del propósito se reajustan a la vista. Sin esto habría que abrir meta
+      // por meta para saber cómo quedó el reparto.
+      // Solo aparece con 2+ metas en el propósito: con una sola recibe el 100% y decirlo
+      // no informa nada. El permiso es por meta (canEditMeta), no el de lo compartido:
+      // un Lector sí manda en el reparto de sus propias metas individuales.
+      const variasEnBucket = metasDeBucket(m.tipo, m.dueno||null).length > 1;
+      const puedeEditarPct = canEditMeta(m);
+      const pctTxt = (!isPersonal && variasEnBucket)
+        ? (puedeEditarPct
+            ? `<span class="metacard-aporte${flashCls}">Recibe <span class="inline-pct-container"><input type="number" class="inline-pct-input" min="0" max="100" value="${m.aportePct||0}" data-pctmid="${m.id}" aria-label="Porcentaje del ahorro para ${esc(m.nombre)}"><span class="pct-sign">%</span></span></span>`
+            : `<span class="metacard-aporte${flashCls}">Recibe ${m.aportePct||0}%</span>`)
+        : '';
+      const feedHtml = (feedTxt || pctTxt)
+        ? `<div class="metacard-feed">${feedTxt}${pctTxt}</div>`
         : '';
       return `<div class="card metacard" data-mid="${m.id}">
         ${showFill?`<div class="card-fill" style="width:${pct.toFixed(1)}%"></div>`:''}
