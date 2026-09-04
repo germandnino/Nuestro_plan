@@ -4129,9 +4129,19 @@ function getCreatorName(creadoPor) {
   return 'Usuario';
 }
 
+// Color de una meta en las vistas de reparto. Los tres tipos comparten paleta con la
+// dona (drawSavingsDonut, ~2226); las metas individuales propias van en el color privado
+// del perfil, el mismo que Inicio usa para el desglose del acumulado.
+const COL_TIPO = { imprevistos:'#3f8a8a', sueno:'#d9a84a', invertir:'#5aa67e' };
+function colorDeMeta(m){
+  if(!m) return COL_TIPO.sueno;
+  if(m.dueno) return m.dueno === 'p1' ? '#c87a53' : '#a36a84';
+  return COL_TIPO[m.tipo] || COL_TIPO.sueno;
+}
+
 function getMonthlyDistributionData(mes) {
   const c = state.config;
-  const distMap = {}; // key: metaId, value: { name, amount, color }
+  const distMap = {}; // key: metaId, value: { id, name, amount, tipo, dueno, color }
 
   // Privacidad: nunca acumular metas individuales del otro perfil.
   const add = (mId, amt) => {
@@ -4139,7 +4149,10 @@ function getMonthlyDistributionData(mes) {
     const m = metaById(mId);
     if (!m) return;
     if (m.dueno && m.dueno !== c.perfil) return;
-    if (!distMap[mId]) distMap[mId] = { name: m.nombre, amount: 0, color: null };
+    if (!distMap[mId]) distMap[mId] = {
+      id: mId, name: m.nombre, amount: 0,
+      tipo: m.tipo, dueno: m.dueno || null, color: colorDeMeta(m)
+    };
     distMap[mId].amount += amt;
   };
 
@@ -4174,7 +4187,8 @@ function getMonthlyDistributionData(mes) {
     }
   });
 
-  return Object.values(distMap).filter(x => x.amount > 0.5);
+  return Object.values(distMap).filter(x => x.amount > 0.5)
+    .sort((a,b) => b.amount - a.amount);
 }
 
 function drawMonthlyDistributionBars(mes) {
