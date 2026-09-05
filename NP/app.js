@@ -1249,7 +1249,16 @@ function emergenciaPrincipal(){return emergencias()[0]||null;}
 // destino del sobrante (no perder la plata). Distribuir avisa cuando esto pasa.
 // Sumidero del sobrante: SOLO inversión abierta (no colocada). Una inversión fija (CDT) NO admite
 // aportes; si no hay abierta, el sobrante va a "sin asignar" (lo maneja colocarSobrante).
-function inversionAbierta(){return state.metas.find(m=>m.tipo==='invertir'&&!m.colocado)||null;}
+// Sumidero del sobrante: la primera inversión abierta DEL SCOPE. El scope no es opcional:
+// buscando en state.metas entero, el motor compartido elegía como sumidero una inversión
+// individual, y aplicarIngresoInmediatoActivo —que solo acredita metas sin dueño en el
+// reparto común— descartaba esa asignación. Como colocarSobrante ya había dejado `rem` en
+// cero, tampoco se registraba sobrante pendiente: la plata desaparecía del plan entero.
+// Aplicarla habría sido peor: plata común aterrizando en la meta privada de uno.
+function inversionAbierta(dueno){
+  const base = dueno ? metasIndividuales(dueno) : metasCompartidas();
+  return base.find(m=>m.tipo==='invertir'&&!m.colocado)||null;
+}
 const BUCKETS=['imprevistos','sueno','invertir'];
 // Metas de un bucket en un scope (dueno=null → compartido) que admiten reparto (MOTOR: excluye fijas).
 function metasDeBucket(tipo,dueno){
@@ -1330,9 +1339,9 @@ let _ultimoSobrante = [];
 /* Sumidero del sobrante del reparto: (1) inversión abierta (perpetua, sin tope),
    (2) si no hay, queda como sobrante y el caller lo registra como "sin asignar".
    Muta `res`. Devuelve { placements, rem } con lo que NO se pudo colocar. */
-function colocarSobrante(rem, res){
+function colocarSobrante(rem, res, dueno){
   const placements=[];
-  const inv=inversionAbierta();
+  const inv=inversionAbierta(dueno||null);
   if(inv && rem>0.5){
     if(res[inv.id]===undefined)res[inv.id]=0;
     res[inv.id]+=rem; placements.push({id:inv.id,nombre:inv.nombre,monto:rem}); rem=0;
@@ -1360,7 +1369,7 @@ function distribuirAhorro(monto){
     rem+=repartirEnBucket(tipo,null,parte,res);
   });
   rem+=monto-despachado; // rescata lo que ningún bucket llegó a recibir (p.ej. todas las metas llenas)
-  const r=colocarSobrante(rem,res);
+  const r=colocarSobrante(rem,res,null);   // motor compartido: sumidero compartido
   return { dist:res, rem:r.rem };
 }
 
