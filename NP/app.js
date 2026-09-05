@@ -776,9 +776,20 @@ function particionarEstado(st, perfil){
 
   const configSinPerfil = { ...(st.config || {}) };
   delete configSinPerfil.perfil;
+  // El reparto entre propósitos de las metas INDIVIDUALES es dato privado de cada quien,
+  // y hasta v1.0.63 vivía entero en config, es decir en el documento compartido. Dos
+  // consecuencias: la pareja veía cómo divide el otro su plata privada, y el Lector
+  // —que no escribe shared— no tenía dónde guardar el suyo, así que sus deslizadores
+  // individuales se movían, decían "guardado" y volvían solos al valor del Editor.
+  // Ahora cada perfil se lleva el suyo al bolsillo y shared no guarda ninguno:
+  // normalize() siembra el que falte a partir de `buckets`, así que nada queda sin valor.
+  const bucketsIndivTodos = configSinPerfil.bucketsIndiv || {};
+  const miBucketIndiv = bucketsIndivTodos[perfil];
+  delete configSinPerfil.bucketsIndiv;
 
   return {
     bolsillo: {
+      bucketsIndiv: miBucketIndiv ? { [perfil]: miBucketIndiv } : {},
       metas: metas.filter(mia),
       ingresos: (st.ingresos || []).filter(ingresoMio),
       gastos: (st.gastos || []).filter(gastoMio),
@@ -816,7 +827,14 @@ function unirEstado(shared, bolsillo, perfilLocal){
     });
   };
   return {
-    config: { ...(sh.config || {}), perfil: perfilLocal },
+    // `bucketsIndiv` ya no viaja en shared (ver particionarEstado). Se rearma desde el
+    // bolsillo, con lo que quede en shared como respaldo para los planes que todavía no
+    // han pasado por un guardado de esta versión. El bolsillo manda, igual que las metas.
+    config: {
+      ...(sh.config || {}),
+      perfil: perfilLocal,
+      bucketsIndiv: { ...((sh.config || {}).bucketsIndiv || {}), ...(bo.bucketsIndiv || {}) }
+    },
     metas: unir(bo.metas, sh.metas),
     log: sh.log || [],
     ingresos: unir(bo.ingresos, sh.ingresos),
@@ -1853,10 +1871,13 @@ async function confirmarMetasVaciadas(vaciadas){
    El monto manda: el usuario escribe el total que necesita y lo reparte entre sus metas
    hasta cubrirlo. El botón no se habilita hasta que asignado === monto. */
 function openRetiroDinero(){
-  if(!canEditShared()){flash('No tienes permisos para esto');return;}
   const c=state.config;
+  // El Lector retira de sus metas individuales, igual que aporta a ellas: son suyas y
+  // viven en su bolsillo. Hasta v1.0.63 el retiro se le negaba en bloque, así que su
+  // plata privada entraba pero no salía. Lo conjunto sigue siendo del Editor.
+  const soloIndividual = c.modo === 'pareja' && !canEditShared();
   const conSaldo=m=>m&&(m.saldo||0)>0;
-  const origenesTodos=metasCompartidas().filter(conSaldo)
+  const origenesTodos=(soloIndividual?[]:metasCompartidas().filter(conSaldo))
     .concat(metasIndividuales(c.perfil).filter(conSaldo))
     .sort((a,b)=>(b.saldo||0)-(a.saldo||0));   // el que se autocompleta es el primero que se ve
   if(origenesTodos.length===0){flash('No hay metas con saldo para retirar');return;}
@@ -1897,11 +1918,13 @@ function openRetiroDinero(){
   const montoPedido=()=>parse(mi.value);
 
   const fillDestinos=()=>{
-    const comp=metasCompartidas().filter(m=>!m.colocado);
+    // Mismo alcance que los orígenes: el Lector no puede mandar su plata privada a una
+    // meta común, porque acreditarla sería escribir el documento compartido.
+    const comp=soloIndividual?[]:metasCompartidas().filter(m=>!m.colocado);
     const indiv=metasIndividuales(c.perfil).filter(m=>!m.colocado);
     const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
     selD.innerHTML=`<option value="fuera">Fuera de tus metas (gasto real)</option>`
-      +(c.modo==='individual'
+      +((c.modo==='individual'||soloIndividual)
         ? indiv.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
         : og('Metas comunes',comp)+og('Mis metas (privadas)',indiv));
   };
