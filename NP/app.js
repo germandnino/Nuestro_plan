@@ -1626,6 +1626,31 @@ function registrarSobrantePendiente(monto, origenNombre, opts){
   return ing;
 }
 // Todos los sobrantes del plan, sin filtrar. Solo para cálculos de patrimonio.
+// Al borrar una meta con saldo, esa plata NO desaparece: pasa a "sin asignar" para que
+// siga contando en el patrimonio y se pueda reasignar. Antes se evaporaba y el mes seguía
+// diciendo que se había ahorrado: la cifra del mes y el patrimonio dejaban de cuadrar por
+// exactamente ese monto, sin ningún registro que lo explicara.
+//
+// Va como ingreso con sinAsignar:true, que es la forma que ya tiene un sobrante pendiente.
+// Ese tipo de ingreso NO cuenta como entrada del mes (ahorroMesUI e ingresoDeScope lo
+// excluyen), así que no infla el ahorro; solo conserva la plata.
+function sobranteDesdeMetaBorrada(meta){
+  const saldo = meta && meta.saldo || 0;
+  if (saldo <= 0.5) return null;
+  return {
+    id: uid(),
+    mes: curMonth(),
+    fecha: today(),
+    nombre: `Saldo de "${meta.nombre}"`,
+    monto: saldo,
+    meta: 'sinAsignar',
+    sinAsignar: true,
+    persona: state.config.perfil,
+    creadoPor: state.config.perfil,
+    privado: meta.dueno ? true : undefined,
+    duenoPriv: meta.dueno || undefined
+  };
+}
 function sobrantesPendientesTodos(){return state.ingresos.filter(i=>i.sinAsignar);}
 // Los que puede ver y asignar el perfil activo: los compartidos y los suyos.
 function sobrantesPendientesVisibles(){return especialesVisibles(sobrantesPendientesTodos());}
@@ -1757,12 +1782,15 @@ function openRetiroDinero(){
       if (confirmDelete) {
         const metaSnap = JSON.parse(JSON.stringify(o));
         const gastosSnap = state.gastos.filter(g => g.meta === metaSnap.id);
+        const sobrante = sobranteDesdeMetaBorrada(metaSnap);
         state.gastos = state.gastos.filter(g => g.meta !== metaSnap.id);
         state.metas = state.metas.filter(x => x.id !== metaSnap.id);
+        if (sobrante) state.ingresos.push(sobrante);
         save();
         rerender();
         flashUndo('Meta eliminada', () => {
           if (!state.metas.some(x => x.id === metaSnap.id)) state.metas.push(metaSnap);
+          if (sobrante) state.ingresos = state.ingresos.filter(i => i.id !== sobrante.id);
           const faltantes = gastosSnap.filter(g => !state.gastos.some(x => x.id === g.id));
           if (faltantes.length) state.gastos = state.gastos.concat(faltantes);
           save();
@@ -3771,18 +3799,21 @@ function attachMetaForm(editing){
     const saldo=mForm.saldo||0;
     let msg='¿Eliminar esta meta?';
     if(saldo>0.5){
-      msg=`Esta meta tiene ${fmt(saldo)} acumulados. Al borrarla ese saldo se quitará de tu patrimonio sin dejar registro. ¿Continuar?`;
+      msg=`Esta meta tiene ${fmt(saldo)} acumulados. Al borrarla esa plata pasa a "sin asignar" para que la repartas donde quieras. ¿Continuar?`;
     }
     if(!await customConfirm(msg,true))return;
     // Snapshot para deshacer; limpia gastos huérfanos de la meta.
     const metaSnap=JSON.parse(JSON.stringify(mForm));
     const gastosSnap=state.gastos.filter(g=>g.meta===metaSnap.id);
+    const sobrante=sobranteDesdeMetaBorrada(metaSnap);
     state.gastos=state.gastos.filter(g=>g.meta!==metaSnap.id);
     state.metas=state.metas.filter(x=>x.id!==metaSnap.id);
+    if(sobrante)state.ingresos.push(sobrante);
     save();closeMetaForm(()=>go(1));
     flashUndo('Meta eliminada',()=>{
       // Restaura de forma idempotente (por si el sync ya la trajo de vuelta).
       if(!state.metas.some(x=>x.id===metaSnap.id))state.metas.push(metaSnap);
+      if(sobrante)state.ingresos=state.ingresos.filter(i=>i.id!==sobrante.id);
       const faltantes=gastosSnap.filter(g=>!state.gastos.some(x=>x.id===g.id));
       if(faltantes.length)state.gastos=state.gastos.concat(faltantes);
       save();go(1);flash('Eliminación deshecha ✓');
