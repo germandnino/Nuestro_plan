@@ -53,7 +53,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.63'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.64'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 // Un decimal solo donde informa. Bajo 100k, redondear a miles enteros borra plata que
@@ -7292,7 +7292,7 @@ function attachPlan(){
     startOnboarding();
   };
   $('btnAjustesVolver').onclick=()=>go(0);
-  $('bOnb').onclick=()=>startOnboarding();
+  $('bOnb').onclick=()=>startOnboarding(true);
   const bInst = $('bInstallPWA');
   if (bInst) {
     bInst.onclick = async () => {
@@ -7343,8 +7343,16 @@ function rerenderPlanKeepOpen(){renderPlan();}
    ONBOARDING (bienvenida + 5 pasos)
    ========================================================= */
 let obStep=0,obMetaTipo='sueno';
+/* "Ver el tutorial otra vez" (Ajustes) reabría el ASISTENTE DE CONFIGURACIÓN sobre un
+   plan ya hecho, y desde ahí se podía —sin una sola confirmación— borrar el plan entero
+   con "Saltar", pasar la pareja a modo individual (borrando el nombre del otro y
+   escondiendo su plata), duplicar una meta o cambiarse de perfil, que es justo lo que
+   Ajustes bloquea cuando hay sesión. En modo repaso las pantallas se ven pero no
+   escriben nada: ni obSaveStep, ni los botones de modo/perfil, ni Saltar, ni Empezar. */
+let _obTour=false;
 const OB_TOTAL=4;
-function startOnboarding(){
+function startOnboarding(tour){
+  _obTour = !!tour;
   if (currentUser) {
     obStep = 1;
   } else {
@@ -7353,7 +7361,14 @@ function startOnboarding(){
   $('onb').classList.add('on');
   renderOb();
 }
-function obProgress(){$('obBar').style.width=Math.round((obStep)/(OB_TOTAL-1)*100)+'%';}
+/* La barra tiene que llegar a 100 en la última pantalla de CADA recorrido. Para el
+   invitado el paso 1 es el final (obNext dice "Empezar" y termina ahí), así que se
+   quedaba clavada en 33% justo cuando ya no faltaba nada. */
+function obProgress(){
+  const esUltimo = localStorage.getItem('isInvited')==='true' && obStep===1;
+  const pct = esUltimo ? 100 : Math.round((obStep)/(OB_TOTAL-1)*100);
+  $('obBar').style.width = pct+'%';
+}
 function renderOb(){
   obProgress();
   const c=state.config;const inner=$('obInner');
@@ -7449,7 +7464,7 @@ function renderOb(){
     if (isInv) {
       h=`<div class="ob-step on">
         <div class="ob-mark">✦</div>
-        <div class="ob-eyebrow">Paso 1 de 2</div>
+        <div class="ob-eyebrow">Último paso</div>
         <div class="ob-h">¿Quién eres en este teléfono?</div>
         <div class="ob-p" style="margin-top:4px;">Cada uno instala la app en el suyo. Elige tu nombre para acceder a tus metas individuales.</div>
         <div class="ob-field" id="obDeviceField">
@@ -7461,7 +7476,7 @@ function renderOb(){
       </div>`;
     } else {
       const isIndiv = c.modo === 'individual';
-      h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 2</div>
+      h=`<div class="ob-step on"><div class="ob-eyebrow">Paso 1 de 3</div>
         <div class="ob-h">¿Cómo usarás la app?</div>
         <div class="ob-field" style="margin-bottom:14px;">
           <div class="mode-cards dark-seg" id="obModoSeg">
@@ -7494,7 +7509,7 @@ function renderOb(){
     }
   } else if(obStep===2){
     h=`<div class="ob-step on">
-      <div class="ob-eyebrow">Paso 2 de 2</div>
+      <div class="ob-eyebrow">Paso 2 de 3</div>
       <div class="ob-h">¿Tienes una primera meta?</div>
       <div class="ob-p">Agrégala ahora para ver cómo se distribuye tu plan. Si no la tienes, puedes crearla después.</div>
       ${c.modo === 'pareja' ? `<div class="hint" style="margin-top:2px; line-height:1.4; color:rgba(246,241,230,.7); background:rgba(246,241,230,.04); border:1px solid rgba(246,241,230,.1); border-radius:10px; padding:10px 12px;">Más adelante podrás crear <b>metas conjuntas</b> o <b>metas individuales</b>. El tipo se elige al crear cada meta.</div>` : ''}
@@ -7608,6 +7623,15 @@ function renderOb(){
       ${obInstallHtml}
       ${obParejaHtml}
     </div>`;
+  }
+  if(_obTour && obStep>0){
+    // El aviso va en todo el repaso; lo inerte, solo en los pasos que capturan datos
+    // (1 y 2). El 3 no guarda nada y sus botones —instalar la app, copiar la invitación—
+    // sirven igual desde el repaso.
+    const inerte = (obStep===1 || obStep===2);
+    h = `<div style="background:rgba(217,168,74,.1);border:1px solid rgba(217,168,74,.35);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;line-height:1.4;color:var(--gb);">
+      Estás repasando el tutorial. Nada de lo que veas aquí cambia tu plan.
+    </div>` + (inerte ? `<div style="pointer-events:none;opacity:.72;">${h}</div>` : h);
   }
   inner.innerHTML=h;
   attachOb();
@@ -7750,7 +7774,7 @@ function attachOb(){
       };
     }
   }
-  if(obStep===1){
+  if(obStep===1 && !_obTour){
     const obModoPareja = $('obModoPareja');
     const obModoIndiv = $('obModoIndiv');
     if (obModoPareja && obModoIndiv) {
@@ -7869,6 +7893,7 @@ function attachOb(){
   }
 }
 function obSaveStep(){
+  if(_obTour) return;   // repaso: se ve, no se guarda
   const c=state.config;
   if(obStep===1){
     if (localStorage.getItem('isInvited') !== 'true') {
@@ -7927,6 +7952,9 @@ $('obBack').onclick=()=>{
   renderOb();
 };
 $('obSkip').onclick=()=>{
+  // En repaso "Saltar" solo cierra. Antes vaciaba metas, movimientos y logros del plan
+  // real y lo guardaba —también en Firestore, así que se llevaba por delante a la pareja.
+  if (_obTour) { cerrarOnboarding(); return; }
   if (obStep === 1) {
     obSaveStep();
   }
@@ -7946,7 +7974,14 @@ $('obSkip').onclick=()=>{
   
   finishOnboarding();
 };
+function cerrarOnboarding(){
+  _obTour=false;
+  obMetaCreatedId=null;
+  $('onb').classList.remove('on');
+  go(0);
+}
 function finishOnboarding(){
+  if(_obTour){ cerrarOnboarding(); return; }   // repaso: no reescribe config ni guarda
   state.config.onboarded=true;
   state.config.pctPremio=20;
   state.config.modoPremio='igual';
