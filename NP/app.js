@@ -47,7 +47,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.60'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.61'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 // Un decimal solo donde informa. Bajo 100k, redondear a miles enteros borra plata que
@@ -1687,23 +1687,145 @@ function especialesVisibles(arr){
   return (arr||[]).filter(ep=>!ep.privado||ep.duenoPriv===state.config.perfil);
 }
 
-/* Retiro = movimiento espejo: ¿de dónde? ¿cuánto? ¿a dónde? */
+/* ---------- motor del retiro multi-meta ----------
+   Un retiro es UNA operación que puede salir de varias metas. `retiroId` la agrupa.
+
+   Con destino otra meta se crea un PAR de transferencia por origen, cada uno con su
+   propio `transferId`: processTransactionsForDisplay, sinContraparteVisible y la guarda
+   de revertirGasto asumen exactamente dos patas por transferId, y un grupo N-a-1 rompe
+   las tres. El retiroId solo agrega agrupación por encima; no reemplaza al transferId.
+
+   El monto total de la operación NUNCA se persiste: la fila del timeline lo suma de las
+   patas visibles en cada dispositivo. Guardarlo dejaría que el teléfono de la pareja
+   dedujera la parte privada, que es justo la fuga que se cerró en gastoDeMetaAjena. */
+function ejecutarRetiroMulti(repartos, destinoId, nota){
+  const c = state.config;
+  const validos = (repartos||[]).filter(r => r && r.monto > 0 && metaById(r.metaId));
+  if(!validos.length) return null;
+  const d = destinoId === 'fuera' ? null : metaById(destinoId);
+  if(destinoId !== 'fuera' && !d) return null;
+
+  const rId = uid();
+  const nPatas = validos.length;
+  const gastoIds = [], aplicados = [];
+
+  validos.forEach(r => {
+    const o = metaById(r.metaId);
+    o.saldo -= r.monto;
+    aplicados.push({ metaId: o.id, monto: r.monto });
+
+    if(!d){
+      const gId = uid();
+      state.gastos.push({ id:gId, meta:o.id, fecha:today(), monto:r.monto, mov:'salida',
+        retiroId:rId, retiroPatas:nPatas,
+        nota: nota || 'Retiro de una meta', creadoPor:c.perfil });
+      gastoIds.push(gId);
+    }else{
+      const tId = uid();
+      const cruzaTerreno = !o.dueno && o.tipo!=='personal' && (d.dueno || d.tipo==='personal');
+      const gOutId = uid(), gInId = uid();
+      state.gastos.push({ id:gOutId, meta:o.id, fecha:today(), monto:r.monto, mov:'transfer-out',
+        transferId:tId, retiroId:rId, retiroPatas:nPatas,
+        aTerrenoPersonal: cruzaTerreno || undefined,
+        nota: nota || ('Transferencia a ' + (cruzaTerreno ? 'lo personal' : d.nombre)),
+        creadoPor:c.perfil });
+      state.gastos.push({ id:gInId, meta:d.id, fecha:today(), monto:r.monto, entrada:true,
+        mov:'transfer-in', transferId:tId, retiroId:rId, retiroPatas:nPatas,
+        nota: nota || ('Transferencia desde ' + o.nombre), creadoPor:c.perfil });
+      gastoIds.push(gOutId, gInId);
+      d.saldo += r.monto;
+    }
+  });
+
+  return { retiroId: rId, gastoIds, aplicados, destino: d ? d.id : 'fuera' };
+}
+
+// Reverso del grupo completo: devuelve cada saldo de origen, baja el destino por el
+// total y borra todas las patas. Es el que usa el "Deshacer" del toast, donde el
+// resultado de ejecutarRetiroMulti sigue en memoria.
+function deshacerRetiroMulti(res){
+  if(!res) return;
+  res.aplicados.forEach(a => { const m = metaById(a.metaId); if(m) m.saldo += a.monto; });
+  if(res.destino !== 'fuera'){
+    const d = metaById(res.destino);
+    if(d){
+      const total = res.aplicados.reduce((s,a) => s + a.monto, 0);
+      d.saldo = Math.max(0, d.saldo - total);
+    }
+  }
+  const ids = new Set(res.gastoIds);
+  state.gastos = state.gastos.filter(g => !ids.has(g.id));
+}
+
+// Una meta que estaba cumplida y quedó en cero tras el retiro se guarda en Logros.
+// A diferencia de consumirSueno NO se crea un gasto de salida: la plata ya salió con
+// el retiro, y otro gasto la contaría dos veces.
+// `duenoMeta` se estampa en todos sus gastos porque al borrar la meta quedan huérfanos
+// y particionarEstado ya no podría deducir de quién eran: terminarían en el documento
+// compartido. Es lo mismo que hacen consumirSueno y liberarCDT.
+function archivarMetaVaciada(meta, montoRetirado){
+  if(!meta) return null;
+  const metaSnap = JSON.parse(JSON.stringify(meta));
+  const logro = { id: uid(), nombre: meta.nombre, monto: montoRetirado || 0,
+                  fecha: today(), dueno: meta.dueno || null };
+  state.logros.push(logro);
+  if(meta.dueno) state.gastos.forEach(g => { if(g.meta === meta.id) g.duenoMeta = meta.dueno; });
+  state.metas = state.metas.filter(x => x.id !== meta.id);
+  return { metaSnap, logroId: logro.id };
+}
+
+function revivirMetaArchivada(snap){
+  if(!snap) return;
+  state.logros = state.logros.filter(l => l.id !== snap.logroId);
+  if(!state.metas.some(x => x.id === snap.metaSnap.id)) state.metas.push(snap.metaSnap);
+}
+
+// Una sola pregunta al final, listando las metas que quedaron en cero estando cumplidas.
+// Todo-o-nada a propósito: una casilla por meta obliga a construir un modal nuevo, y el
+// atajo por meta ya existe en su tarjeta ("Gastar y guardar").
+async function confirmarMetasVaciadas(vaciadas){
+  const lista=(vaciadas||[]).filter(v=>v&&v.meta);
+  if(!lista.length) return;
+  const nombres=lista.map(v=>`"${esc(v.meta.nombre)}"`).join(lista.length===2?' y ':', ');
+  const ok=await customConfirm(
+    `¿Cumpliste ${nombres}? ${lista.length>1?'Las guardo':'La guardo'} en Logros y ${lista.length>1?'salen':'sale'} de tus metas.`,
+    false, 'Sí, guardar en Logros', 'No, dejar activas'
+  );
+  if(!ok) return;
+  const snaps=lista.map(v=>archivarMetaVaciada(v.meta, v.monto)).filter(Boolean);
+  save(); rerender();
+  flashUndo(lista.length>1?'Metas guardadas en Logros ✓':'Meta guardada en Logros ✓', ()=>{
+    snaps.forEach(revivirMetaArchivada);
+    save(); rerender(); flash('Deshecho ✓');
+  });
+}
+
+/* Retiro = movimiento espejo: ¿cuánto? ¿a dónde? ¿de dónde sale?
+   El monto manda: el usuario escribe el total que necesita y lo reparte entre sus metas
+   hasta cubrirlo. El botón no se habilita hasta que asignado === monto. */
 function openRetiroDinero(){
   if(!canEditShared()){flash('No tienes permisos para esto');return;}
   const c=state.config;
   const conSaldo=m=>m&&(m.saldo||0)>0;
-  const origenes=metasCompartidas().filter(conSaldo)
-    .concat(metasIndividuales(c.perfil).filter(conSaldo));
-  if(origenes.length===0){flash('No hay metas con saldo para retirar');return;}
+  const origenesTodos=metasCompartidas().filter(conSaldo)
+    .concat(metasIndividuales(c.perfil).filter(conSaldo))
+    .sort((a,b)=>(b.saldo||0)-(a.saldo||0));   // el que se autocompleta es el primero que se ve
+  if(origenesTodos.length===0){flash('No hay metas con saldo para retirar');return;}
+
   const ov=document.createElement('div');
   ov.className='modal-overlay'; ov.style.display='flex';
-  const origOpts=origenes.map(m=>`<option value="${m.id}">${m.nombre} — ${fmt(m.saldo)}</option>`).join('');
   ov.innerHTML=`
     <div class="modal-card animate-in" style="max-width:400px;">
       <h3 class="modal-title" style="font-size:20px;">Retirar dinero</h3>
-      <div><label class="lbl">¿De dónde sale?</label><select class="sf" id="rtOrigen">${origOpts}</select></div>
-      <div><label class="lbl">Monto</label><div style="display:flex;gap:8px;align-items:stretch;width:100%;box-sizing:border-box;"><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0" style="flex:1 1 auto;min-width:0;width:auto;margin:0;"><button class="btn ghost sm" id="rtTodo" type="button" style="flex:0 0 auto;width:auto;margin:0;padding:0 16px;">Todo</button></div></div>
+      <div><label class="lbl">Monto</label><input class="sf money" id="rtMonto" inputmode="numeric" placeholder="$0"></div>
       <div><label class="lbl">¿A dónde va?</label><select class="sf" id="rtDestino"></select></div>
+      <div style="margin-top:4px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+          <label class="lbl" style="margin:0;">De dónde sale</label>
+          <span id="rtAsignado" style="font-size:11.5px;font-weight:700;color:var(--gs);"></span>
+        </div>
+        <div id="rtFilas" style="margin-top:6px;"></div>
+      </div>
       <div><label class="lbl">Nota (opcional)</label><input class="sf" id="rtNota" placeholder="Ej: compra del viaje, imprevisto"></div>
       <div style="display:flex; gap:10px; margin-top:8px;">
         <button class="btn ghost sm" id="rtCancel" style="flex:1;margin:0;">Cancelar</button>
@@ -1711,94 +1833,162 @@ function openRetiroDinero(){
       </div>
     </div>`;
   document.body.appendChild(ov);
-  const selO=ov.querySelector('#rtOrigen'), selD=ov.querySelector('#rtDestino');
+
+  const mi=ov.querySelector('#rtMonto'), selD=ov.querySelector('#rtDestino');
+  const filas=ov.querySelector('#rtFilas'), lblAsig=ov.querySelector('#rtAsignado');
+  const btnOk=ov.querySelector('#rtOk');
+
+  // Reparto vivo: metaId → monto. `tocado` congela el autocompletado en cuanto el
+  // usuario mueve una fila: repartir es decisión suya y la app no se la pisa.
+  let reparto={}, tocado=false;
+
+  const destinoId=()=>selD.value;
+  const origenes=()=>origenesTodos.filter(m=>m.id!==destinoId());
+  const asignado=()=>origenes().reduce((s,m)=>s+(reparto[m.id]||0),0);
+  const montoPedido=()=>parse(mi.value);
+
   const fillDestinos=()=>{
-    const oid=selO.value;
-    const comp=metasCompartidas().filter(m=>m.id!==oid&&!m.colocado);
-    const indiv=metasIndividuales(c.perfil).filter(m=>m.id!==oid&&!m.colocado);
+    const comp=metasCompartidas().filter(m=>!m.colocado);
+    const indiv=metasIndividuales(c.perfil).filter(m=>!m.colocado);
     const og=(lbl,arr)=>arr.length?`<optgroup label="${lbl}">${arr.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')}</optgroup>`:'';
     selD.innerHTML=`<option value="fuera">Fuera de tus metas (gasto real)</option>`
       +(c.modo==='individual'
         ? indiv.map(m=>`<option value="${m.id}">${m.nombre} (${tipoLabel(m.tipo)})</option>`).join('')
         : og('Metas comunes',comp)+og('Mis metas (privadas)',indiv));
   };
-  fillDestinos(); selO.onchange=fillDestinos;
-  const mi=ov.querySelector('#rtMonto');
-  mi.addEventListener('input',e=>{const d=e.target.value.replace(/\D/g,'');e.target.value=d?'$'+Number(d).toLocaleString('es-CO'):'';});
-  ov.querySelector('#rtTodo').onclick=()=>{const o=metaById(selO.value);if(o&&o.saldo>0)mi.value='$'+Math.round(o.saldo).toLocaleString('es-CO');};
+
+  // Autocompletado: carga el monto en la meta con MÁS saldo, topado a ese saldo. No
+  // cascadea. Si el monto es mayor, el sobrante queda sin asignar y lo reparte el
+  // usuario: adivinar el orden sería reparto proporcional por la puerta de atrás, que
+  // es justo lo que se descartó.
+  const autocompletar=()=>{
+    if(tocado) return;
+    reparto={};
+    const lista=origenes();
+    if(!lista.length) return;
+    const m=lista[0], p=montoPedido();
+    if(p>0) reparto[m.id]=Math.min(p, Math.round(m.saldo));
+  };
+
+  const pintarIndicador=()=>{
+    const p=montoPedido(), a=asignado();
+    const tope=origenes().reduce((s,m)=>s+Math.round(m.saldo),0);
+    // La tarjeta del modal es CLARA (.modal-card sobre --paper), así que los colores
+    // son los de la paleta sobre claro: --gb y #e06c75 son para fondo oscuro y aquí se
+    // pierden contra el crema. --gold es el ámbar que la app ya usa sobre claro
+    // (.gold en styles.css) y #7a2222 su rojo (.btn.danger).
+    // El texto va en una sola línea junto al rótulo: a 375px "Asignado $7.200.000 ·
+    // faltan $1.800.000" rompía en dos y partía "De dónde sale" con él. Lo que el
+    // usuario necesita es cuánto le falta, no cuánto lleva — eso ya lo dicen las filas.
+    let txt, col;
+    if(p<=0){ txt=''; col=''; }
+    else if(p>tope){ txt=`No alcanza: faltan ${fmtK(p-tope)}`; col='#7a2222'; }
+    else if(a<p){ txt=`Faltan ${fmtK(p-a)}`; col='var(--gold)'; }
+    else if(a>p){ txt=`Sobran ${fmtK(a-p)}`; col='#7a2222'; }
+    else { txt='Todo repartido ✓'; col='var(--green)'; }
+    lblAsig.textContent=txt; lblAsig.style.color=col||'var(--gs)';
+    const ok=p>0 && a===p;
+    btnOk.disabled=!ok;
+    btnOk.style.opacity=ok?'1':'.45';
+  };
+
+  // Se repinta la lista completa solo al cambiar monto o destino, nunca en cada tecla
+  // de una fila: reconstruir el DOM mientras se escribe cierra el teclado en móvil.
+  const pintarFilas=()=>{
+    const lista=origenes();
+    filas.innerHTML=lista.map(m=>{
+      const priv=!!m.dueno;
+      const punto=priv
+        ? `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${colorDeMeta(m)};flex:0 0 auto;"></span>`
+        : '';
+      return `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);">
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">
+          ${punto}
+          <div style="min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.nombre)}</div>
+            <div style="font-size:10.5px;color:var(--gs);">de ${fmtK(m.saldo)}${priv?' · privada':''}</div>
+          </div>
+        </div>
+        <input class="sf money rt-fila" data-meta="${m.id}" inputmode="numeric" placeholder="$0"
+               style="flex:0 0 118px;width:118px;margin:0;text-align:right;font-size:13px;padding:7px 8px;">
+      </div>`;
+    }).join('');
+    lista.forEach(m=>{
+      const inp=filas.querySelector(`[data-meta="${m.id}"]`);
+      const v=reparto[m.id]||0;
+      inp.value=v>0?'$'+v.toLocaleString('es-CO'):'';
+    });
+    pintarIndicador();
+  };
+
+  // Formateo y tope: el tope se aplica al SALIR del campo, no al escribir. Recortar
+  // mientras se teclea impide escribir un número más largo que el saldo — es el mismo
+  // bug de teclado que ya se corrigió en el % inline de Metas.
+  filas.addEventListener('input', e=>{
+    const inp=e.target.closest('.rt-fila'); if(!inp) return;
+    tocado=true;
+    const d=inp.value.replace(/\D/g,'');
+    inp.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+    const m=metaById(inp.dataset.meta), val=Number(d||0);
+    reparto[inp.dataset.meta]=val;
+    inp.style.color = (m && val>Math.round(m.saldo)) ? 'var(--gold)' : '';
+    pintarIndicador();
+  });
+  filas.addEventListener('blur', e=>{
+    const inp=e.target.closest('.rt-fila'); if(!inp) return;
+    const m=metaById(inp.dataset.meta); if(!m) return;
+    const tope=Math.round(m.saldo);
+    let val=Number((inp.value||'').replace(/\D/g,''))||0;
+    if(val>tope){ val=tope; flash('Esa meta solo tiene '+fmtK(tope)); }
+    reparto[m.id]=val;
+    inp.value=val>0?'$'+val.toLocaleString('es-CO'):'';
+    inp.style.color='';
+    pintarIndicador();
+  }, true);
+
+  mi.addEventListener('input',e=>{
+    const d=e.target.value.replace(/\D/g,'');
+    e.target.value=d?'$'+Number(d).toLocaleString('es-CO'):'';
+    autocompletar(); pintarFilas();
+  });
+  selD.onchange=()=>{ if(reparto[destinoId()]) delete reparto[destinoId()]; autocompletar(); pintarFilas(); };
+
+  fillDestinos(); pintarFilas();
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   ov.querySelector('#rtCancel').onclick=()=>ov.remove();
+
   ov.querySelector('#rtOk').onclick=async ()=>{
-    const o=metaById(selO.value), monto=parse(mi.value), nota=ov.querySelector('#rtNota').value.trim();
-    if(!o||monto<=0){flash('Pon un monto válido');return;}
-    if(monto>o.saldo){flash('Saldo insuficiente en el origen');return;}
+    const p=montoPedido();
+    if(p<=0){flash('Pon un monto válido');return;}
+    const repartos=origenes()
+      .map(m=>({metaId:m.id, monto:Math.min(reparto[m.id]||0, Math.round(m.saldo))}))
+      .filter(r=>r.monto>0);
+    const total=repartos.reduce((s,r)=>s+r.monto,0);
+    if(total!==p){flash('Reparte el monto completo entre tus metas');return;}
+
+    // Antes de mover nada: qué metas estaban cumplidas y van a quedar en cero.
+    const vaciadas=repartos.map(r=>{
+      const m=metaById(r.metaId);
+      const cumplida=m && m.objetivo>0 && m.saldo>=m.objetivo;
+      const quedaEnCero=m && Math.abs(m.saldo-r.monto)<0.5;
+      return (cumplida&&quedaEnCero)?{meta:m, monto:r.monto}:null;
+    }).filter(Boolean);
+
     const dval=selD.value;
+    const res=ejecutarRetiroMulti(repartos, dval, ov.querySelector('#rtNota').value.trim());
+    if(!res){flash('No se pudo registrar el retiro');return;}
+    save(); ov.remove(); rerender();
 
-    const wasCompleted = o.objetivo > 0 && o.saldo >= o.objetivo;
-    const isWithdrawingAll = Math.abs(o.saldo - monto) < 0.5;
+    const msg = dval==='fuera'
+      ? (repartos.length>1 ? `Retiro de ${repartos.length} metas ✓` : 'Retiro registrado ✓')
+      : (repartos.length>1 ? `Transferencia de ${repartos.length} metas ✓` : 'Transferencia realizada ✓');
+    flashUndo(msg, ()=>{
+      deshacerRetiroMulti(res);
+      save(); rerender(); flash('Retiro deshecho ✓');
+    });
 
-    if(dval==='fuera'){
-      o.saldo-=monto;
-      const gId = uid();
-      state.gastos.push({id:gId,meta:o.id,fecha:today(),monto:monto,mov:'salida',nota:nota||'Retiro de una meta',creadoPor:c.perfil});
-      save();ov.remove();rerender();
-      flashUndo('Retiro registrado ✓', () => {
-        const mCurrent = metaById(o.id);
-        if (mCurrent) {
-          mCurrent.saldo += monto;
-          state.gastos = state.gastos.filter(g => g.id !== gId);
-          save(); rerender(); flash('Retiro deshecho ✓');
-        }
-      });
-    }else{
-      const d=metaById(dval);
-      if(!d){flash('Destino inválido');return;}
-      o.saldo-=monto;
-      d.saldo+=monto;
-      const tId=uid();
-      const cruzaTerreno=!o.dueno&&o.tipo!=='personal'&&(d.dueno||d.tipo==='personal');
-      const gOutId = uid(), gInId = uid();
-      state.gastos.push({id:gOutId,meta:o.id,fecha:today(),monto:monto,mov:'transfer-out',transferId:tId,aTerrenoPersonal:cruzaTerreno||undefined,nota:nota||('Transferencia a '+(cruzaTerreno?'lo personal':d.nombre)),creadoPor:c.perfil});
-      state.gastos.push({id:gInId,meta:d.id,fecha:today(),monto:monto,entrada:true,mov:'transfer-in',transferId:tId,nota:nota||('Transferencia desde '+o.nombre),creadoPor:c.perfil});
-      save();ov.remove();rerender();
-      flashUndo('Transferencia realizada ✓', () => {
-        const mSrc = metaById(o.id), mDst = metaById(d.id);
-        if (mSrc && mDst) {
-          mSrc.saldo += monto;
-          mDst.saldo -= monto;
-          state.gastos = state.gastos.filter(g => g.id !== gOutId && g.id !== gInId);
-          save(); rerender(); flash('Transferencia deshecha ✓');
-        }
-      });
-    }
-
-    if (wasCompleted && isWithdrawingAll) {
-      const confirmDelete = await customConfirm(
-        `¿Ya usaste el dinero para cumplir la meta "${esc(o.nombre)}"?\n\nSi es así, la eliminaremos del plan. Si no, volverá a quedar como meta activa para seguir ahorrando.`,
-        false,
-        'Sí, eliminar',
-        'No, dejar activa'
-      );
-      if (confirmDelete) {
-        const metaSnap = JSON.parse(JSON.stringify(o));
-        const gastosSnap = state.gastos.filter(g => g.meta === metaSnap.id);
-        const sobrante = sobranteDesdeMetaBorrada(metaSnap);
-        state.gastos = state.gastos.filter(g => g.meta !== metaSnap.id);
-        state.metas = state.metas.filter(x => x.id !== metaSnap.id);
-        if (sobrante) state.ingresos.push(sobrante);
-        save();
-        rerender();
-        flashUndo('Meta eliminada', () => {
-          if (!state.metas.some(x => x.id === metaSnap.id)) state.metas.push(metaSnap);
-          if (sobrante) state.ingresos = state.ingresos.filter(i => i.id !== sobrante.id);
-          const faltantes = gastosSnap.filter(g => !state.gastos.some(x => x.id === g.id));
-          if (faltantes.length) state.gastos = state.gastos.concat(faltantes);
-          save();
-          rerender();
-          flash('Eliminación deshecha ✓');
-        });
-      }
-    }
+    await confirmarMetasVaciadas(vaciadas);
   };
 }
 
@@ -4447,11 +4637,53 @@ function revertirAporte(id) {
   flash('Ingreso eliminado y saldos revertidos ✓');
 }
 
+// Revierte todas las patas de un retiro multi-meta. Solo si están TODAS en este
+// dispositivo: si una es de una meta privada de la pareja y vive en su bolsillo, este
+// teléfono nunca la recibe, y revertir a medias devolvería unos saldos dejando los
+// otros colgando — la misma regla de fallar cerrado que ya protege media transferencia.
+function revertirRetiroGrupo(retiroId){
+  const patas = state.gastos.filter(x => x.retiroId === retiroId);
+  const salientes = patas.filter(x => x.mov === 'salida' || x.mov === 'transfer-out');
+  if (!salientes.length) return;
+
+  if (patas.some(x => gastoDeMetaAjena(x, state.config.perfil))) {
+    flash('Este retiro toca una meta individual de tu pareja: no puedes eliminarlo');
+    return;
+  }
+  const esperadas = salientes[0].retiroPatas || salientes.length;
+  if (salientes.length < esperadas) {
+    flash('Este retiro no está completo en este dispositivo: no puedes eliminarlo');
+    return;
+  }
+  // Un transfer-out sin su transfer-in es media transferencia: mismo bloqueo.
+  const medias = salientes.some(x =>
+    x.transferId && state.gastos.filter(y => y.transferId === x.transferId).length < 2);
+  if (medias) {
+    flash('Este retiro no está completo en este dispositivo: no puedes eliminarlo');
+    return;
+  }
+
+  patas.forEach(x => {
+    const mx = metaById(x.meta);
+    if (!mx) return;
+    if (x.mov === 'transfer-in') mx.saldo = Math.max(0, mx.saldo - x.monto);
+    else mx.saldo += x.monto;                       // 'salida' y 'transfer-out'
+  });
+  state.gastos = state.gastos.filter(x => x.retiroId !== retiroId);
+  save();
+  rerender();
+  flash('Retiro eliminado y saldos revertidos ✓');
+}
+
 function revertirGasto(id) {
   const g = state.gastos.find(x => x.id === id);
   if (!g) return;
 
   const m = metaById(g.meta);
+
+  // Retiro multi-meta: la × revierte el GRUPO, no la pata suelta. Se delega en
+  // revertirRetiroGrupo, que falla cerrado si falta alguna pata.
+  if (g.retiroId && (g.retiroPatas || 1) > 1) { revertirRetiroGrupo(g.retiroId); return; }
 
   // Ninguna vista debe poder mutar el saldo de una meta individual de la pareja.
   const patas = g.transferId ? state.gastos.filter(x => x.transferId === g.transferId) : [g];
@@ -4693,8 +4925,62 @@ function drawMonthlyDistributionBars(mes) {
 function processTransactionsForDisplay(rawList) {
   const processed = [];
   const seenTransfers = new Set();
-  
+
+  // Retiro multi-meta: N patas de un mismo retiroId son UNA fila. Se agrupa solo si
+  // este dispositivo ve dos o más patas SALIENTES; con una sola se cae al camino de
+  // siempre (retiro suelto o par de transferencia), que ya trata bien el caso huérfano.
+  //
+  // El monto de la fila se SUMA de las patas visibles, nunca de un campo guardado: en
+  // el teléfono de la pareja faltan las patas de metas privadas ajenas y la fila debe
+  // valer menos. Un total persistido dejaría deducir la parte privada restando.
+  const esSaliente = t => t.mov === 'salida' || t.mov === 'transfer-out';
+  const salientesPorRetiro = {};
   rawList.forEach(t => {
+    if (t.type === 'gasto' && t.retiroId && esSaliente(t)) {
+      (salientesPorRetiro[t.retiroId] = salientesPorRetiro[t.retiroId] || []).push(t);
+    }
+  });
+  const agrupados = new Set(
+    Object.keys(salientesPorRetiro).filter(k => salientesPorRetiro[k].length >= 2));
+  const emitidos = new Set();
+
+  rawList.forEach(t => {
+    if (t.type === 'gasto' && t.retiroId && agrupados.has(t.retiroId)) {
+      if (!esSaliente(t)) return;            // la entrada la representa su grupo
+      if (emitidos.has(t.retiroId)) return;
+      emitidos.add(t.retiroId);
+
+      const salientes = salientesPorRetiro[t.retiroId];
+      const primera = salientes[0];
+      const esTransfer = primera.mov === 'transfer-out';
+      // Fallar cerrado: solo se puede revertir si están TODAS las patas salientes de la
+      // operación. Si alguna es de una meta privada de la pareja y no llegó a este
+      // dispositivo, revertir movería unos saldos y dejaría los otros colgando.
+      const completo = salientes.length === (primera.retiroPatas || salientes.length);
+      let destino = null;
+      if (esTransfer) {
+        const gIn = state.gastos.find(x => x.retiroId === t.retiroId && x.mov === 'transfer-in');
+        const mIn = gIn ? metaById(gIn.meta) : null;
+        destino = mIn ? mIn.nombre : 'otra meta';
+      }
+
+      processed.push({
+        type: 'retiro',
+        id: primera.id,
+        retiroId: t.retiroId,
+        nombre: esTransfer
+          ? `Transferencia de ${salientes.length} metas`
+          : (primera.nombre && !/^Retiro/.test(primera.nombre) ? primera.nombre : 'Retiro de varias metas'),
+        monto: salientes.reduce((s, x) => s + x.monto, 0),
+        fecha: primera.fecha,
+        creadoPor: primera.creadoPor,
+        nOrigenes: salientes.length,
+        destinoNombre: destino,
+        noBorrable: !completo || undefined
+      });
+      return;
+    }
+
     if (t.type === 'gasto' && t.transferId) {
       if (seenTransfers.has(t.transferId)) return;
       seenTransfers.add(t.transferId);
@@ -4795,6 +5081,13 @@ function drawTransactionTimeline(transactions, canEdit) {
       sign = '';
       color = 'var(--gold)';
       destLabel = `Transferencia: ${t.fromMeta} → ${t.toMeta}`;
+    } else if (t.type === 'retiro') {
+      // Retiro multi-meta agrupado. El monto ya viene sumado de las patas visibles.
+      sign = t.destinoNombre ? '' : '-';
+      color = t.destinoNombre ? 'var(--gold)' : '#e06c75';
+      destLabel = t.destinoNombre
+        ? `${t.nOrigenes} metas → ${t.destinoNombre}`
+        : `Retiro de ${t.nOrigenes} metas`;
     }
     
     let dateFormatted = '';
@@ -4874,7 +5167,9 @@ function renderMiMes(){
     creadoPor: g.creadoPor,
     mov: g.mov,
     meta: g.meta,
-    transferId: g.transferId
+    transferId: g.transferId,
+    retiroId: g.retiroId,
+    retiroPatas: g.retiroPatas
   }));
   
   const rawAll = [...listIngresos, ...listGastos].sort((a, b) => {
