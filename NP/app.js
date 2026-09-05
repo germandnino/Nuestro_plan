@@ -3246,18 +3246,17 @@ function renderMetas(){
       // por tarjeta para repetir lo que el relleno ya dice, y con la fila del reparto la
       // tarjeta se volvió demasiado gruesa. Lo que NO puede volver es un porcentaje suelto
       // y prominente: ese se leía como progreso siendo el aporte.
-      // ETA útil (sueño/colchón con objetivo y aún no lleno).
-      let eta='';
-      if(m.tipo!=='invertir' && obj && m.saldo<obj){
-        const meses=calcularTiempoRestante(m);
-        if(meses!=null && meses>0) eta = meses<12 ? `~${meses} mes${meses!==1?'es':''}` : `~${Math.floor(meses/12)} año${Math.floor(meses/12)!==1?'s':''}`;
-      }
+      // Sin plazo estimado en la tarjeta. Solo aparecía cuando ahorroEstimado() del
+      // scope de la meta tenía historial, así que la misma pantalla mostraba unas metas
+      // con "~8 meses" y otras sin nada — no por ser distintas, sino por de dónde venía
+      // la plata. Esa asimetría se lee como que a unas les falta información. El plazo
+      // sigue estando donde se pide a propósito: al abrir la meta y en Aprender.
       // Sin el porcentaje: desde el rediseño lo dice el número grande de la derecha, y
       // repetirlo aquí ponía la misma cifra dos veces en la misma tarjeta. El "de" en vez
       // de la barra sigue al diseño (MetasA2.dc.html): se lee como frase, no como quebrado.
       // Todo en formato compacto: la tarjeta es de dos líneas y $27.900 junto al reparto
       // la apretaba hasta los puntos suspensivos. fmtK conserva el decimal bajo 100k.
-      const generico = `${fmtK(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}${eta?` · ${eta}`:''}`;
+      const generico = `${fmtK(m.saldo)}${obj?` de ${fmtK(obj)}`:''}${pct!=null?` · ${Math.round(pct)}%`:''}`;
       let sub;
       const cdtVencido = m.tipo==='invertir' && m.colocado && m.vencimiento && m.vencimiento<=curMonth();
       if(m.tipo==='invertir'){
@@ -3283,7 +3282,7 @@ function renderMetas(){
           const unidad = (m.saldo/m.gastoRef)===1 ? 'mes' : 'meses';
           sub = lleno
             ? `${prot} · ${mAct} ${unidad} de respaldo`
-            : (obj>0 ? `${mAct} / ${fm(obj/m.gastoRef)} meses${eta?` · ${eta}`:''}` : `${mAct} ${unidad} de respaldo`);
+            : (obj>0 ? `${mAct} / ${fm(obj/m.gastoRef)} meses` : `${mAct} ${unidad} de respaldo`);
         } else {
           sub = lleno ? `${prot} · ${fmtK(m.saldo)}` : generico;
         }
