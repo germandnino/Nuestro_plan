@@ -44,6 +44,9 @@ let _syncEnVuelo = Promise.resolve(); // última escritura de sync lanzada por s
 // Guardados propios en curso. Mientras haya alguno, el listener del bolsillo NO
 // reconstruye el estado: ver la nota en su onSnapshot.
 let _guardadosEnVuelo = 0;
+// Número del último guardado pedido. syncSavePartido descarta el suyo si ya no es el
+// vigente, para que una foto vieja no pise a una nueva.
+let _saveSeq = 0;
 
 const store={
   async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
@@ -974,9 +977,25 @@ async function syncSaveBolsillo(planId, uid, bolsillo) {
 // costo —un round-trip de más por guardado— es barato frente a perder plata.
 // Si cualquiera de las dos falla, el guardado entero se reporta como fallido: el usuario
 // no puede quedar creyendo que sincronizó cuando la mitad no salió.
-async function syncSavePartido(planId, stateToSave) {
+// `seq` es el número de guardado que pidió esta escritura. Si mientras se espera el ACK
+// del bolsillo arranca un guardado más nuevo, este ya no manda y se descarta.
+//
+// Sin esto, dos guardados solapados escriben cada uno el documento ENTERO con la foto
+// que capturó al arrancar, y gana el que aterriza de último —que puede ser el más
+// viejo—: era el porcentaje que volvía a su valor anterior. Firestore sí respeta el
+// orden de emisión, pero el `await` del bolsillo deja que un guardado posterior adelante
+// al anterior y emita su `shared` primero.
+//
+// Descartar en vez de encadenar es deliberado: encadenando, una escritura que nunca
+// resuelve —sin conexión, Firestore deja la promesa pendiente hasta reconectar— bloquea
+// para siempre todas las siguientes. El estado más nuevo ya contiene lo del viejo, así
+// que saltárselo no pierde nada.
+async function syncSavePartido(planId, stateToSave, seq) {
+  const vigente = () => seq === undefined || seq === _saveSeq;
   const { bolsillo } = particionarEstado(stateToSave, stateToSave.config.perfil);
+  if (!vigente()) return;
   await syncSaveBolsillo(planId, currentUser.uid, bolsillo);
+  if (!vigente()) return;
   if (canEditShared()) await syncSaveShared(planId, stateToSave);
 }
 
@@ -1111,16 +1130,11 @@ async function save(){
       showSyncStatus('Solo local (sin conexión)', true);
     };
     _guardadosEnVuelo++;
-    // Los guardados se ENCADENAN, no salen en paralelo. Cada uno escribe el documento
-    // entero con la foto que capturó al arrancar; si dos se solapan, el que aterriza de
-    // último gana, y ese puede ser el más viejo. Encadenándolos aterrizan en el orden en
-    // que se pidieron, así que gana el más reciente, que es el que trae lo que el usuario
-    // acaba de hacer. El eslabón anterior se absorbe con catch: un guardado que falló no
-    // debe impedir el siguiente.
-    const previo = _syncEnVuelo;
-    _syncEnVuelo = previo
-      .catch(() => {})
-      .then(() => syncSavePartido(currentPlanId, stateClone));
+    // Cada guardado lleva su número. syncSavePartido descarta el suyo si mientras
+    // esperaba el ACK del bolsillo arrancó uno más nuevo: así gana el más reciente, que
+    // es el que trae lo que el usuario acaba de hacer.
+    const miSeq = ++_saveSeq;
+    _syncEnVuelo = syncSavePartido(currentPlanId, stateClone, miSeq);
     // El contador se libera cuando syncSavePartido termina, o sea DESPUÉS de que la
     // escritura de shared ya salió: su eco local ya refrescó _syncShared, así que
     // cualquier reconstrucción posterior parte de datos frescos.
@@ -2396,8 +2410,12 @@ function drawBucketBar(dueno, embebido = false){
 
   // Colores por propósito (barra + slider): teal colchón, oro sueños, verde inversión.
   const col = { imprevistos:'#3f8a8a', sueno:'var(--gb)', invertir:'#5aa67e' };
-  // Base para proyectar el monto en $ por propósito (ahorro del mes actual). Si 0, solo %.
-  const base = (typeof ahorroMesUI==='function') ? ahorroMesUI(curMonth()) : 0;
+  // Base para proyectar el monto en $ por propósito: el ahorro del mes DE ESTE SCOPE.
+  // Antes usaba ahorroMesUI(), que suma lo común y lo privado propio, así que la barra
+  // "Distribución del ahorro compartido" repartía plata privada: con $50.000 comunes y
+  // $300.000 privados mostraba $175.000 por propósito en un teléfono y $25.000 en el
+  // otro, bajo la misma etiqueta y para el mismo mes.
+  const base = flujoScopeMes(curMonth(), dueno).base;
 
   // Barra segmentada proporcional: los propósitos llenos quedan en 0% → no ocupan ancho.
   const segs = todos.filter(t=>(cfg[t]||0)>0).map(t=>
@@ -2479,7 +2497,10 @@ function drawBucketBar(dueno, embebido = false){
 // toggle. `flujoDelMes` es el mismo que cita Mi Mes.
 function drawMesYReparto(dueno){
   const mes = curMonth();
-  const f = flujoDelMes(mes);
+  // Del SCOPE de la sub-pestaña, no del flujo completo: en "Compartidas" el titular
+  // decía +$350.000 (lo común más lo privado propio) encima de un reparto rotulado
+  // "compartido", y en el teléfono de la pareja la misma ficha decía +$50.000.
+  const f = flujoScopeMes(mes, dueno);
   const reparto = drawBucketBar(dueno, true);
   const nombreMes = fmtMes(mes).split(' ')[0];
   const netoCol = f.neto >= 0 ? 'var(--gb)' : '#e06c75';
@@ -2975,6 +2996,30 @@ function ahorroNetoMesUI(mes){
   return flujoDelMes(mes).neto;
 }
 
+// Flujo del mes ACOTADO a un scope: null = lo común, un perfil = lo privado de ese
+// perfil (siempre el activo; el del otro no llega a este dispositivo).
+//
+// Existe porque las tarjetas rotuladas "compartido" estaban usando cifras de alcance UI
+// —lo común MÁS lo privado propio—. En un plan con $50.000 comunes y $300.000 privados
+// al mes, la barra "Distribución del ahorro compartido" repartía $350.000, y el mismo
+// mes se veía como $175.000 por propósito en un teléfono y $25.000 en el otro. Una cifra
+// rotulada "nuestro" tiene que ser idéntica en los dos teléfonos.
+//
+// `base` es BRUTA a propósito, igual que ahorroMesUI: es lo que el motor reparte, y los
+// retiros no se reparten. `neto` sí descuenta las salidas del scope.
+function flujoScopeMes(mes, dueno){
+  const f = flujoDelMes(mes);
+  if (dueno) {
+    return { base: f.entroPriv, neto: f.netoPriv, entro: f.entroPriv, salio: f.salioPriv };
+  }
+  return {
+    base: Math.max(0, f.entro - f.entroPriv),
+    neto: f.netoComun,
+    entro: f.entro - f.entroPriv,
+    salio: f.salio - f.salioPriv
+  };
+}
+
 // Ahorro visible de un mes: suma los movimientos del mes (excluye sobrantes sin asignar,
 // ya contados en su ingreso de origen). BRUTO: no resta retiros. Ver ahorroNetoMesUI.
 function ahorroMesUI(mes){
@@ -3139,13 +3184,19 @@ function drawSavingsHistoryCard() {
   // Con retiros un mes puede cerrar en negativo, así que la escala se mide en valor
   // absoluto y las barras negativas cuelgan HACIA ABAJO de la línea base.
   const maxVal = Math.max(...historyData.map(d => Math.abs(d.ahorro)), 500000);
-  // El promedio de referencia es el mismo que cita la tarjeta del mes (ahorroEstimado:
-  // SMA de 6 meses cerrados). Antes se promediaban las barras dibujadas, que incluyen el
-  // mes en curso a medias, y daba una cifra distinta a la del titular: dos "promedios"
-  // en la misma pantalla. El respaldo es la media de las barras, por si no hay ningún
-  // mes cerrado todavía.
-  const avgVal = ahorroEstimado(scopeVista())
-    ?? (historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length);
+  // El promedio es de las MISMAS barras que se dibujan, saltándose el mes en curso
+  // porque va a medias.
+  //
+  // Antes citaba ahorroEstimado(scopeVista()), que en pareja promedia SOLO lo común,
+  // junto a barras que son alcance UI —lo común más lo privado propio—. Con $50.000
+  // comunes y $300.000 privados al mes la tarjeta mostraba tres barras de $350.000 y un
+  // "prom $50k": el promedio de tres barras iguales no puede ser otra cifra. Un promedio
+  // tiene que promediar lo que se está viendo.
+  const mesActual = curMonth();
+  const cerrados = mesesUI.slice(-6).filter(m => m < mesActual);
+  const avgVal = cerrados.length
+    ? cerrados.reduce((s, m) => s + ahorroNetoMesUI(m), 0) / cerrados.length
+    : (historyData.reduce((s, d) => s + d.ahorro, 0) / historyData.length);
   const N = historyData.length;
   
   const graphWidth = 250;
@@ -3622,10 +3673,13 @@ function renderMetas(){
     return pres;
   };
   // Refresca en vivo (sin rerender) % , monto, ancho de la barra y el slider amortiguado.
-  const baseAhorroSlider = (typeof ahorroMesUI==='function') ? ahorroMesUI(curMonth()) : 0;
+  // La base es la del SCOPE de los sliders, la misma que pinta drawBucketBar: si no,
+  // arrastrar un slider cambiaba los montos a una escala distinta de la que se veía.
   const refreshBucketUI = (root) => {
     const anySlider = root.querySelector('.bucket-slider[data-bucket]');
-    const cfg = bucketsCfg(anySlider ? (anySlider.dataset.scope || null) : null);
+    const scopeSliders = anySlider ? (anySlider.dataset.scope || null) : null;
+    const baseAhorroSlider = flujoScopeMes(curMonth(), scopeSliders).base;
+    const cfg = bucketsCfg(scopeSliders);
     root.querySelectorAll('.bucket-slider[data-bucket]').forEach(s=>{
       const t = s.dataset.bucket, val = cfg[t]||0;
       if(parseInt(s.value)!==val) s.value = val;
