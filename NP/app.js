@@ -41,13 +41,16 @@ let planMeta = null;          // Objeto con metadatos del plan (owner, partner, 
 let unsubscribeMeta = null;   // función para cancelar listener de metadatos
 let unsubscribeBolsillo = null; // listener del bolsillo privado propio
 let _syncEnVuelo = Promise.resolve(); // última escritura de sync lanzada por save(), para poder encadenarla
+// Guardados propios en curso. Mientras haya alguno, el listener del bolsillo NO
+// reconstruye el estado: ver la nota en su onSnapshot.
+let _guardadosEnVuelo = 0;
 
 const store={
   async get(){try{if(window.storage){const r=await window.storage.get('plan2');if(r&&r.value)return r.value;}}catch(e){}try{return localStorage.getItem('plan2');}catch(e){return null;}},
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.61'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.62'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 // Un decimal solo donde informa. Bajo 100k, redondear a miles enteros borra plata que
@@ -1048,6 +1051,16 @@ function syncSubscribe(planId) {
         // local ya es el bueno, y rehacerlo aquí solo abre la ventana para mezclar con un
         // snapshot compartido que todavía no llegó.
         if (doc.metadata && doc.metadata.hasPendingWrites) return;
+        // Mismo motivo, un paso más allá: syncSavePartido ESPERA el ACK del servidor
+        // del bolsillo antes de lanzar la escritura de shared (E28 lo exige: si el
+        // bolsillo falla, shared no se toca). Ese ACK dispara este snapshot ya sin
+        // hasPendingWrites, y en ese instante _syncShared todavía es el documento VIEJO
+        // porque la escritura compartida ni siquiera ha salido. Reconstruir ahí revertía
+        // la edición de una meta compartida recién guardada —y saveLocalOnly() persistía
+        // la reversión—, mientras que las metas individuales sobrevivían porque vienen
+        // del bolsillo, que sí estaba fresco. Durante un guardado propio el estado local
+        // es el bueno y no hay nada que reconstruir.
+        if (_guardadosEnVuelo > 0) return;
         rebuildStateFromSync();
         scheduleRerender();
       }, e => console.warn('Bolsillo sin sincronizar:', e.message));
@@ -1097,8 +1110,12 @@ async function save(){
       console.warn('Firestore shared save failed, local only:', e.message);
       showSyncStatus('Solo local (sin conexión)', true);
     };
+    _guardadosEnVuelo++;
     _syncEnVuelo = syncSavePartido(currentPlanId, stateClone);
-    _syncEnVuelo.then(onOk).catch(onErr);
+    // El contador se libera cuando syncSavePartido termina, o sea DESPUÉS de que la
+    // escritura de shared ya salió: su eco local ya refrescó _syncShared, así que
+    // cualquier reconstrucción posterior parte de datos frescos.
+    _syncEnVuelo.then(onOk).catch(onErr).finally(() => { _guardadosEnVuelo = Math.max(0, _guardadosEnVuelo - 1); });
   }
 }
 
@@ -3523,18 +3540,36 @@ function renderMetas(){
     // Memoria: marca t como el más recién editado.
     _bucketEditOrder = _bucketEditOrder.filter(x=>x!==t); _bucketEditOrder.push(t);
     const otros = pres.filter(x=>x!==t);
-    if(otros.length===0){ cfg[t]=100; }
-    else {
-      // Solo UN amortiguador absorbe el cambio: el editado hace más tiempo (o nunca).
-      // Desempate entre no-editados: el último en el orden de la barra.
-      const orden = BUCKETS.filter(x=>otros.includes(x)); // orden visual de la barra
-      const rank = x => { const i=_bucketEditOrder.indexOf(x); return i<0?-1:i; };
-      const absorber = orden.slice().sort((a,b)=> (rank(a)-rank(b)) || (orden.indexOf(b)-orden.indexOf(a)) )[0];
-      const fijos = otros.filter(x=>x!==absorber);
-      const sumFijos = fijos.reduce((s,x)=>s+(cfg[x]||0),0);
-      const maxEdit = Math.max(0, 100 - sumFijos); // t no puede pasar de lo que deja libre lo fijo
-      cfg[t] = Math.min(v, maxEdit);
-      cfg[absorber] = Math.max(0, 100 - sumFijos - cfg[t]);
+    if(otros.length===0){ cfg[t]=100; return pres; }
+
+    // El slider que se está arrastrando SIEMPRE manda: se mueve libre entre 0 y 100.
+    // Antes se topaba en `100 - suma de los fijos`, y eso lo dejaba muerto: con colchón
+    // en 70 y inversión en 0, sueños tenía techo 30 —justo donde ya estaba— así que no
+    // respondía en ninguna dirección hasta devolver el otro slider.
+    cfg[t] = v;
+    const resto = 100 - v;   // lo que deben sumar los demás
+
+    // Un solo amortiguador absorbe el cambio mientras alcance: el editado hace más
+    // tiempo (o nunca). Desempate entre no-editados: el último en el orden de la barra.
+    const orden = BUCKETS.filter(x=>otros.includes(x)); // orden visual de la barra
+    const rank = x => { const i=_bucketEditOrder.indexOf(x); return i<0?-1:i; };
+    const absorber = orden.slice().sort((a,b)=> (rank(a)-rank(b)) || (orden.indexOf(b)-orden.indexOf(a)) )[0];
+    const fijos = otros.filter(x=>x!==absorber);
+    const sumFijos = fijos.reduce((s,x)=>s+(cfg[x]||0),0);
+
+    if(sumFijos <= resto){
+      cfg[absorber] = resto - sumFijos;             // caso normal: solo cede el amortiguador
+    }else{
+      // El amortiguador ya está en cero y no alcanza. Los fijos ceden a prorrata en vez
+      // de bloquear al editado: preferimos que los otros se muevan a que este se trabe.
+      cfg[absorber] = 0;
+      let repartido = 0;
+      fijos.forEach((x,i)=>{
+        const val = (i===fijos.length-1)
+          ? Math.max(0, resto - repartido)          // el último cuadra la suma exacta
+          : Math.round((cfg[x]||0) / sumFijos * resto);
+        cfg[x] = val; repartido += val;
+      });
     }
     return pres;
   };
