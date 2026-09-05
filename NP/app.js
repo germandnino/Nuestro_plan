@@ -2321,7 +2321,7 @@ function renderInicio(){
     ? `${drawHeroMes()}
        ${drawSinAsignarCard()}
        ${drawDestinoMes()}
-       <div class="stitle">Cómo van sus metas</div>
+       <div class="stitle">${state.config.modo === 'individual' ? 'Cómo van tus metas' : 'Cómo van sus metas'}</div>
        ${drawSavingsDonut()}
        <div style="height:12px;"></div>
        ${drawStatsBI()}
@@ -2550,7 +2550,7 @@ function drawSavingsDonut() {
     return `<div class="card dark" style="padding:18px 16px;">
       <div class="k" style="margin-bottom:12px;">Distribución de Ahorros</div>
       <div style="font-size:12.5px; color:rgba(246,241,230,.55); line-height:1.45;">
-        Aún no hay ahorros acumulados. Los saldos que agreguen a sus metas aparecerán aquí.
+        Aún no hay ahorros acumulados. Los saldos que ${state.config.modo === 'individual' ? 'agregues a tus metas' : 'agreguen a sus metas'} aparecerán aquí.
       </div>
     </div>`;
   }
@@ -5330,7 +5330,7 @@ function renderMiMes(){
         <span>Entró <b style="color:rgba(246,241,230,.88);">${fmtK(totalIn)}</b></span>
         <span>Salió <b style="color:rgba(246,241,230,.88);">${fmtK(totalOut)}</b></span>
       </div>
-      ${flujoMes.netoPriv > 0.5 ? `<div style="font-size:11.5px;color:rgba(246,241,230,.5);margin-top:6px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.config.perfil === 'p1' ? '#c87a53' : '#a36a84'};margin-right:4px;"></span>Incluye ${fmtK(flujoMes.netoPriv)} tuyo, privado</div>` : ''}
+      ${(state.config.modo !== 'individual' && flujoMes.netoPriv > 0.5) ? `<div style="font-size:11.5px;color:rgba(246,241,230,.5);margin-top:6px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.config.perfil === 'p1' ? '#c87a53' : '#a36a84'};margin-right:4px;"></span>Incluye ${fmtK(flujoMes.netoPriv)} tuyo, privado</div>` : ''}
     </div>`;
   
   // El chevron solo tiene sentido si hay barras que plegar.
@@ -5524,7 +5524,7 @@ function recomendacionAprender(ctx){
   }
   return {
     tool: 'simulador',
-    k: 'Con lo que ya ahorran',
+    k: esPareja ? 'Con lo que ya ahorran' : 'Con lo que ya ahorras',
     n: `${fmtK(ctx.prom)} al mes, proyectados`,
     d: `Mira en qué se convierte ${esPareja ? 'su' : 'tu'} ahorro mensual con distintos rendimientos y plazos.`,
     cta: 'Proyectar'
