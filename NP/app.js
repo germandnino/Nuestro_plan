@@ -1111,7 +1111,16 @@ async function save(){
       showSyncStatus('Solo local (sin conexión)', true);
     };
     _guardadosEnVuelo++;
-    _syncEnVuelo = syncSavePartido(currentPlanId, stateClone);
+    // Los guardados se ENCADENAN, no salen en paralelo. Cada uno escribe el documento
+    // entero con la foto que capturó al arrancar; si dos se solapan, el que aterriza de
+    // último gana, y ese puede ser el más viejo. Encadenándolos aterrizan en el orden en
+    // que se pidieron, así que gana el más reciente, que es el que trae lo que el usuario
+    // acaba de hacer. El eslabón anterior se absorbe con catch: un guardado que falló no
+    // debe impedir el siguiente.
+    const previo = _syncEnVuelo;
+    _syncEnVuelo = previo
+      .catch(() => {})
+      .then(() => syncSavePartido(currentPlanId, stateClone));
     // El contador se libera cuando syncSavePartido termina, o sea DESPUÉS de que la
     // escritura de shared ya salió: su eco local ya refrescó _syncShared, así que
     // cualquier reconstrucción posterior parte de datos frescos.
@@ -2352,7 +2361,8 @@ function drawBucketBar(dueno, embebido = false){
   // Editable: lo compartido solo por el Editor; lo individual por el dueño del perfil.
   const editable = dueno ? true : canEditShared();
   // Propósitos llenos → 0% fijo (no reciben ahorro hasta tener una meta con cupo).
-  todos.forEach(t=>{ if(!editables.includes(t)) cfg[t]=0; });
+  let cambioCfg = false;
+  todos.forEach(t=>{ if(!editables.includes(t) && (cfg[t]||0)!==0){ cfg[t]=0; cambioCfg=true; } });
   // Auto-normaliza a 100 SOLO sobre los editables (con cupo). Se auto-cura cuando un
   // propósito se llena/vacía o aparece/desaparece (sin esperar edición manual).
   if(editables.length){
@@ -2360,9 +2370,20 @@ function drawBucketBar(dueno, embebido = false){
     if(Math.round(sum)!==100){
       if(sum<=0){ const each=Math.floor(100/editables.length); editables.forEach(t=>cfg[t]=each); cfg[editables[editables.length-1]]+=100-each*editables.length; }
       else { editables.forEach(t=>cfg[t]=Math.round((cfg[t]||0)/sum*100)); const t2=editables.reduce((s,t)=>s+(cfg[t]||0),0); cfg[editables[editables.length-1]]+=100-t2; }
+      cambioCfg = true;
     }
-    save();
   }
+  // Guardar SOLO si la auto-cura cambió algo de verdad.
+  //
+  // Antes el save() estaba fuera del `if` de cambio, así que CADA render de esta barra
+  // escribía el plan entero en Firestore. Y como el guardado dispara el snapshot del
+  // bolsillo, que llama a rebuildStateFromSync() y a scheduleRerender(), el render
+  // siguiente volvía a guardar: estar parado en la pantalla de Metas era un bucle de
+  // escritura que no paraba solo —medido en producción: ~9 escrituras por segundo,
+  // indefinidamente, hasta recargar la página—. De paso, ese bucle dejaba varios save()
+  // solapados en vuelo, cada uno con la foto que capturó al arrancar, y el que aterrizaba
+  // de último ganaba: por eso un porcentaje recién editado volvía a su valor anterior.
+  if(cambioCfg) save();
 
   const resumenParts = [];
   todos.forEach(t => {
