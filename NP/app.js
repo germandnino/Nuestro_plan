@@ -50,7 +50,7 @@ const store={
   async set(v){let ok=false;try{if(window.storage){await window.storage.set('plan2',v,false);ok=true;}}catch(e){}try{localStorage.setItem('plan2',v);ok=true;}catch(e){}return ok;}
 };
 
-const APP_VERSION='1.0.62'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
+const APP_VERSION='1.0.63'; // versión visible en Ajustes; subir junto con el CACHE del service-worker en cada release
 const $=id=>document.getElementById(id);
 const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
 // Un decimal solo donde informa. Bajo 100k, redondear a miles enteros borra plata que
@@ -2844,7 +2844,11 @@ function drawHeroMes(){
 
   let cmpHtml;
   if (r.delta == null) {
-    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">Aún no hay meses cerrados con qué comparar.</div>`;
+    // En pareja el promedio sale del scope COMÚN, así que hay que decirlo: un plan cuyo
+    // movimiento ha sido todo individual tiene historial de sobra y aun así aquí no hay
+    // con qué comparar. Sin la palabra "comunes", esta frase se lee como "no tienes
+    // historial" justo encima de un "mejor mes jul 2026" en Estadísticas.
+    cmpHtml = `<div style="font-size:12.5px;color:rgba(246,241,230,.6);margin-top:5px;">Aún no hay meses ${esPareja?'comunes ':''}cerrados con qué comparar.</div>`;
   } else if (r.ahorro <= 0.5) {
     // Sin esta rama, el primer día de cada mes la tarjeta le dice a todo el mundo "van
     // 100% por debajo de su promedio". Es exacto y es un regaño automático por un estado
@@ -3062,10 +3066,34 @@ function drawStatsBI(){
       ${sub ? `<div style="font-size:10.5px; color:rgba(246,241,230,.45); margin-top:3px;">${sub}</div>` : ''}
     </div>`;
 
+  // El total se parte en común y tuyo, en vez de una sola cifra que los sumaba sin
+  // decirlo. El titular de arriba compara SOLO lo común (para que la cifra sea idéntica
+  // en los dos teléfonos), así que un plan donde todo el movimiento ha sido individual
+  // mostraba "aún no hay meses cerrados con qué comparar" justo encima de un "mejor mes
+  // jul 2026": las dos ciertas, en universos distintos, y contradiciéndose a la vista.
+  // Separadas, cada cifra dice de qué habla. En modo individual no hay "común" que
+  // separar y se conserva el total único.
+  const esPareja = state.config.modo !== 'individual';
+  const flujos = meses.map(flujoDelMes);
+  const totalComun = flujos.reduce((s, f) => s + f.netoComun, 0);
+  const totalTuyo = flujos.reduce((s, f) => s + f.netoPriv, 0);
+
+  // Marca de alcance del mejor mes, solo cuando el mes fue puro: mezclado no se rotula
+  // en vez de inventar a cuál de los dos "pertenece".
+  const fBest = flujos[bestIdx];
+  const soloTuyo = Math.abs(fBest.netoComun) < 0.5 && Math.abs(fBest.netoPriv) > 0.5;
+  const soloComun = Math.abs(fBest.netoPriv) < 0.5 && Math.abs(fBest.netoComun) > 0.5;
+  const marca = !esPareja ? '' : (soloTuyo ? ' · tuyo' : (soloComun ? ' · común' : ''));
+
   let tiles = '';
   // Es la suma de lo que ha entrado al plan, no el saldo actual (la dona de arriba muestra ese).
-  tiles += tile('Total ahorrado', fmtK(totalAhorrado), 'neto de retiros');
-  tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]));
+  if (esPareja) {
+    tiles += tile('Total común', fmtK(totalComun), 'neto de retiros');
+    tiles += tile('Total tuyo', fmtK(totalTuyo), 'solo tú lo ves');
+  } else {
+    tiles += tile('Total ahorrado', fmtK(totalAhorrado), 'neto de retiros');
+  }
+  tiles += tile('Mejor mes', fmtK(ahorros[bestIdx]), fmtMes(meses[bestIdx]) + marca);
   tiles += tile('Constancia', `${nAhorrados} ${nAhorrados === 1 ? 'mes' : 'meses'}`, racha > 1 ? `racha de ${racha}` : '');
 
   return `<div class="card dark" style="padding:18px 16px; margin-bottom:12px;">
