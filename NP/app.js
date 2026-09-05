@@ -2235,7 +2235,13 @@ function renderInicio(){
   const _svgTip = (icon) => getSVG(icon, '', 'vertical-align:middle;margin-right:6px;color:var(--gold);');
 
   const metasActivas = _ind ? metasIndividuales(c.perfil) : metasCompartidas();
-  const aportadoEsteMes = ahorroMesUI(curMonth()) > 0;
+  // Mismo alcance que metasActivas. Con ahorroMesUI —lo común MÁS lo privado propio— el
+  // consejo del plan compartido se daba por cumplido con un aporte que solo tocó una meta
+  // privada: felicitaba con "tienen el mes al día" sin que hubiera entrado un peso común.
+  // En individual no hay pareja de quien separarse, así que ahí todo lo visible es el plan.
+  const aportadoEsteMes = _ind
+    ? ahorroMesUI(curMonth()) > 0
+    : flujoScopeMes(curMonth(), null).entro > 0;
 
   let tipPool = [];
 
