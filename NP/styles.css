@@ -796,7 +796,7 @@ input.bucket-slider:disabled::-webkit-slider-thumb{cursor:default}
 .metacard-edit{background:none;border:none;color:var(--gs);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;opacity:.55;flex-shrink:0;transition:color .2s,opacity .2s}
 .metacard-edit:hover{opacity:1;color:var(--gold)}
 .metacard .inline-pct-container{background:rgba(28,58,44,.08);border:1px solid rgba(28,58,44,.22);color:var(--green);font-weight:800;padding:0 7px;min-height:19px;border-radius:6px;font-size:12px;flex-shrink:0}
-.metacard .inline-pct-input{width:20px}
+.metacard .inline-pct-input{width:30px}
 /* Confeti celebración de sueño cumplido (Fase 3b) */
 .confeti-cont{position:fixed;inset:0;pointer-events:none;z-index:500;overflow:hidden}
 .confeti{position:absolute;top:-14px;width:9px;height:14px;border-radius:2px;opacity:.95;animation:confeti-fall 2.6s cubic-bezier(.3,.6,.5,1) forwards}

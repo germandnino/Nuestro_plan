@@ -3225,19 +3225,34 @@ function renderMetas(){
     input.onclick = (e) => {
       e.stopPropagation();
     };
-    input.onchange = (e) => {
+    // El reajuste se aplica EN SITIO, sin rerender. Rerender destruye el input, y en móvil
+    // <input type="number"> dispara change apenas se confirma un dígito: el campo
+    // desaparecía en el primer número y el teclado se cerraba, así que era imposible
+    // escribir "40" — solo entraba el "4". El rerender se deja para el blur, cuando el
+    // teclado ya se fue.
+    const aplicar = (persistir) => {
       const mid = input.dataset.pctmid;
-      const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+      const val = Math.max(0, Math.min(100, parseInt(input.value) || 0));
       const m = metaById(mid);
-      if (m) {
-        const adjustedId = m.dueno
-          ? autoAdjustIndividualPercentages(m.dueno, mid, val)
-          : autoAdjustPercentages(mid, val);
-        _pctFlashId = adjustedId;
-        save();
-        rerender();
-        setTimeout(() => { _pctFlashId = null; }, 60);
-      }
+      if (!m) return;
+      const adjustedId = m.dueno
+        ? autoAdjustIndividualPercentages(m.dueno, mid, val)
+        : autoAdjustPercentages(mid, val);
+      // Los hermanos se refrescan a mano para que se vea el reajuste mientras se escribe,
+      // que es justo lo que esta píldora existe para mostrar.
+      $('r1').querySelectorAll('.inline-pct-input[data-pctmid]').forEach(otro => {
+        if (otro === input) return;
+        const om = metaById(otro.dataset.pctmid);
+        if (om && String(om.aportePct || 0) !== otro.value) otro.value = om.aportePct || 0;
+      });
+      if (persistir) { _pctFlashId = adjustedId; save(); }
+    };
+    input.oninput = () => aplicar(false);
+    input.onchange = () => aplicar(true);
+    input.onblur = () => {
+      aplicar(true);
+      rerender();
+      setTimeout(() => { _pctFlashId = null; }, 60);
     };
     input.onkeydown = (e) => {
       if (e.key === 'Enter') {
